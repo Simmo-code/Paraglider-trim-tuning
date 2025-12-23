@@ -7,11 +7,11 @@ import React, { useMemo, useState, useEffect, useRef } from "react";
  * Workflow:
  * 1) Import CSV
  * 2) Wing layout (profile mapping)
- * 3) Loop setup (baseline) — NOW PER LINE GROUP
+ * 3) Loop setup (baseline)
  * 4) Trim & target (adjustments + charts + 3D view)
  */
 
-const APP_VERSION = "0.2.3";
+const APP_VERSION = "0.2.2";
 
 const BUILTIN_PROFILES = {
   "Speedster 3 (starter mapping)": {
@@ -376,8 +376,8 @@ function ChartOverlay({ series1, series2, series3, width = 1050, height = 360 })
             <text key={i} x={xFor(i)} y={height - 10} fontSize="11" fill="rgba(170,177,195,0.75)" textAnchor="middle">
               {i + 1}
             </text>
-          </g>
-        ))}
+          );
+        })}
       </svg>
     </div>
   );
@@ -595,7 +595,7 @@ export default function App() {
     Object.values(profiles)[0] ||
     Object.values(BUILTIN_PROFILES)[0];
 
-  // Adjustments (persisted) — already group-based
+  // Adjustments (persisted)
   const [adjustments, setAdjustments] = useState(() => {
     try {
       const s = localStorage.getItem("groupAdjustments");
@@ -617,21 +617,8 @@ export default function App() {
     }
   });
 
-  /**
-   * Loop setup — NOW GROUP-BASED:
-   * key = `${groupName}|${side}` where side is L or R
-   */
-  const [groupLoopSetup, setGroupLoopSetup] = useState(() => {
-    try {
-      const s = localStorage.getItem("groupLoopSetup");
-      return s ? JSON.parse(s) : {};
-    } catch {
-      return {};
-    }
-  });
-
-  // (Legacy) old per-line storage — kept only for compatibility if user previously used it
-  const [legacyLineLoopSetup, setLegacyLineLoopSetup] = useState(() => {
+  // Loop setup per line+side (persisted)
+  const [loopSetup, setLoopSetup] = useState(() => {
     try {
       const s = localStorage.getItem("loopSetup");
       return s ? JSON.parse(s) : {};
@@ -640,7 +627,7 @@ export default function App() {
     }
   });
 
-  // Loop preset library (persisted) — now stores GROUP setup
+  // Loop preset library (persisted)
   const [loopPresets, setLoopPresets] = useState(() => {
     try {
       const s = localStorage.getItem("loopPresets");
@@ -671,8 +658,9 @@ export default function App() {
   const [showOriginalRef, setShowOriginalRef] = useState(false);
   const [beforeMode, setBeforeMode] = useState("LoopsOnly"); // LoopsOnly | Original
 
-  // Bulk loop tool UI (group scope)
-  const [bulkScope, setBulkScope] = useState("All"); // All | A | B | C | D
+  // Bulk loop tool UI
+  const [bulkScope, setBulkScope] = useState("All"); // All | A | B | C | D | Group
+  const [bulkGroup, setBulkGroup] = useState("AR1");
   const [bulkSide, setBulkSide] = useState("Both"); // Both | L | R
   const [bulkLoopType, setBulkLoopType] = useState("SL");
 
@@ -688,16 +676,23 @@ export default function App() {
     setLoopTypes(next);
     localStorage.setItem("loopTypes", JSON.stringify(next));
   }
-  function persistGroupLoopSetup(next) {
-    setGroupLoopSetup(next);
-    localStorage.setItem("groupLoopSetup", JSON.stringify(next));
+  function persistLoopSetup(next) {
+    setLoopSetup(next);
+    localStorage.setItem("loopSetup", JSON.stringify(next));
   }
   function persistLoopPresets(next) {
     setLoopPresets(next);
     localStorage.setItem("loopPresets", JSON.stringify(next));
   }
 
-  // ----- compute lines/groups from CSV -----
+  function loopDeltaFor(lineId, side) {
+    const key = `${lineId}|${side}`;
+    const t = loopSetup[key] || "SL";
+    const v = loopTypes?.[t];
+    return Number.isFinite(v) ? v : 0;
+  }
+
+  // ----- compute line counts from CSV (used to clamp profile editor ranges) -----
   const allLines = useMemo(() => getAllLinesFromWide(wideRows), [wideRows]);
 
   const csvLineMax = useMemo(() => {
@@ -712,86 +707,7 @@ export default function App() {
 
   const csvProfileName = useMemo(() => makeProfileNameFromMeta(meta), [meta]);
 
-  const allGroupNames = useMemo(
-    () => extractGroupNames(wideRows, activeProfile),
-    [wideRows, activeProfile]
-  );
-
-  // Build group → lines list (for showing which lines are in each group)
-  const groupToLines = useMemo(() => {
-    const map = new Map();
-    for (const { lineId } of allLines) {
-      const g = groupForLine(activeProfile, lineId);
-      if (!g) continue;
-      if (!map.has(g)) map.set(g, []);
-      map.get(g).push(lineId);
-    }
-    for (const [k, arr] of map.entries()) {
-      arr.sort((a, b) => {
-        const pa = parseLineId(a);
-        const pb = parseLineId(b);
-        if (!pa || !pb) return a.localeCompare(b);
-        if (pa.prefix !== pb.prefix) return pa.prefix.localeCompare(pb.prefix);
-        return pa.num - pb.num;
-      });
-      map.set(k, arr);
-    }
-    return map;
-  }, [allLines, activeProfile]);
-
-  // When groups change, set sensible defaults
-  useEffect(() => {
-    if (allGroupNames.length && !allGroupNames.includes(adjGroup)) setAdjGroup(allGroupNames[0]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allGroupNames.join("|")]);
-
-  /**
-   * GROUP LOOP delta for a given line and side
-   * - Primary: groupLoopSetup (new)
-   * - Legacy fallback: per-line loopSetup from old storage
-   */
-  function loopDeltaFor(lineId, side) {
-    const g = groupForLine(activeProfile, lineId);
-    if (g) {
-      const key = `${g}|${side}`;
-      const t = groupLoopSetup[key] || "SL";
-      const v = loopTypes?.[t];
-      return Number.isFinite(v) ? v : 0;
-    }
-
-    // Legacy fallback (only if group mapping missing)
-    const legacyKey = `${lineId}|${side}`;
-    const lt = legacyLineLoopSetup[legacyKey] || "SL";
-    const lv = loopTypes?.[lt];
-    return Number.isFinite(lv) ? lv : 0;
-  }
-
-  // Auto-migrate legacy per-line loops into group loops once we can compute groups
-  useEffect(() => {
-    if (!allGroupNames.length) return;
-    if (!legacyLineLoopSetup || !Object.keys(legacyLineLoopSetup).length) return;
-    if (groupLoopSetup && Object.keys(groupLoopSetup).length) return;
-
-    // Build best-effort migration: for each group+side, take the first encountered line's loop type
-    const migrated = {};
-    for (const { lineId } of allLines) {
-      const g = groupForLine(activeProfile, lineId);
-      if (!g) continue;
-      for (const side of ["L", "R"]) {
-        const gk = `${g}|${side}`;
-        if (migrated[gk]) continue;
-        const lk = `${lineId}|${side}`;
-        const t = legacyLineLoopSetup[lk];
-        if (t) migrated[gk] = t;
-      }
-    }
-    if (Object.keys(migrated).length) {
-      persistGroupLoopSetup(migrated);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allGroupNames.join("|")]);
-
-  // Profile creation/select on import
+  // IMPORTANT: this creates/selects the profile immediately and returns the profile object used for grouping now.
   function ensureProfileExistsByNameSync(name, baseProfile) {
     const key = String(name || "").trim();
     if (!key) return { key: profileKey, profile: activeProfile };
@@ -829,15 +745,19 @@ export default function App() {
 
       const w = parseWide(parsed.grid);
 
+      // Set meta + rows first
       setMeta(w.meta);
       setWideRows(w.rows);
 
+      // Create/select profile based on A2+B2 (meta.input1/meta.input2)
       const importName = makeProfileNameFromMeta(w.meta);
       const chosen = ensureProfileExistsByNameSync(importName, activeProfile);
 
+      // Choose group defaults using the profile used right now
       const groups = extractGroupNames(w.rows, chosen.profile);
       if (groups.length) {
         setAdjGroup(groups[0]);
+        setBulkGroup(groups[0]);
       }
 
       setStep(2);
@@ -910,6 +830,17 @@ export default function App() {
     return blocks;
   }, [wideRows]);
 
+  const allGroupNames = useMemo(
+    () => extractGroupNames(wideRows, activeProfile),
+    [wideRows, activeProfile]
+  );
+
+  useEffect(() => {
+    if (allGroupNames.length && !allGroupNames.includes(adjGroup)) setAdjGroup(allGroupNames[0]);
+    if (allGroupNames.length && !allGroupNames.includes(bulkGroup)) setBulkGroup(allGroupNames[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allGroupNames.join("|")]);
+
   function applyGroupAdjustment() {
     const mm = n(adjMm);
     if (!Number.isFinite(mm)) return;
@@ -930,46 +861,55 @@ export default function App() {
     persistAdjustments({});
   }
 
-  // Step 3 bulk loop tools (GROUP scope)
-  function applyBulkGroupLoop() {
-    if (!allGroupNames.length) return;
+  // Bulk loop tools
+  function applyBulkLoop() {
+    if (!allLines.length) return;
 
-    const next = { ...groupLoopSetup };
-    const selectedGroups = allGroupNames.filter((g) => {
-      const L = groupLetter(g);
+    const selected = allLines.filter(({ lineId, letter }) => {
       if (bulkScope === "All") return true;
-      return L === bulkScope;
+      if (["A", "B", "C", "D"].includes(bulkScope)) return letter === bulkScope;
+      if (bulkScope === "Group") {
+        const g = groupForLine(activeProfile, lineId);
+        return g === bulkGroup;
+      }
+      return false;
     });
 
-    for (const g of selectedGroups) {
-      if (bulkSide === "Both" || bulkSide === "L") next[`${g}|L`] = bulkLoopType;
-      if (bulkSide === "Both" || bulkSide === "R") next[`${g}|R`] = bulkLoopType;
+    const next = { ...loopSetup };
+    for (const { lineId } of selected) {
+      if (bulkSide === "Both" || bulkSide === "L") next[`${lineId}|L`] = bulkLoopType;
+      if (bulkSide === "Both" || bulkSide === "R") next[`${lineId}|R`] = bulkLoopType;
     }
-
-    persistGroupLoopSetup(next);
+    persistLoopSetup(next);
   }
 
-  function resetGroupLoopsToSL() {
-    const ok = confirm("Reset ALL group loop selections back to SL?");
-    if (!ok) return;
-    persistGroupLoopSetup({});
-  }
-
-  function mirrorGroupLoops(fromSide, toSide) {
-    if (!allGroupNames.length) return;
-    const next = { ...groupLoopSetup };
-    for (const g of allGroupNames) {
-      const fromKey = `${g}|${fromSide}`;
-      const toKey = `${g}|${toSide}`;
+  function mirrorLoops(fromSide, toSide) {
+    if (!allLines.length) return;
+    const next = { ...loopSetup };
+    for (const { lineId } of allLines) {
+      const fromKey = `${lineId}|${fromSide}`;
+      const toKey = `${lineId}|${toSide}`;
       next[toKey] = next[fromKey] || "SL";
     }
-    persistGroupLoopSetup(next);
+    persistLoopSetup(next);
+  }
+
+  function resetLoopsToSL() {
+    const ok = confirm("Reset ALL loop selections back to SL?");
+    if (!ok) return;
+    persistLoopSetup({});
+  }
+
+  function applyAllSL() {
+    const ok = confirm("Set ALL line loops (L/R) to SL?");
+    if (!ok) return;
+    persistLoopSetup({});
   }
 
   function saveLoopPreset() {
     const name = presetName.trim();
     if (!name) return alert("Enter a preset name first.");
-    const next = { ...loopPresets, [name]: groupLoopSetup };
+    const next = { ...loopPresets, [name]: loopSetup };
     persistLoopPresets(next);
     setPresetName("");
     alert(`Saved preset "${name}".`);
@@ -978,9 +918,9 @@ export default function App() {
   function loadLoopPreset(name) {
     const p = loopPresets?.[name];
     if (!p || typeof p !== "object") return;
-    const ok = confirm(`Load preset "${name}"? This will overwrite current group loop selections.`);
+    const ok = confirm(`Load preset "${name}"? This will overwrite current loop selections.`);
     if (!ok) return;
-    persistGroupLoopSetup(p);
+    persistLoopSetup(p);
   }
 
   function deleteLoopPreset(name) {
@@ -992,11 +932,11 @@ export default function App() {
   }
 
   function resetSessionAll() {
-    const ok = confirm("Reset everything? (group loops, adjustments, workflow step, loaded data)");
+    const ok = confirm("Reset everything? (loops, adjustments, workflow step, loaded data)");
     if (!ok) return;
     setMeta({ input1: "", input2: "", tolerance: 0, correction: 0 });
     setWideRows([]);
-    persistGroupLoopSetup({});
+    persistLoopSetup({});
     persistAdjustments({});
     setStep(1);
     setSelectedFileName("");
@@ -1034,7 +974,7 @@ export default function App() {
         const oR = deltaMm({ nominal: b.nominal, measured: b.measR, correction: corr, adjustment: 0 });
         mapsOriginal[letter].set(p.num, { dL: oL, dR: oR });
 
-        // Loops only (group loops)
+        // Loops only
         const lL = b.measL == null ? null : b.measL + loopL;
         const lR = b.measR == null ? null : b.measR + loopR;
         const loL = deltaMm({ nominal: b.nominal, measured: lL, correction: corr, adjustment: 0 });
@@ -1126,8 +1066,7 @@ export default function App() {
     activeProfile,
     adjustments,
     chartSideMode,
-    groupLoopSetup,
-    legacyLineLoopSetup,
+    loopSetup,
     loopTypes,
   ]);
 
@@ -1177,7 +1116,7 @@ export default function App() {
 
   const hasCSV = wideRows.length > 0;
   const hasLines = allLines.length > 0;
-  const groupsReady = allGroupNames.length > 0;
+  const groupsReady = extractGroupNames(wideRows, activeProfile).length > 0;
 
   // Step guard
   useEffect(() => {
@@ -1192,10 +1131,10 @@ export default function App() {
     const title = `Trim Report — ${now.toISOString().slice(0, 10)} ${now.toLocaleTimeString()}`;
     const mmPerLoop = Number.isFinite(activeProfile?.mmPerLoop) ? activeProfile.mmPerLoop : 10;
 
-    const loopsSummary = allGroupNames.map((g) => {
-      const tL = groupLoopSetup[`${g}|L`] || "SL";
-      const tR = groupLoopSetup[`${g}|R`] || "SL";
-      return { group: g, left: tL, right: tR };
+    const loopsSummary = allLines.map(({ lineId }) => {
+      const tL = loopSetup[`${lineId}|L`] || "SL";
+      const tR = loopSetup[`${lineId}|R`] || "SL";
+      return { lineId, left: tL, right: tR };
     });
 
     const adjustmentsList = Object.entries(adjustments).sort((a, b) => a[0].localeCompare(b[0]));
@@ -1232,13 +1171,13 @@ export default function App() {
   </div>
 
   <div class="card">
-    <b>Loops installed (group baseline)</b>
+    <b>Loops installed (baseline)</b>
     <table>
-      <thead><tr><th>Group</th><th>Left</th><th>Right</th></tr></thead>
+      <thead><tr><th>Line</th><th>Left</th><th>Right</th></tr></thead>
       <tbody>
         ${loopsSummary
           .map(
-            (r) => `<tr><td class="mono">${escapeHtml(r.group)}</td><td class="mono">${escapeHtml(r.left)}</td><td class="mono">${escapeHtml(r.right)}</td></tr>`
+            (r) => `<tr><td class="mono">${escapeHtml(r.lineId)}</td><td class="mono">${escapeHtml(r.left)}</td><td class="mono">${escapeHtml(r.right)}</td></tr>`
           )
           .join("")}
       </tbody>
@@ -1285,16 +1224,64 @@ export default function App() {
 
   /* ------------------------- Styles ------------------------- */
 
-  const page = { minHeight: "100vh", background: "#0b0c10", color: "#eef1ff", fontFamily: "system-ui, sans-serif" };
-  const wrap = { maxWidth: 1200, margin: "0 auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 };
-  const card = { border: "1px solid #2a2f3f", borderRadius: 14, background: "#11131a", padding: 12 };
+  const page = {
+    minHeight: "100vh",
+    background: "#0b0c10",
+    color: "#eef1ff",
+    fontFamily: "system-ui, sans-serif",
+  };
+  const wrap = {
+    maxWidth: 1200,
+    margin: "0 auto",
+    padding: 16,
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  };
+  const card = {
+    border: "1px solid #2a2f3f",
+    borderRadius: 14,
+    background: "#11131a",
+    padding: 12,
+  };
   const muted = { color: "#aab1c3" };
-  const btn = { padding: "10px 12px", borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", cursor: "pointer", fontWeight: 650, fontSize: 13 };
-  const btnDanger = { ...btn, border: "1px solid rgba(255,107,107,0.55)", background: "rgba(255,107,107,0.12)" };
-  const btnWarn = { ...btn, border: "1px solid rgba(255,214,102,0.65)", background: "rgba(255,214,102,0.12)" };
-  const input = { width: "100%", borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", padding: "10px 10px", outline: "none" };
-  const redCell = { border: "1px solid rgba(255,107,107,0.85)", background: "rgba(255,107,107,0.14)" };
-  const yellowCell = { border: "1px solid rgba(255,214,102,0.95)", background: "rgba(255,214,102,0.14)" };
+  const btn = {
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: "1px solid #2a2f3f",
+    background: "#0d0f16",
+    color: "#eef1ff",
+    cursor: "pointer",
+    fontWeight: 650,
+    fontSize: 13,
+  };
+  const btnDanger = {
+    ...btn,
+    border: "1px solid rgba(255,107,107,0.55)",
+    background: "rgba(255,107,107,0.12)",
+  };
+  const btnWarn = {
+    ...btn,
+    border: "1px solid rgba(255,214,102,0.65)",
+    background: "rgba(255,214,102,0.12)",
+  };
+  const input = {
+    width: "100%",
+    borderRadius: 10,
+    border: "1px solid #2a2f3f",
+    background: "#0d0f16",
+    color: "#eef1ff",
+    padding: "10px 10px",
+    outline: "none",
+  };
+  const redCell = {
+    border: "1px solid rgba(255,107,107,0.85)",
+    background: "rgba(255,107,107,0.14)",
+  };
+  const yellowCell = {
+    border: "1px solid rgba(255,214,102,0.95)",
+    background: "rgba(255,214,102,0.14)",
+  };
 
   const beforeSeries = beforeMode === "Original" ? computed.originalSeries : computed.loopsOnlySeries;
 
@@ -1302,10 +1289,19 @@ export default function App() {
     <div style={page}>
       <div style={wrap}>
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
           <div>
             <h1 style={{ margin: 0, fontSize: 22 }}>
-              Paraglider Trim Tuning <span style={{ ...muted, fontSize: 12, fontWeight: 700 }}>v{APP_VERSION}</span>
+              Paraglider Trim Tuning{" "}
+              <span style={{ ...muted, fontSize: 12, fontWeight: 700 }}>v{APP_VERSION}</span>
             </h1>
             <div style={{ ...muted, fontSize: 12, marginTop: 6 }}>
               Red: |Δ| ≥ tolerance. Yellow: within 3mm of tolerance. Workflow: set layout + loops before trimming.
@@ -1313,10 +1309,18 @@ export default function App() {
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <button onClick={exportReportPDF} style={{ ...btnWarn, opacity: hasCSV ? 1 : 0.5 }} disabled={!hasCSV}>
+            <button
+              onClick={exportReportPDF}
+              style={{ ...btnWarn, opacity: hasCSV ? 1 : 0.5 }}
+              disabled={!hasCSV}
+            >
               Export Trim Report (Print to PDF)
             </button>
-            <button onClick={exportWideCSV} disabled={!wideRows.length} style={{ ...btn, opacity: wideRows.length ? 1 : 0.5 }}>
+            <button
+              onClick={exportWideCSV}
+              disabled={!wideRows.length}
+              style={{ ...btn, opacity: wideRows.length ? 1 : 0.5 }}
+            >
               Export CSV
             </button>
             <button onClick={resetSessionAll} style={btnDanger}>
@@ -1326,14 +1330,29 @@ export default function App() {
         </div>
 
         {/* Safety */}
-        <div style={{ ...card, borderColor: "rgba(255,204,102,0.5)", background: "rgba(255,204,102,0.08)" }}>
-          <b>Safety notice:</b> This is an analysis + simulation tool. Trimming can be dangerous and may invalidate certification.
-          Always follow manufacturer / check-center procedures, and verify by re-measuring and test flying responsibly.
+        <div
+          style={{
+            ...card,
+            borderColor: "rgba(255,204,102,0.5)",
+            background: "rgba(255,204,102,0.08)",
+          }}
+        >
+          <b>Safety notice:</b> This is an analysis + simulation tool. Trimming can be dangerous and may invalidate
+          certification. Always follow manufacturer / check-center procedures, and verify by re-measuring and test flying
+          responsibly.
         </div>
 
         {/* Workflow Stepper */}
         <div style={card}>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
             <div style={{ fontWeight: 900 }}>Workflow</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <StepButton current={step} num={1} setStep={setStep} enabled={true} label="1) Import CSV" />
@@ -1352,11 +1371,13 @@ export default function App() {
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 1 — Import measurement CSV</div>
             <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
-              Upload your measurement file (wide layout with A/B/C/D blocks). The wing name is read from cells <b>A2</b> + <b>B2</b> and used as the profile name.
+              Upload your measurement file (wide layout with A/B/C/D blocks). The wing name is read from cells <b>A2</b>{" "}
+              + <b>B2</b> and used as the profile name.
             </div>
 
             <div style={{ height: 10 }} />
 
+            {/* hidden native input (removes "No file chosen") */}
             <input
               ref={fileInputRef}
               type="file"
@@ -1403,7 +1424,8 @@ export default function App() {
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 2 — Wing profile & line layout</div>
             <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
-              Choose (or build) a mapping so the app understands your rigging diagram grouping (AR1/BR2/…). This controls grouping, target, and the 3D view.
+              Choose (or build) a mapping so the app understands your rigging diagram grouping (AR1/BR2/…). This controls
+              grouping, target, and the 3D view.
             </div>
 
             <div style={{ height: 10 }} />
@@ -1447,7 +1469,7 @@ export default function App() {
                   CSV max lines: A{csvLineMax.A || "–"} / B{csvLineMax.B || "–"} / C{csvLineMax.C || "–"} / D{csvLineMax.D || "–"}
                 </div>
                 <div style={{ ...muted, fontSize: 12, marginTop: 6 }}>
-                  Groups detected from data: <b>{allGroupNames.length}</b>
+                  Groups detected from data: <b>{extractGroupNames(wideRows, activeProfile).length}</b>
                 </div>
               </div>
 
@@ -1481,7 +1503,7 @@ export default function App() {
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 3 — Maillon loop setup (baseline)</div>
             <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
-              Set which loop type is installed on each <b>line group</b> maillon (Left/Right). Changing AR1 affects A1–A4 etc.
+              Set which loop type is installed on each line’s maillon (Left/Right). This defines the real “Before trimming” baseline.
             </div>
 
             <div style={{ height: 10 }} />
@@ -1539,23 +1561,38 @@ export default function App() {
                 <div style={{ fontWeight: 850, marginBottom: 8 }}>Presets & bulk tools</div>
 
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button onClick={() => persistGroupLoopSetup({})} style={btn}>All SL</button>
-                  <button onClick={() => mirrorGroupLoops("L", "R")} style={btn}>Mirror L → R</button>
-                  <button onClick={() => mirrorGroupLoops("R", "L")} style={btn}>Mirror R → L</button>
-                  <button onClick={resetGroupLoopsToSL} style={btnDanger}>Reset loops</button>
+                  <button onClick={applyAllSL} style={btn}>All SL</button>
+                  <button onClick={() => mirrorLoops("L", "R")} style={btn}>Mirror L → R</button>
+                  <button onClick={() => mirrorLoops("R", "L")} style={btn}>Mirror R → L</button>
+                  <button onClick={resetLoopsToSL} style={btnDanger}>Reset loops</button>
                 </div>
 
                 <div style={{ height: 12 }} />
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 0.9fr 0.9fr auto", gap: 10, alignItems: "end" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 0.9fr 0.9fr 0.9fr auto", gap: 10, alignItems: "end" }}>
                   <div>
                     <label style={{ ...muted, fontSize: 12 }}>Scope</label>
                     <select value={bulkScope} onChange={(e) => setBulkScope(e.target.value)} style={{ ...input, padding: "10px 10px" }}>
-                      <option value="All">All groups</option>
-                      <option value="A">A groups</option>
-                      <option value="B">B groups</option>
-                      <option value="C">C groups</option>
-                      <option value="D">D groups</option>
+                      <option value="All">All lines</option>
+                      <option value="A">A lines</option>
+                      <option value="B">B lines</option>
+                      <option value="C">C lines</option>
+                      <option value="D">D lines</option>
+                      <option value="Group">Specific group…</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ ...muted, fontSize: 12 }}>Group</label>
+                    <select
+                      value={bulkGroup}
+                      onChange={(e) => setBulkGroup(e.target.value)}
+                      disabled={bulkScope !== "Group"}
+                      style={{ ...input, padding: "10px 10px", opacity: bulkScope === "Group" ? 1 : 0.5 }}
+                    >
+                      {allGroupNames.map((g) => (
+                        <option key={g} value={g}>{g}</option>
+                      ))}
                     </select>
                   </div>
 
@@ -1578,7 +1615,7 @@ export default function App() {
                   </div>
 
                   <div>
-                    <button onClick={applyBulkGroupLoop} style={btn} disabled={!groupsReady} title="Apply loop type to selected scope">
+                    <button onClick={applyBulkLoop} style={btn} disabled={!hasLines} title="Apply loop type to selected scope">
                       Apply
                     </button>
                   </div>
@@ -1615,19 +1652,18 @@ export default function App() {
 
             <div style={{ height: 12 }} />
 
-            {/* GROUP setup table */}
+            {/* Per-line setup */}
             <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
-              <div style={{ fontWeight: 850, marginBottom: 8 }}>Loops installed per line group</div>
-
-              {!groupsReady ? (
-                <div style={{ ...muted, fontSize: 12 }}>No groups found. Check Step 2 mapping.</div>
+              <div style={{ fontWeight: 850, marginBottom: 8 }}>Loops installed per line</div>
+              {!hasLines ? (
+                <div style={{ ...muted, fontSize: 12 }}>No lines found. Check your CSV import.</div>
               ) : (
                 <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 860 }}>
                     <thead>
                       <tr style={{ color: "#aab1c3", fontSize: 12 }}>
+                        <th style={{ textAlign: "left", padding: "8px 8px" }}>Line</th>
                         <th style={{ textAlign: "left", padding: "8px 8px" }}>Group</th>
-                        <th style={{ textAlign: "left", padding: "8px 8px" }}>Lines included</th>
                         <th style={{ textAlign: "left", padding: "8px 8px" }}>Left loop</th>
                         <th style={{ textAlign: "right", padding: "8px 8px" }}>Left Δ(mm)</th>
                         <th style={{ textAlign: "left", padding: "8px 8px" }}>Right loop</th>
@@ -1635,27 +1671,27 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {allGroupNames.map((g) => {
-                        const kL = `${g}|L`;
-                        const kR = `${g}|R`;
-                        const tL = groupLoopSetup[kL] || "SL";
-                        const tR = groupLoopSetup[kR] || "SL";
+                      {allLines.map(({ lineId, letter }) => {
+                        const groupName = groupForLine(activeProfile, lineId) || `${letter}?`;
+
+                        const kL = `${lineId}|L`;
+                        const kR = `${lineId}|R`;
+                        const tL = loopSetup[kL] || "SL";
+                        const tR = loopSetup[kR] || "SL";
+
                         const dL = Number.isFinite(loopTypes?.[tL]) ? loopTypes[tL] : 0;
                         const dR = Number.isFinite(loopTypes?.[tR]) ? loopTypes[tR] : 0;
-                        const lines = groupToLines.get(g) || [];
 
                         return (
-                          <tr key={g} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
-                            <td style={{ padding: "8px 8px", fontWeight: 900 }}>{g}</td>
-                            <td style={{ padding: "8px 8px", color: "#aab1c3", fontSize: 12 }}>
-                              {lines.length ? lines.join(", ") : "—"}
-                            </td>
+                          <tr key={lineId} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
+                            <td style={{ padding: "8px 8px", fontWeight: 850 }}>{lineId}</td>
+                            <td style={{ padding: "8px 8px", color: "#aab1c3", fontSize: 12 }}>{groupName}</td>
 
                             <td style={{ padding: "8px 8px" }}>
                               <select
                                 value={tL}
-                                onChange={(e) => persistGroupLoopSetup({ ...groupLoopSetup, [kL]: e.target.value })}
-                                style={{ width: 140, borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", padding: "8px 10px", outline: "none" }}
+                                onChange={(e) => persistLoopSetup({ ...loopSetup, [kL]: e.target.value })}
+                                style={{ width: 130, borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", padding: "8px 10px", outline: "none" }}
                               >
                                 {Object.keys(loopTypes).map((name) => (
                                   <option key={name} value={name}>{name}</option>
@@ -1670,8 +1706,8 @@ export default function App() {
                             <td style={{ padding: "8px 8px" }}>
                               <select
                                 value={tR}
-                                onChange={(e) => persistGroupLoopSetup({ ...groupLoopSetup, [kR]: e.target.value })}
-                                style={{ width: 140, borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", padding: "8px 10px", outline: "none" }}
+                                onChange={(e) => persistLoopSetup({ ...loopSetup, [kR]: e.target.value })}
+                                style={{ width: 130, borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", padding: "8px 10px", outline: "none" }}
                               >
                                 {Object.keys(loopTypes).map((name) => (
                                   <option key={name} value={name}>{name}</option>
@@ -1692,7 +1728,12 @@ export default function App() {
             </div>
 
             <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button onClick={() => setStep(4)} style={{ ...btnWarn, opacity: groupsReady ? 1 : 0.6 }} disabled={!groupsReady}>
+              <button
+                onClick={() => setStep(4)}
+                style={{ ...btnWarn, opacity: groupsReady ? 1 : 0.6 }}
+                disabled={!groupsReady}
+                title={!groupsReady ? "Set your wing layout so groups can be detected first (Step 2)" : ""}
+              >
                 Continue to Step 4 (Trimming)
               </button>
               <button onClick={() => setStep(2)} style={btn}>Back</button>
@@ -1706,7 +1747,7 @@ export default function App() {
             <div style={card}>
               <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 4 — Trimming, target plan, and analysis</div>
               <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
-                Dotted = “Before trimming” (group loops baseline). Solid = “After” (group loops + adjustments).
+                Dotted = “Before trimming” (loops-only baseline). Solid = “After” (loops + adjustments).
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: 12 }}>
@@ -1844,7 +1885,7 @@ export default function App() {
                 <div>
                   <div style={{ fontWeight: 900 }}>Trim chart (Before vs After)</div>
                   <div style={{ ...muted, fontSize: 12, marginTop: 6 }}>
-                    Dotted = Before (group loops baseline). Solid = After (group loops + adjustments). Optional dashed = Original reference.
+                    Dotted = Before (loops-only baseline). Solid = After (loops + adjustments). Optional dashed = Original reference.
                   </div>
                 </div>
 
@@ -1920,7 +1961,7 @@ export default function App() {
             <div style={card}>
               <div style={{ fontWeight: 900, marginBottom: 8 }}>Wing profile (3D column chart)</div>
               <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
-                Uses group-average Δ after group loops + adjustments.
+                Uses group-average Δ after loops + adjustments. AR1 near center; higher Rn toward tips (mirrored).
               </div>
               <Wing3D groupStats={computed.groupStatsAfter} width={1050} height={420} />
             </div>
@@ -1929,7 +1970,7 @@ export default function App() {
             <div style={card}>
               <div style={{ fontWeight: 900, marginBottom: 10 }}>Measurement tables (compact)</div>
               <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
-                Δ values include group loops + adjustments (current effective setup).
+                Δ values include loops + adjustments (current effective setup).
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
                 <BlockTable title="A" rows={compactBlocks.A} meta={meta} activeProfile={activeProfile} adjustments={adjustments} loopDeltaFor={loopDeltaFor} input={input} redCell={redCell} yellowCell={yellowCell} setCell={setCell} blockKey="A" />
@@ -1986,21 +2027,21 @@ function BlockTable({ title, rows, meta, activeProfile, adjustments, loopDeltaFo
       <div style={{ padding: 10, borderBottom: "1px solid #2a2f3f", fontWeight: 900 }}>{title} lines</div>
 
       <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 520 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 620 }}>
           <thead>
             <tr style={{ color: "#aab1c3", fontSize: 12 }}>
-              <Th compact>Line</Th>
-              <Th compact>Group</Th>
-              <Th compact align="right">Nom</Th>
-              <Th compact align="right">Meas L</Th>
-              <Th compact align="right">Meas R</Th>
+              <Th>Line</Th>
+              <Th>Group</Th>
+              <Th align="right">Nominal</Th>
+              <Th align="right">Measured L</Th>
+              <Th align="right">Measured R</Th>
             </tr>
           </thead>
 
           <tbody>
             {!rows.length ? (
               <tr>
-                <Td compact colSpan={5} style={{ color: "#aab1c3" }}>
+                <Td colSpan={5} style={{ color: "#aab1c3" }}>
                   No {title} rows found.
                 </Td>
               </tr>
@@ -2025,48 +2066,46 @@ function BlockTable({ title, rows, meta, activeProfile, adjustments, loopDeltaFo
 
                 return (
                   <tr key={`${b.line}-${idx}`} style={{ borderTop: "1px solid #2a2f3f" }}>
-                    <Td compact>
+                    <Td>
                       <b>{b.line}</b>
                     </Td>
-                    <Td compact style={{ color: "#aab1c3", fontSize: 12 }}>{groupName}</Td>
-                    <Td compact align="right" style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
+                    <Td style={{ color: "#aab1c3", fontSize: 12 }}>{groupName}</Td>
+                    <Td align="right" style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
                       {b.nominal ?? ""}
                     </Td>
 
-                    <Td compact align="right">
+                    <Td align="right">
                       <input
                         value={b.measL ?? ""}
                         onChange={(e) => setCell(b.rowIndex, blockKey, "measL", e.target.value)}
                         style={{
                           ...input,
                           ...(styleFor(sevL) || null),
-                          width: 86,
-                          padding: "6px 8px",
+                          width: 120,
                           textAlign: "right",
                           fontFamily: "ui-monospace, Menlo, Consolas, monospace",
                         }}
                         inputMode="numeric"
                       />
-                      <div style={{ color: "#aab1c3", fontSize: 10, marginTop: 4, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
+                      <div style={{ color: "#aab1c3", fontSize: 11, marginTop: 6, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
                         loop {loopL > 0 ? `+${loopL}` : `${loopL}`} | Δ {Number.isFinite(dL) ? `${dL > 0 ? "+" : ""}${Math.round(dL)}mm` : "–"}
                       </div>
                     </Td>
 
-                    <Td compact align="right">
+                    <Td align="right">
                       <input
                         value={b.measR ?? ""}
                         onChange={(e) => setCell(b.rowIndex, blockKey, "measR", e.target.value)}
                         style={{
                           ...input,
                           ...(styleFor(sevR) || null),
-                          width: 86,
-                          padding: "6px 8px",
+                          width: 120,
                           textAlign: "right",
                           fontFamily: "ui-monospace, Menlo, Consolas, monospace",
                         }}
                         inputMode="numeric"
                       />
-                      <div style={{ color: "#aab1c3", fontSize: 10, marginTop: 4, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
+                      <div style={{ color: "#aab1c3", fontSize: 11, marginTop: 6, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
                         loop {loopR > 0 ? `+${loopR}` : `${loopR}`} | Δ {Number.isFinite(dR) ? `${dR > 0 ? "+" : ""}${Math.round(dR)}mm` : "–"}
                       </div>
                     </Td>
@@ -2083,12 +2122,11 @@ function BlockTable({ title, rows, meta, activeProfile, adjustments, loopDeltaFo
   );
 }
 
-/* ------------------------- Profile Editor (unchanged) ------------------------- */
-/* (Same as previous version; kept as-is to avoid breaking your existing profile editing flow.) */
+/* ------------------------- Wing Profile Editor (clamped by CSV max) ------------------------- */
 
 function ProfileEditor({ profiles, profileKey, setProfileKey, profileJson, setProfileJson, csvLineMax }) {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState("builder");
+  const [tab, setTab] = useState("builder"); // builder | json | help
   const [draftKey, setDraftKey] = useState(profileKey);
   const [draft, setDraft] = useState(() => deepClone(profiles[profileKey] || {}));
   const [message, setMessage] = useState("");
@@ -2111,9 +2149,13 @@ function ProfileEditor({ profiles, profileKey, setProfileKey, profileJson, setPr
     try {
       const next = { ...profiles };
       next[draftKey] = draft;
+
       const json = JSON.stringify(next, null, 2);
       setProfileJson(json);
+
+      // ensures dropdown includes it and selection populates
       setProfileKey(draftKey);
+
       setMessage("Saved ✅");
       setTimeout(() => setMessage(""), 1500);
     } catch {
@@ -2121,8 +2163,59 @@ function ProfileEditor({ profiles, profileKey, setProfileKey, profileJson, setPr
     }
   }
 
-  const btn = { padding: "10px 12px", borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", cursor: "pointer", fontWeight: 750, fontSize: 13 };
+  function addNewProfile() {
+    const baseName = "New Wing Profile";
+    let k = baseName;
+    let i = 2;
+    while ((profiles || {})[k]) k = `${baseName} ${i++}`;
+
+    const nextDraft = { name: k, mmPerLoop: 10, mapping: { A: [], B: [], C: [], D: [] } };
+    setDraftKey(k);
+    setDraft(nextDraft);
+    setMessage("Created a new blank profile. Add ranges below, then Save.");
+  }
+
+  function duplicateProfile() {
+    const base = draft;
+    const baseName = `${draftKey} (copy)`;
+    let k = baseName;
+    let i = 2;
+    while ((profiles || {})[k]) k = `${baseName} ${i++}`;
+    setDraftKey(k);
+    setDraft(deepClone(base));
+    setMessage("Duplicated profile. Rename it and edit ranges, then Save.");
+  }
+
+  function deleteProfile() {
+    if (allKeys.length <= 1) {
+      setMessage("You need at least 1 profile.");
+      return;
+    }
+    const ok = confirm(`Delete profile "${draftKey}"?`);
+    if (!ok) return;
+
+    const next = { ...profiles };
+    delete next[draftKey];
+    const json = JSON.stringify(next, null, 2);
+    setProfileJson(json);
+
+    const remaining = Object.keys(next);
+    setProfileKey(remaining[0]);
+    setMessage("Deleted.");
+  }
+
+  const btn = {
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: "1px solid #2a2f3f",
+    background: "#0d0f16",
+    color: "#eef1ff",
+    cursor: "pointer",
+    fontWeight: 750,
+    fontSize: 13,
+  };
   const btnWarn = { ...btn, border: "1px solid rgba(255,214,102,0.65)", background: "rgba(255,214,102,0.12)" };
+  const btnDanger = { ...btn, border: "1px solid rgba(255,107,107,0.55)", background: "rgba(255,107,107,0.12)" };
   const input = { width: "100%", borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", padding: "10px 10px", outline: "none" };
 
   return (
@@ -2170,7 +2263,7 @@ function ProfileEditor({ profiles, profileKey, setProfileKey, profileJson, setPr
             </div>
 
             <div style={{ marginTop: 12, border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 0.9fr", gap: 10, alignItems: "end" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 0.9fr 0.9fr", gap: 10, alignItems: "end" }}>
                 <div>
                   <label style={{ color: "#aab1c3", fontSize: 12 }}>Profile</label>
                   <select
@@ -2189,10 +2282,21 @@ function ProfileEditor({ profiles, profileKey, setProfileKey, profileJson, setPr
                   </select>
                 </div>
 
+                <div>
+                  <label style={{ color: "#aab1c3", fontSize: 12 }}>Display name</label>
+                  <input value={draft?.name ?? draftKey} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} style={input} />
+                </div>
+
                 <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#aab1c3", fontSize: 12 }}>
                   <input type="checkbox" checked={allowBeyondCsv} onChange={(e) => setAllowBeyondCsv(e.target.checked)} />
                   Allow ranges beyond CSV
                 </label>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                <button style={btn} onClick={addNewProfile}>New</button>
+                <button style={btn} onClick={duplicateProfile}>Duplicate</button>
+                <button style={btnDanger} onClick={deleteProfile}>Delete</button>
               </div>
             </div>
 
@@ -2416,26 +2520,14 @@ function validateProfile(profileKey, profile) {
   return { ok: errors.length === 0, errors };
 }
 
-/* ------------------------- Table helpers (compact option) ------------------------- */
+/* ------------------------- Table helpers ------------------------- */
 
-function Th({ children, align, compact }) {
-  return (
-    <th style={{ padding: compact ? "6px 8px" : "10px 10px", textAlign: align || "left" }}>
-      {children}
-    </th>
-  );
+function Th({ children, align }) {
+  return <th style={{ padding: "10px 10px", textAlign: align || "left" }}>{children}</th>;
 }
-function Td({ children, colSpan, align, style, compact }) {
+function Td({ children, colSpan, align, style }) {
   return (
-    <td
-      colSpan={colSpan}
-      style={{
-        padding: compact ? "6px 8px" : "10px 10px",
-        textAlign: align || "left",
-        ...style,
-        verticalAlign: "top",
-      }}
-    >
+    <td colSpan={colSpan} style={{ padding: "10px 10px", textAlign: align || "left", ...style, verticalAlign: "top" }}>
       {children}
     </td>
   );
