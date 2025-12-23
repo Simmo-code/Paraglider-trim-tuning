@@ -1,19 +1,17 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 
 /**
  * Paraglider Trim Tuning — Guided workflow version
  * Static-site friendly (GitHub Pages / Netlify)
  *
- * Steps:
+ * Workflow:
  * 1) Import CSV
- * 2) Wing profile / line layout
- * 3) Loops setup (baseline)
- * 4) Trimming (adjustments + target + charts + tables + 3D)
- *
- * Export PDF: uses window.print() in a new tab (Print to PDF)
+ * 2) Wing layout (profile mapping)
+ * 3) Loop setup (baseline)
+ * 4) Trim & target (adjustments + charts + 3D view)
  */
 
-const APP_VERSION = "0.2.0";
+const APP_VERSION = "0.2.2";
 
 const BUILTIN_PROFILES = {
   "Speedster 3 (starter mapping)": {
@@ -140,6 +138,7 @@ function downloadText(filename, text, mime = "text/csv") {
 }
 
 function parseWide(grid) {
+  // Row 2 (1-indexed) = grid[1] → A2,B2 contains wing name parts per user requirement
   const metaValues = grid[1] || [];
   const meta = {
     input1: metaValues[0] || "",
@@ -251,9 +250,6 @@ function getAllLinesFromWide(wideRows) {
   return out;
 }
 
-function fmt(v, d = 0) {
-  return Number.isFinite(v) ? v.toFixed(d) : "–";
-}
 function fmtSigned(v, d = 0) {
   if (!Number.isFinite(v)) return "–";
   return `${v > 0 ? "+" : ""}${v.toFixed(d)}`;
@@ -490,7 +486,6 @@ function Wing3D({ groupStats, width = 1050, height = 420 }) {
       const laneYSkewed = laneY - depth * depthSkewY;
 
       bars.push({
-        letter,
         groupName: s.groupName,
         x: xSkewed,
         y0: laneYSkewed + (yZero - baseY),
@@ -538,6 +533,33 @@ function Wing3D({ groupStats, width = 1050, height = 420 }) {
   );
 }
 
+/* ------------------------- Profile naming + helpers ------------------------- */
+
+function makeProfileNameFromMeta(meta) {
+  const a = String(meta?.input1 || "").trim();
+  const b = String(meta?.input2 || "").trim();
+  const combined = `${a} ${b}`.trim().replace(/\s+/g, " ");
+  return combined || "Imported Wing";
+}
+function deepClone(x) {
+  try {
+    return JSON.parse(JSON.stringify(x));
+  } catch {
+    return x;
+  }
+}
+
+/* ------------------------- HTML escaping for report ------------------------- */
+
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 /* ------------------------- Main App ------------------------- */
 
 export default function App() {
@@ -568,7 +590,10 @@ export default function App() {
     return { ...BUILTIN_PROFILES };
   }, [profileJson]);
 
-  const activeProfile = profiles[profileKey] || Object.values(profiles)[0] || Object.values(BUILTIN_PROFILES)[0];
+  const activeProfile =
+    profiles[profileKey] ||
+    Object.values(profiles)[0] ||
+    Object.values(BUILTIN_PROFILES)[0];
 
   // Adjustments (persisted)
   const [adjustments, setAdjustments] = useState(() => {
@@ -639,6 +664,10 @@ export default function App() {
   const [bulkSide, setBulkSide] = useState("Both"); // Both | L | R
   const [bulkLoopType, setBulkLoopType] = useState("SL");
 
+  // Step 1 custom file picker
+  const fileInputRef = useRef(null);
+  const [selectedFileName, setSelectedFileName] = useState("");
+
   function persistAdjustments(next) {
     setAdjustments(next);
     localStorage.setItem("groupAdjustments", JSON.stringify(next));
@@ -663,17 +692,43 @@ export default function App() {
     return Number.isFinite(v) ? v : 0;
   }
 
-  function setCell(rowIndex, blockKey, field, value) {
-    setWideRows((prev) => {
-      const next = prev.slice();
-      const row = { ...next[rowIndex] };
-      const block = row[blockKey] ? { ...row[blockKey] } : null;
-      if (!block) return prev;
-      block[field] = value === "" ? null : n(value);
-      row[blockKey] = block;
-      next[rowIndex] = row;
-      return next;
-    });
+  // ----- compute line counts from CSV (used to clamp profile editor ranges) -----
+  const allLines = useMemo(() => getAllLinesFromWide(wideRows), [wideRows]);
+
+  const csvLineMax = useMemo(() => {
+    const max = { A: 0, B: 0, C: 0, D: 0 };
+    for (const { lineId } of allLines) {
+      const p = parseLineId(lineId);
+      if (!p) continue;
+      if (max[p.prefix] != null) max[p.prefix] = Math.max(max[p.prefix], p.num);
+    }
+    return max;
+  }, [allLines]);
+
+  const csvProfileName = useMemo(() => makeProfileNameFromMeta(meta), [meta]);
+
+  // IMPORTANT: this creates/selects the profile immediately and returns the profile object used for grouping now.
+  function ensureProfileExistsByNameSync(name, baseProfile) {
+    const key = String(name || "").trim();
+    if (!key) return { key: profileKey, profile: activeProfile };
+
+    if (profiles[key]) {
+      setProfileKey(key);
+      return { key, profile: profiles[key] };
+    }
+
+    const nextProfiles = { ...profiles };
+    const cloneBase = deepClone(baseProfile || activeProfile || Object.values(BUILTIN_PROFILES)[0]);
+    cloneBase.name = key;
+
+    nextProfiles[key] = cloneBase;
+
+    const json = JSON.stringify(nextProfiles, null, 2);
+    setProfileJson(json);
+    localStorage.setItem("wingProfilesJson", json);
+    setProfileKey(key);
+
+    return { key, profile: cloneBase };
   }
 
   function onImportFile(file) {
@@ -689,16 +744,22 @@ export default function App() {
       }
 
       const w = parseWide(parsed.grid);
+
+      // Set meta + rows first
       setMeta(w.meta);
       setWideRows(w.rows);
 
-      const groups = extractGroupNames(w.rows, activeProfile);
+      // Create/select profile based on A2+B2 (meta.input1/meta.input2)
+      const importName = makeProfileNameFromMeta(w.meta);
+      const chosen = ensureProfileExistsByNameSync(importName, activeProfile);
+
+      // Choose group defaults using the profile used right now
+      const groups = extractGroupNames(w.rows, chosen.profile);
       if (groups.length) {
         setAdjGroup(groups[0]);
         setBulkGroup(groups[0]);
       }
 
-      // move workflow forward automatically
       setStep(2);
     };
     reader.readAsText(file);
@@ -737,10 +798,25 @@ export default function App() {
       rows.push(out);
     }
 
-    downloadText(`measurement_export_${new Date().toISOString().slice(0, 10)}.csv`, toCSV(delim, rows), "text/csv");
+    downloadText(
+      `measurement_export_${new Date().toISOString().slice(0, 10)}.csv`,
+      toCSV(delim, rows),
+      "text/csv"
+    );
   }
 
-  const allLines = useMemo(() => getAllLinesFromWide(wideRows), [wideRows]);
+  function setCell(rowIndex, blockKey, field, value) {
+    setWideRows((prev) => {
+      const next = prev.slice();
+      const row = { ...next[rowIndex] };
+      const block = row[blockKey] ? { ...row[blockKey] } : null;
+      if (!block) return prev;
+      block[field] = value === "" ? null : n(value);
+      row[blockKey] = block;
+      next[rowIndex] = row;
+      return next;
+    });
+  }
 
   const compactBlocks = useMemo(() => {
     const blocks = { A: [], B: [], C: [], D: [] };
@@ -754,7 +830,10 @@ export default function App() {
     return blocks;
   }, [wideRows]);
 
-  const allGroupNames = useMemo(() => extractGroupNames(wideRows, activeProfile), [wideRows, activeProfile]);
+  const allGroupNames = useMemo(
+    () => extractGroupNames(wideRows, activeProfile),
+    [wideRows, activeProfile]
+  );
 
   useEffect(() => {
     if (allGroupNames.length && !allGroupNames.includes(adjGroup)) setAdjGroup(allGroupNames[0]);
@@ -860,13 +939,10 @@ export default function App() {
     persistLoopSetup({});
     persistAdjustments({});
     setStep(1);
+    setSelectedFileName("");
   }
 
   /* ------------------------- Computations ------------------------- */
-  // We compute:
-  // - Original: no loops, no adjustments
-  // - LoopsOnly: loops applied, no adjustments (Before trimming)
-  // - After: loops + adjustments applied (After trimming)
 
   const computed = useMemo(() => {
     const corr = meta.correction || 0;
@@ -965,7 +1041,9 @@ export default function App() {
       if (!Number.isFinite(mean)) continue;
       groupStatsAfter.push({ groupName, side, meanDelta: mean });
     }
-    groupStatsAfter.sort((a, b) => (groupSortKey(a.groupName) + a.side).localeCompare(groupSortKey(b.groupName) + b.side));
+    groupStatsAfter.sort((a, b) =>
+      (groupSortKey(a.groupName) + a.side).localeCompare(groupSortKey(b.groupName) + b.side)
+    );
 
     const suggestionsAfter = groupStatsAfter.map((s) => {
       const loopsSigned = Math.round(s.meanDelta / mmPerLoop);
@@ -981,7 +1059,16 @@ export default function App() {
     });
 
     return { originalSeries, loopsOnlySeries, afterSeries, groupStatsAfter, suggestionsAfter };
-  }, [wideRows, meta.correction, meta.tolerance, activeProfile, adjustments, chartSideMode, loopSetup, loopTypes]);
+  }, [
+    wideRows,
+    meta.correction,
+    meta.tolerance,
+    activeProfile,
+    adjustments,
+    chartSideMode,
+    loopSetup,
+    loopTypes,
+  ]);
 
   const targetPlan = useMemo(() => {
     const mmPerLoop = Number.isFinite(activeProfile?.mmPerLoop) ? activeProfile.mmPerLoop : 10;
@@ -1027,12 +1114,16 @@ export default function App() {
     persistAdjustments(next);
   }
 
-  // Workflow validation helpers
   const hasCSV = wideRows.length > 0;
   const hasLines = allLines.length > 0;
   const groupsReady = extractGroupNames(wideRows, activeProfile).length > 0;
 
-  // Export report (Print to PDF)
+  // Step guard
+  useEffect(() => {
+    if (step > 1 && !hasCSV) setStep(1);
+  }, [step, hasCSV]);
+
+  // Export report to "Print to PDF"
   function exportReportPDF() {
     if (!hasCSV) return alert("Import a CSV first.");
 
@@ -1040,7 +1131,6 @@ export default function App() {
     const title = `Trim Report — ${now.toISOString().slice(0, 10)} ${now.toLocaleTimeString()}`;
     const mmPerLoop = Number.isFinite(activeProfile?.mmPerLoop) ? activeProfile.mmPerLoop : 10;
 
-    // Simple summaries
     const loopsSummary = allLines.map(({ lineId }) => {
       const tL = loopSetup[`${lineId}|L`] || "SL";
       const tR = loopSetup[`${lineId}|R`] || "SL";
@@ -1064,7 +1154,6 @@ export default function App() {
   th, td { border-bottom: 1px solid #eee; padding: 6px 8px; text-align: left; }
   .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
   .warn { background: #fff3cd; border: 1px solid #ffeeba; }
-  .danger { background: #f8d7da; border: 1px solid #f5c6cb; }
 </style>
 </head>
 <body>
@@ -1077,13 +1166,12 @@ export default function App() {
 
   <div class="card">
     <b>Session header</b>
-    <div class="muted">Input 1: ${escapeHtml(meta.input1)} • Input 2: ${escapeHtml(meta.input2)}</div>
+    <div class="muted">Wing/profile name (A2+B2): ${escapeHtml(makeProfileNameFromMeta(meta))}</div>
     <div class="muted">Tolerance: <span class="mono">${escapeHtml(String(meta.tolerance))}</span> mm • Correction: <span class="mono">${escapeHtml(String(meta.correction))}</span> mm</div>
   </div>
 
   <div class="card">
     <b>Loops installed (baseline)</b>
-    <div class="muted">Each line side has one loop type. Deltas are defined in the app.</div>
     <table>
       <thead><tr><th>Line</th><th>Left</th><th>Right</th></tr></thead>
       <tbody>
@@ -1123,21 +1211,10 @@ export default function App() {
     }
   </div>
 
-  <div class="card">
-    <b>Notes</b>
-    <div class="muted">
-      Charts are visible in the app: “Before trimming” = loops-only (baseline) and “After” = loops + adjustments.
-      Print this report to PDF using your browser print dialog.
-    </div>
-  </div>
-
-<script>
-  window.onload = () => { window.print(); };
-</script>
+<script>window.onload=()=>window.print();</script>
 </body>
 </html>
 `;
-
     const w = window.open("", "_blank", "noopener,noreferrer");
     if (!w) return alert("Popup blocked. Allow popups to export PDF.");
     w.document.open();
@@ -1147,9 +1224,26 @@ export default function App() {
 
   /* ------------------------- Styles ------------------------- */
 
-  const page = { minHeight: "100vh", background: "#0b0c10", color: "#eef1ff", fontFamily: "system-ui, sans-serif" };
-  const wrap = { maxWidth: 1200, margin: "0 auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 };
-  const card = { border: "1px solid #2a2f3f", borderRadius: 14, background: "#11131a", padding: 12 };
+  const page = {
+    minHeight: "100vh",
+    background: "#0b0c10",
+    color: "#eef1ff",
+    fontFamily: "system-ui, sans-serif",
+  };
+  const wrap = {
+    maxWidth: 1200,
+    margin: "0 auto",
+    padding: 16,
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  };
+  const card = {
+    border: "1px solid #2a2f3f",
+    borderRadius: 14,
+    background: "#11131a",
+    padding: 12,
+  };
   const muted = { color: "#aab1c3" };
   const btn = {
     padding: "10px 12px",
@@ -1161,27 +1255,53 @@ export default function App() {
     fontWeight: 650,
     fontSize: 13,
   };
-  const btnDanger = { ...btn, border: "1px solid rgba(255,107,107,0.55)", background: "rgba(255,107,107,0.12)" };
-  const btnWarn = { ...btn, border: "1px solid rgba(255,214,102,0.65)", background: "rgba(255,214,102,0.12)" };
-  const input = { width: "100%", borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", padding: "10px 10px", outline: "none" };
-  const redCell = { border: "1px solid rgba(255,107,107,0.85)", background: "rgba(255,107,107,0.14)" };
-  const yellowCell = { border: "1px solid rgba(255,214,102,0.95)", background: "rgba(255,214,102,0.14)" };
+  const btnDanger = {
+    ...btn,
+    border: "1px solid rgba(255,107,107,0.55)",
+    background: "rgba(255,107,107,0.12)",
+  };
+  const btnWarn = {
+    ...btn,
+    border: "1px solid rgba(255,214,102,0.65)",
+    background: "rgba(255,214,102,0.12)",
+  };
+  const input = {
+    width: "100%",
+    borderRadius: 10,
+    border: "1px solid #2a2f3f",
+    background: "#0d0f16",
+    color: "#eef1ff",
+    padding: "10px 10px",
+    outline: "none",
+  };
+  const redCell = {
+    border: "1px solid rgba(255,107,107,0.85)",
+    background: "rgba(255,107,107,0.14)",
+  };
+  const yellowCell = {
+    border: "1px solid rgba(255,214,102,0.95)",
+    background: "rgba(255,214,102,0.14)",
+  };
 
   const beforeSeries = beforeMode === "Original" ? computed.originalSeries : computed.loopsOnlySeries;
-
-  // Step guard
-  useEffect(() => {
-    if (step > 1 && !hasCSV) setStep(1);
-  }, [step, hasCSV]);
 
   return (
     <div style={page}>
       <div style={wrap}>
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
           <div>
             <h1 style={{ margin: 0, fontSize: 22 }}>
-              Paraglider Trim Tuning <span style={{ ...muted, fontSize: 12, fontWeight: 700 }}>v{APP_VERSION}</span>
+              Paraglider Trim Tuning{" "}
+              <span style={{ ...muted, fontSize: 12, fontWeight: 700 }}>v{APP_VERSION}</span>
             </h1>
             <div style={{ ...muted, fontSize: 12, marginTop: 6 }}>
               Red: |Δ| ≥ tolerance. Yellow: within 3mm of tolerance. Workflow: set layout + loops before trimming.
@@ -1189,25 +1309,50 @@ export default function App() {
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <button onClick={exportReportPDF} style={{ ...btnWarn, opacity: hasCSV ? 1 : 0.5 }} disabled={!hasCSV}>
+            <button
+              onClick={exportReportPDF}
+              style={{ ...btnWarn, opacity: hasCSV ? 1 : 0.5 }}
+              disabled={!hasCSV}
+            >
               Export Trim Report (Print to PDF)
             </button>
-            <button onClick={exportWideCSV} disabled={!wideRows.length} style={{ ...btn, opacity: wideRows.length ? 1 : 0.5 }}>
+            <button
+              onClick={exportWideCSV}
+              disabled={!wideRows.length}
+              style={{ ...btn, opacity: wideRows.length ? 1 : 0.5 }}
+            >
               Export CSV
             </button>
-            <button onClick={resetSessionAll} style={btnDanger}>Reset session</button>
+            <button onClick={resetSessionAll} style={btnDanger}>
+              Reset session
+            </button>
           </div>
         </div>
 
         {/* Safety */}
-        <div style={{ ...card, borderColor: "rgba(255,204,102,0.5)", background: "rgba(255,204,102,0.08)" }}>
-          <b>Safety notice:</b> This is an analysis + simulation tool. Trimming can be dangerous and may invalidate certification.
-          Always follow manufacturer / check-center procedures, and verify by re-measuring and test flying responsibly.
+        <div
+          style={{
+            ...card,
+            borderColor: "rgba(255,204,102,0.5)",
+            background: "rgba(255,204,102,0.08)",
+          }}
+        >
+          <b>Safety notice:</b> This is an analysis + simulation tool. Trimming can be dangerous and may invalidate
+          certification. Always follow manufacturer / check-center procedures, and verify by re-measuring and test flying
+          responsibly.
         </div>
 
         {/* Workflow Stepper */}
         <div style={card}>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
             <div style={{ fontWeight: 900 }}>Workflow</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <StepButton current={step} num={1} setStep={setStep} enabled={true} label="1) Import CSV" />
@@ -1226,22 +1371,49 @@ export default function App() {
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 1 — Import measurement CSV</div>
             <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
-              Upload your measurement file (wide layout with A/B/C/D blocks). After import, we’ll move to wing layout.
+              Upload your measurement file (wide layout with A/B/C/D blocks). The wing name is read from cells <b>A2</b>{" "}
+              + <b>B2</b> and used as the profile name.
             </div>
+
             <div style={{ height: 10 }} />
+
+            {/* hidden native input (removes "No file chosen") */}
             <input
+              ref={fileInputRef}
               type="file"
               accept=".csv,text/csv"
+              style={{ display: "none" }}
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) onImportFile(f);
+                if (f) {
+                  setSelectedFileName(f.name);
+                  onImportFile(f);
+                }
                 e.target.value = "";
               }}
-              style={{ color: "#aab1c3" }}
             />
+
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <button style={btnWarn} onClick={() => fileInputRef.current?.click()}>
+                Choose CSV…
+              </button>
+
+              <div style={{ ...muted, fontSize: 12 }}>
+                {selectedFileName ? (
+                  <>
+                    Selected: <b style={{ color: "#eef1ff" }}>{selectedFileName}</b>
+                  </>
+                ) : (
+                  <>No file selected.</>
+                )}
+              </div>
+            </div>
+
             {!hasCSV ? null : (
-              <div style={{ marginTop: 12, ...muted, fontSize: 12 }}>
+              <div style={{ marginTop: 12, ...muted, fontSize: 12, lineHeight: 1.6 }}>
                 Loaded <b>{wideRows.length}</b> rows • Lines detected: <b>{allLines.length}</b>
+                <br />
+                Profile name from CSV (A2+B2): <b style={{ color: "#eef1ff" }}>{makeProfileNameFromMeta(meta)}</b>
               </div>
             )}
           </div>
@@ -1252,16 +1424,22 @@ export default function App() {
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 2 — Wing profile & line layout</div>
             <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
-              Choose (or build) a mapping so the app understands your rigging diagram grouping (AR1/BR2/…). This controls grouping, target, and the 3D view.
+              Choose (or build) a mapping so the app understands your rigging diagram grouping (AR1/BR2/…). This controls
+              grouping, target, and the 3D view.
             </div>
 
             <div style={{ height: 10 }} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
                 <div style={{ fontWeight: 850, marginBottom: 10 }}>Select profile</div>
+
+                <div style={{ ...muted, fontSize: 12, marginBottom: 8 }}>
+                  Imported wing/profile name: <b style={{ color: "#eef1ff" }}>{csvProfileName}</b>
+                </div>
+
                 <label style={{ ...muted, fontSize: 12 }}>Profile</label>
                 <select value={profileKey} onChange={(e) => setProfileKey(e.target.value)} style={{ ...input, padding: "10px 10px", marginTop: 6 }}>
-                  {Object.keys(profiles).map((k) => (
+                  {Object.keys(profiles).sort((a, b) => a.localeCompare(b)).map((k) => (
                     <option key={k} value={k}>
                       {k}
                     </option>
@@ -1288,6 +1466,9 @@ export default function App() {
 
                 <div style={{ height: 10 }} />
                 <div style={{ ...muted, fontSize: 12 }}>
+                  CSV max lines: A{csvLineMax.A || "–"} / B{csvLineMax.B || "–"} / C{csvLineMax.C || "–"} / D{csvLineMax.D || "–"}
+                </div>
+                <div style={{ ...muted, fontSize: 12, marginTop: 6 }}>
                   Groups detected from data: <b>{extractGroupNames(wideRows, activeProfile).length}</b>
                 </div>
               </div>
@@ -1303,6 +1484,7 @@ export default function App() {
                     setProfileJson(next);
                     localStorage.setItem("wingProfilesJson", next);
                   }}
+                  csvLineMax={csvLineMax}
                 />
               </div>
             </div>
@@ -1326,7 +1508,7 @@ export default function App() {
 
             <div style={{ height: 10 }} />
 
-            {/* Loop types + presets */}
+            {/* Loop types */}
             <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
               <div style={{ fontWeight: 850, marginBottom: 8 }}>Loop types (editable)</div>
               <div style={{ color: "#aab1c3", fontSize: 12, marginBottom: 10 }}>
@@ -1335,7 +1517,15 @@ export default function App() {
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
                 {Object.entries(loopTypes).map(([name, mm]) => (
-                  <div key={name} style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 10, background: "#0d0f16" }}>
+                  <div
+                    key={name}
+                    style={{
+                      border: "1px solid #2a2f3f",
+                      borderRadius: 14,
+                      padding: 10,
+                      background: "#0d0f16",
+                    }}
+                  >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                       <div style={{ fontWeight: 850 }}>{name}</div>
                       <div style={{ color: "#aab1c3", fontSize: 12 }}>mm</div>
@@ -1369,15 +1559,11 @@ export default function App() {
 
               <div style={{ padding: 12, borderRadius: 14, border: "1px solid #2a2f3f", background: "#0b0c10" }}>
                 <div style={{ fontWeight: 850, marginBottom: 8 }}>Presets & bulk tools</div>
-                <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
-                  Use quick presets, bulk apply, and save/load named presets for different wings or setups.
-                </div>
 
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button onClick={applyAllSL} style={btn}>All SL</button>
                   <button onClick={() => mirrorLoops("L", "R")} style={btn}>Mirror L → R</button>
                   <button onClick={() => mirrorLoops("R", "L")} style={btn}>Mirror R → L</button>
-                  <button onClick={() => mirrorLoops("L", "R")} style={btn}>Set R = L</button>
                   <button onClick={resetLoopsToSL} style={btnDanger}>Reset loops</button>
                 </div>
 
@@ -1405,9 +1591,7 @@ export default function App() {
                       style={{ ...input, padding: "10px 10px", opacity: bulkScope === "Group" ? 1 : 0.5 }}
                     >
                       {allGroupNames.map((g) => (
-                        <option key={g} value={g}>
-                          {g}
-                        </option>
+                        <option key={g} value={g}>{g}</option>
                       ))}
                     </select>
                   </div>
@@ -1425,9 +1609,7 @@ export default function App() {
                     <label style={{ ...muted, fontSize: 12 }}>Loop type</label>
                     <select value={bulkLoopType} onChange={(e) => setBulkLoopType(e.target.value)} style={{ ...input, padding: "10px 10px" }}>
                       {Object.keys(loopTypes).map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
+                        <option key={t} value={t}>{t}</option>
                       ))}
                     </select>
                   </div>
@@ -1453,15 +1635,13 @@ export default function App() {
                   <div style={{ ...muted, fontSize: 12, marginBottom: 6 }}>Saved presets:</div>
                   {Object.keys(loopPresets).length ? (
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {Object.keys(loopPresets)
-                        .sort((a, b) => a.localeCompare(b))
-                        .map((name) => (
-                          <div key={name} style={{ display: "flex", gap: 6, alignItems: "center", border: "1px solid #2a2f3f", borderRadius: 12, padding: "8px 10px", background: "#0d0f16" }}>
-                            <b style={{ fontSize: 12 }}>{name}</b>
-                            <button onClick={() => loadLoopPreset(name)} style={{ ...btn, padding: "6px 8px", fontSize: 12 }}>load</button>
-                            <button onClick={() => deleteLoopPreset(name)} style={{ ...btnDanger, padding: "6px 8px", fontSize: 12 }}>delete</button>
-                          </div>
-                        ))}
+                      {Object.keys(loopPresets).sort((a, b) => a.localeCompare(b)).map((name) => (
+                        <div key={name} style={{ display: "flex", gap: 6, alignItems: "center", border: "1px solid #2a2f3f", borderRadius: 12, padding: "8px 10px", background: "#0d0f16" }}>
+                          <b style={{ fontSize: 12 }}>{name}</b>
+                          <button onClick={() => loadLoopPreset(name)} style={{ ...btn, padding: "6px 8px", fontSize: 12 }}>load</button>
+                          <button onClick={() => deleteLoopPreset(name)} style={{ ...btnDanger, padding: "6px 8px", fontSize: 12 }}>delete</button>
+                        </div>
+                      ))}
                     </div>
                   ) : (
                     <div style={{ ...muted, fontSize: 12 }}>None yet.</div>
@@ -1475,10 +1655,6 @@ export default function App() {
             {/* Per-line setup */}
             <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
               <div style={{ fontWeight: 850, marginBottom: 8 }}>Loops installed per line</div>
-              <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
-                Choose the loop type per line side (one type per maillon).
-              </div>
-
               {!hasLines ? (
                 <div style={{ ...muted, fontSize: 12 }}>No lines found. Check your CSV import.</div>
               ) : (
@@ -1568,7 +1744,6 @@ export default function App() {
         {/* STEP 4 */}
         {step === 4 ? (
           <>
-            {/* Trimming + target */}
             <div style={card}>
               <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 4 — Trimming, target plan, and analysis</div>
               <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
@@ -1686,9 +1861,7 @@ export default function App() {
                         <tbody>
                           {targetPlan.map((p, idx) => (
                             <tr key={idx} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
-                              <td style={{ padding: "6px 6px" }}>
-                                <b>{p.groupName}</b>
-                              </td>
+                              <td style={{ padding: "6px 6px" }}><b>{p.groupName}</b></td>
                               <td style={{ padding: "6px 6px" }}>{p.side}</td>
                               <td style={{ padding: "6px 6px", textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
                                 {fmtSigned(p.currentMean, 1)}
@@ -1949,14 +2122,15 @@ function BlockTable({ title, rows, meta, activeProfile, adjustments, loopDeltaFo
   );
 }
 
-/* ------------------------- Wing Profile Editor (friendly UI) ------------------------- */
+/* ------------------------- Wing Profile Editor (clamped by CSV max) ------------------------- */
 
-function ProfileEditor({ profiles, profileKey, setProfileKey, profileJson, setProfileJson }) {
+function ProfileEditor({ profiles, profileKey, setProfileKey, profileJson, setProfileJson, csvLineMax }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("builder"); // builder | json | help
   const [draftKey, setDraftKey] = useState(profileKey);
   const [draft, setDraft] = useState(() => deepClone(profiles[profileKey] || {}));
   const [message, setMessage] = useState("");
+  const [allowBeyondCsv, setAllowBeyondCsv] = useState(false);
 
   useEffect(() => {
     setDraftKey(profileKey);
@@ -1964,26 +2138,29 @@ function ProfileEditor({ profiles, profileKey, setProfileKey, profileJson, setPr
   }, [profileKey]); // eslint-disable-line
 
   const allKeys = Object.keys(profiles || {});
-  const current = profiles?.[draftKey] || null;
-
-  function saveDraftToProfiles() {
-    try {
-      const next = { ...profiles };
-      next[draftKey] = draft;
-      const json = JSON.stringify(next, null, 2);
-      setProfileJson(json);
-      setProfileKey(draftKey);
-      setMessage("Saved ✅");
-      setTimeout(() => setMessage(""), 1500);
-    } catch {
-      setMessage("Could not save (invalid data).");
-    }
-  }
 
   function validateDraftClick() {
     const result = validateProfile(draftKey, draft);
     if (result.ok) setMessage("Looks good ✅");
     else setMessage(result.errors.join(" • "));
+  }
+
+  function saveDraftToProfiles() {
+    try {
+      const next = { ...profiles };
+      next[draftKey] = draft;
+
+      const json = JSON.stringify(next, null, 2);
+      setProfileJson(json);
+
+      // ensures dropdown includes it and selection populates
+      setProfileKey(draftKey);
+
+      setMessage("Saved ✅");
+      setTimeout(() => setMessage(""), 1500);
+    } catch {
+      setMessage("Could not save (invalid data).");
+    }
   }
 
   function addNewProfile() {
@@ -1999,7 +2176,7 @@ function ProfileEditor({ profiles, profileKey, setProfileKey, profileJson, setPr
   }
 
   function duplicateProfile() {
-    const base = current || draft;
+    const base = draft;
     const baseName = `${draftKey} (copy)`;
     let k = baseName;
     let i = 2;
@@ -2027,54 +2204,6 @@ function ProfileEditor({ profiles, profileKey, setProfileKey, profileJson, setPr
     setMessage("Deleted.");
   }
 
-  function openPopout() {
-    const w = window.open("", "_blank", "noopener,noreferrer");
-    if (!w) {
-      setMessage("Popup blocked. Allow popups then try again.");
-      return;
-    }
-
-    const html = `
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Wing Profile JSON Editor</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 20px; background:#0b0c10; color:#eef1ff;}
-    textarea { width:100%; min-height: 60vh; background:#0d0f16; color:#eef1ff; border:1px solid #2a2f3f; border-radius: 10px; padding: 12px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; outline:none;}
-    .card { border:1px solid #2a2f3f; border-radius: 14px; background:#11131a; padding:12px; margin-bottom: 12px;}
-    button { padding:10px 12px; border-radius: 10px; border:1px solid #2a2f3f; background:#0d0f16; color:#eef1ff; cursor:pointer; font-weight:700;}
-    .muted { color:#aab1c3; font-size: 12px; line-height: 1.4;}
-    code { color:#b084ff; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h2 style="margin:0 0 6px 0;">Wing Profiles JSON (Pop-out)</h2>
-    <div class="muted">
-      Tips:
-      <ul>
-        <li><code>mmPerLoop</code>: used for target plan sizing.</li>
-        <li><code>mapping.A</code>: ranges mapping A line numbers to group labels (example: <code>[1,4,"AR1"]</code>).</li>
-        <li>Ranges should not overlap within the same letter.</li>
-      </ul>
-    </div>
-  </div>
-  <textarea id="t"></textarea>
-  <div style="display:flex; gap:10px; margin-top:10px; flex-wrap:wrap;">
-    <button onclick="navigator.clipboard.writeText(document.getElementById('t').value)">Copy to clipboard</button>
-  </div>
-  <script>
-    const initial = ${JSON.stringify(profileJson)};
-    document.getElementById('t').value = initial;
-  </script>
-</body>
-</html>`;
-    w.document.write(html);
-    w.document.close();
-  }
-
   const btn = {
     padding: "10px 12px",
     borderRadius: 10,
@@ -2093,8 +2222,9 @@ function ProfileEditor({ profiles, profileKey, setProfileKey, profileJson, setPr
     <>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <button style={btn} onClick={() => setOpen(true)}>Open Profile Editor</button>
-        <button style={btn} onClick={openPopout}>Pop-out editor</button>
-        <span style={{ color: "#aab1c3", fontSize: 12 }}>(Builder + validation + raw JSON)</span>
+        <span style={{ color: "#aab1c3", fontSize: 12 }}>
+          CSV max: A{csvLineMax?.A || "–"} / B{csvLineMax?.B || "–"} / C{csvLineMax?.C || "–"} / D{csvLineMax?.D || "–"}
+        </span>
       </div>
 
       {!open ? null : (
@@ -2110,7 +2240,7 @@ function ProfileEditor({ profiles, profileKey, setProfileKey, profileJson, setPr
               <div>
                 <div style={{ fontWeight: 900, fontSize: 16 }}>Wing Profile Editor</div>
                 <div style={{ color: "#aab1c3", fontSize: 12, marginTop: 4 }}>
-                  Grouping affects: baseline grouping, target plan, chart aggregation, and the 3D wing view.
+                  By default, range values are clamped to the imported CSV max line numbers. Enable extras if needed.
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -2146,7 +2276,7 @@ function ProfileEditor({ profiles, profileKey, setProfileKey, profileJson, setPr
                     }}
                     style={{ ...input, padding: "10px 10px" }}
                   >
-                    {allKeys.map((k) => (
+                    {allKeys.sort((a, b) => a.localeCompare(b)).map((k) => (
                       <option key={k} value={k}>{k}</option>
                     ))}
                   </select>
@@ -2157,10 +2287,10 @@ function ProfileEditor({ profiles, profileKey, setProfileKey, profileJson, setPr
                   <input value={draft?.name ?? draftKey} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} style={input} />
                 </div>
 
-                <div>
-                  <label style={{ color: "#aab1c3", fontSize: 12 }}>mm per loop</label>
-                  <input value={draft?.mmPerLoop ?? 10} onChange={(e) => setDraft((d) => ({ ...d, mmPerLoop: n(e.target.value) ?? 10 }))} style={input} inputMode="numeric" />
-                </div>
+                <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#aab1c3", fontSize: 12 }}>
+                  <input type="checkbox" checked={allowBeyondCsv} onChange={(e) => setAllowBeyondCsv(e.target.checked)} />
+                  Allow ranges beyond CSV
+                </label>
               </div>
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
@@ -2170,8 +2300,14 @@ function ProfileEditor({ profiles, profileKey, setProfileKey, profileJson, setPr
               </div>
             </div>
 
-            {tab === "builder" ? <ProfileBuilder draft={draft} setDraft={setDraft} /> : null}
-            {tab === "json" ? <ProfileJsonView profileJson={profileJson} setProfileJson={setProfileJson} /> : null}
+            {tab === "builder" ? (
+              <ProfileBuilder draft={draft} setDraft={setDraft} csvLineMax={csvLineMax} allowBeyondCsv={allowBeyondCsv} />
+            ) : null}
+
+            {tab === "json" ? (
+              <ProfileJsonView profileJson={profileJson} setProfileJson={setProfileJson} />
+            ) : null}
+
             {tab === "help" ? <ProfileHelp /> : null}
           </div>
         </div>
@@ -2198,10 +2334,17 @@ function TabButton({ active, onClick, children }) {
   );
 }
 
-function ProfileBuilder({ draft, setDraft }) {
+function ProfileBuilder({ draft, setDraft, csvLineMax, allowBeyondCsv }) {
   const input = { width: "100%", borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", padding: "10px 10px", outline: "none" };
 
   const mapping = draft?.mapping || { A: [], B: [], C: [], D: [] };
+
+  function clampFor(letter, value) {
+    if (allowBeyondCsv) return value;
+    const max = csvLineMax?.[letter] || 0;
+    if (!max) return value;
+    return Math.min(value, max);
+  }
 
   function setLetter(letter, nextArr) {
     setDraft((d) => ({ ...d, mapping: { ...(d.mapping || {}), [letter]: nextArr } }));
@@ -2209,7 +2352,10 @@ function ProfileBuilder({ draft, setDraft }) {
 
   function addRow(letter) {
     const arr = Array.isArray(mapping[letter]) ? mapping[letter] : [];
-    setLetter(letter, [...arr, [1, 1, `${letter}R1`]]);
+    const max = csvLineMax?.[letter] || 1;
+    const minV = allowBeyondCsv ? 1 : Math.min(1, max);
+    const maxV = allowBeyondCsv ? 1 : Math.min(1, max);
+    setLetter(letter, [...arr, [minV, maxV, `${letter}R1`]]);
   }
 
   function updateRow(letter, idx, col, value) {
@@ -2219,7 +2365,14 @@ function ProfileBuilder({ draft, setDraft }) {
 
     if (col === "min" || col === "max") {
       const nv = n(value);
-      row[col === "min" ? 0 : 1] = Number.isFinite(nv) ? nv : row[col === "min" ? 0 : 1];
+      if (Number.isFinite(nv)) {
+        const clamped = clampFor(letter, nv);
+        row[col === "min" ? 0 : 1] = clamped;
+        if (row[0] > row[1]) {
+          if (col === "min") row[1] = row[0];
+          else row[0] = row[1];
+        }
+      }
     } else if (col === "group") {
       row[2] = value;
     }
@@ -2237,7 +2390,7 @@ function ProfileBuilder({ draft, setDraft }) {
   return (
     <div style={{ marginTop: 12 }}>
       <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5 }}>
-        <b>Builder:</b> Add ranges like “A 1–4 → AR1”. The app maps line IDs like <b>A01</b>, <b>A2</b>, <b>A16</b>.
+        <b>Builder:</b> Add ranges like “A 1–4 → AR1”. By default, min/max are clamped to the imported CSV maximum line number per letter.
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12, marginTop: 12 }}>
@@ -2254,7 +2407,7 @@ function ProfileBuilder({ draft, setDraft }) {
             </div>
 
             <div style={{ color: "#aab1c3", fontSize: 12, marginTop: 6 }}>
-              Example: [{L}1–{L}4] → {L}R1 (group label should match your diagram like AR1/BR2).
+              CSV max {L}: <b style={{ color: "#eef1ff" }}>{csvLineMax?.[L] || "–"}</b> {allowBeyondCsv ? "(extras allowed)" : "(clamped)"}
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
@@ -2290,7 +2443,9 @@ function ProfileBuilder({ draft, setDraft }) {
 function ProfileJsonView({ profileJson, setProfileJson }) {
   return (
     <div style={{ marginTop: 12 }}>
-      <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5 }}>Raw JSON view (advanced). If you edit here, use Validate then Save.</div>
+      <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5 }}>
+        Raw JSON view (advanced). If you edit here, Save applies to dropdown immediately.
+      </div>
       <textarea
         value={profileJson}
         onChange={(e) => setProfileJson(e.target.value)}
@@ -2352,7 +2507,6 @@ function validateProfile(profileKey, profile) {
     });
 
     const sorted = rows.filter((r) => Number.isFinite(r.min) && Number.isFinite(r.max)).sort((a, b) => a.min - b.min);
-
     for (let i = 1; i < sorted.length; i++) {
       const prev = sorted[i - 1];
       const cur = sorted[i];
@@ -2366,14 +2520,6 @@ function validateProfile(profileKey, profile) {
   return { ok: errors.length === 0, errors };
 }
 
-function deepClone(x) {
-  try {
-    return JSON.parse(JSON.stringify(x));
-  } catch {
-    return x;
-  }
-}
-
 /* ------------------------- Table helpers ------------------------- */
 
 function Th({ children, align }) {
@@ -2385,15 +2531,4 @@ function Td({ children, colSpan, align, style }) {
       {children}
     </td>
   );
-}
-
-/* ------------------------- HTML escaping for report ------------------------- */
-
-function escapeHtml(s) {
-  return String(s ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
 }
