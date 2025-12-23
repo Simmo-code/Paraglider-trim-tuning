@@ -1,26 +1,19 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 
 /**
- * Trim Tuning App — App.jsx (single file)
+ * Paraglider Trim Tuning — Guided workflow version
+ * Static-site friendly (GitHub Pages / Netlify)
  *
- * Includes:
- * - Wide CSV import (German layout: Eingabe / Toleranz / Korrektur; A/B/C/D blocks)
- * - Compact A/B/C/D tables (2x2) with red/yellow highlight:
- *    RED:    |Δ| >= tolerance
- *    YELLOW: tolerance-3 <= |Δ| < tolerance
- * - Wing profile mapping line IDs -> groups (AR1/BR2/...)
- * - What-if group adjustments (mm) + factory target plan w/ A/B/C/D filter checkboxes
- * - BEFORE vs AFTER overlay line chart
- * - 3D-ish wing profile column chart (isometric SVG)
- * - Friendly wing profile editor modal + pop-out
+ * Steps:
+ * 1) Import CSV
+ * 2) Wing profile / line layout
+ * 3) Loops setup (baseline)
+ * 4) Trimming (adjustments + target + charts + tables + 3D)
  *
- * NEW:
- * - Maillon loop system:
- *   - Loop types with editable mm deltas
- *   - Per line/side loop selection (only one loop type per maillon per line side)
- *   - Bulk apply to All / Letter / Group; Mirror L->R, R->L; Sync
- * - Chart "Before trimming" = loops only, "After" = loops + adjustments, optional Original reference
+ * Export PDF: uses window.print() in a new tab (Print to PDF)
  */
+
+const APP_VERSION = "0.2.0";
 
 const BUILTIN_PROFILES = {
   "Speedster 3 (starter mapping)": {
@@ -47,6 +40,36 @@ const BUILTIN_PROFILES = {
         [1, 4, "DR1"],
         [5, 8, "DR2"],
         [9, 14, "DR3"],
+      ],
+    },
+  },
+  "Generic 16 lines (demo)": {
+    name: "Generic 16 lines (demo)",
+    mmPerLoop: 10,
+    mapping: {
+      A: [
+        [1, 4, "AR1"],
+        [5, 8, "AR2"],
+        [9, 12, "AR3"],
+        [13, 16, "AR4"],
+      ],
+      B: [
+        [1, 4, "BR1"],
+        [5, 8, "BR2"],
+        [9, 12, "BR3"],
+        [13, 16, "BR4"],
+      ],
+      C: [
+        [1, 4, "CR1"],
+        [5, 8, "CR2"],
+        [9, 12, "CR3"],
+        [13, 16, "CR4"],
+      ],
+      D: [
+        [1, 4, "DR1"],
+        [5, 8, "DR2"],
+        [9, 12, "DR3"],
+        [13, 16, "DR4"],
       ],
     },
   },
@@ -157,7 +180,9 @@ function parseWide(grid) {
 /* ------------------------- Group mapping ------------------------- */
 
 function parseLineId(lineId) {
-  const m = String(lineId || "").trim().match(/^([A-Za-z])\s*0*([0-9]+)$/);
+  const m = String(lineId || "")
+    .trim()
+    .match(/^([A-Za-z])\s*0*([0-9]+)$/);
   if (!m) return null;
   return { prefix: m[1].toUpperCase(), num: parseInt(m[2], 10) };
 }
@@ -272,9 +297,6 @@ function makeLinePath(points) {
 }
 
 function ChartOverlay({ series1, series2, series3, width = 1050, height = 360 }) {
-  // series1 = optional reference (e.g. Original) dashed
-  // series2 = "Before trimming" dotted
-  // series3 = "After trimming" solid
   const padding = { l: 45, r: 16, t: 16, b: 28 };
 
   const maxLen = Math.max(
@@ -335,11 +357,7 @@ function ChartOverlay({ series1, series2, series3, width = 1050, height = 360 })
 
   return (
     <div style={{ overflowX: "auto" }}>
-      <svg
-        width={width}
-        height={height}
-        style={{ background: "#0e1018", borderRadius: 14, border: "1px solid #2a2f3f" }}
-      >
+      <svg width={width} height={height} style={{ background: "#0e1018", borderRadius: 14, border: "1px solid #2a2f3f" }}>
         {grid.map((g, i) => (
           <g key={i}>
             <line x1={padding.l} x2={width - padding.r} y1={g.y} y2={g.y} stroke="rgba(170,177,195,0.18)" />
@@ -359,14 +377,7 @@ function ChartOverlay({ series1, series2, series3, width = 1050, height = 360 })
           const show = maxLen <= 16 ? true : i % 2 === 0;
           if (!show) return null;
           return (
-            <text
-              key={i}
-              x={xFor(i)}
-              y={height - 10}
-              fontSize="11"
-              fill="rgba(170,177,195,0.75)"
-              textAnchor="middle"
-            >
+            <text key={i} x={xFor(i)} y={height - 10} fontSize="11" fill="rgba(170,177,195,0.75)" textAnchor="middle">
               {i + 1}
             </text>
           );
@@ -530,6 +541,14 @@ function Wing3D({ groupStats, width = 1050, height = 420 }) {
 /* ------------------------- Main App ------------------------- */
 
 export default function App() {
+  // Guided workflow step (persisted)
+  const [step, setStep] = useState(() => {
+    const s = localStorage.getItem("workflowStep");
+    const v = parseInt(s || "1", 10);
+    return Number.isFinite(v) ? Math.min(4, Math.max(1, v)) : 1;
+  });
+  useEffect(() => localStorage.setItem("workflowStep", String(step)), [step]);
+
   const [delim, setDelim] = useState(",");
   const [meta, setMeta] = useState({ input1: "", input2: "", tolerance: 0, correction: 0 });
   const [wideRows, setWideRows] = useState([]);
@@ -549,8 +568,7 @@ export default function App() {
     return { ...BUILTIN_PROFILES };
   }, [profileJson]);
 
-  const activeProfile =
-    profiles[profileKey] || Object.values(profiles)[0] || Object.values(BUILTIN_PROFILES)[0];
+  const activeProfile = profiles[profileKey] || Object.values(profiles)[0] || Object.values(BUILTIN_PROFILES)[0];
 
   // Adjustments (persisted)
   const [adjustments, setAdjustments] = useState(() => {
@@ -562,33 +580,19 @@ export default function App() {
     }
   });
 
-  // Loop types (persisted) — mm delta applied to measured length
+  // Loop types (persisted)
   const [loopTypes, setLoopTypes] = useState(() => {
     try {
       const s = localStorage.getItem("loopTypes");
       return s
         ? JSON.parse(s)
-        : {
-            SL: 0,
-            DL: -7,
-            AS: -10,
-            "AS+": -16,
-            PH: -18,
-            "LF++": -23,
-          };
+        : { SL: 0, DL: -7, AS: -10, "AS+": -16, PH: -18, "LF++": -23 };
     } catch {
-      return {
-        SL: 0,
-        DL: -7,
-        AS: -10,
-        "AS+": -16,
-        PH: -18,
-        "LF++": -23,
-      };
+      return { SL: 0, DL: -7, AS: -10, "AS+": -16, PH: -18, "LF++": -23 };
     }
   });
 
-  // Loop setup per line+side (persisted) — stores the selected loop TYPE
+  // Loop setup per line+side (persisted)
   const [loopSetup, setLoopSetup] = useState(() => {
     try {
       const s = localStorage.getItem("loopSetup");
@@ -597,6 +601,17 @@ export default function App() {
       return {};
     }
   });
+
+  // Loop preset library (persisted)
+  const [loopPresets, setLoopPresets] = useState(() => {
+    try {
+      const s = localStorage.getItem("loopPresets");
+      return s ? JSON.parse(s) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [presetName, setPresetName] = useState("");
 
   // UI: manual adjustments
   const [adjGroup, setAdjGroup] = useState("AR1");
@@ -615,7 +630,7 @@ export default function App() {
   const [showB, setShowB] = useState(true);
   const [showC, setShowC] = useState(true);
   const [showD, setShowD] = useState(true);
-  const [showOriginalRef, setShowOriginalRef] = useState(false); // optional
+  const [showOriginalRef, setShowOriginalRef] = useState(false);
   const [beforeMode, setBeforeMode] = useState("LoopsOnly"); // LoopsOnly | Original
 
   // Bulk loop tool UI
@@ -635,6 +650,10 @@ export default function App() {
   function persistLoopSetup(next) {
     setLoopSetup(next);
     localStorage.setItem("loopSetup", JSON.stringify(next));
+  }
+  function persistLoopPresets(next) {
+    setLoopPresets(next);
+    localStorage.setItem("loopPresets", JSON.stringify(next));
   }
 
   function loopDeltaFor(lineId, side) {
@@ -678,6 +697,9 @@ export default function App() {
         setAdjGroup(groups[0]);
         setBulkGroup(groups[0]);
       }
+
+      // move workflow forward automatically
+      setStep(2);
     };
     reader.readAsText(file);
   }
@@ -687,10 +709,22 @@ export default function App() {
     rows.push(["Input 1", "Input 2", "Tolerance", "Correction"]);
     rows.push([meta.input1, meta.input2, meta.tolerance, meta.correction]);
     rows.push([
-      "A", "Nominal", "Measured L", "Measured R",
-      "B", "Nominal", "Measured L", "Measured R",
-      "C", "Nominal", "Measured L", "Measured R",
-      "D", "Nominal", "Measured L", "Measured R",
+      "A",
+      "Nominal",
+      "Measured L",
+      "Measured R",
+      "B",
+      "Nominal",
+      "Measured L",
+      "Measured R",
+      "C",
+      "Nominal",
+      "Measured L",
+      "Measured R",
+      "D",
+      "Nominal",
+      "Measured L",
+      "Measured R",
     ]);
 
     for (const r of wideRows) {
@@ -722,6 +756,12 @@ export default function App() {
 
   const allGroupNames = useMemo(() => extractGroupNames(wideRows, activeProfile), [wideRows, activeProfile]);
 
+  useEffect(() => {
+    if (allGroupNames.length && !allGroupNames.includes(adjGroup)) setAdjGroup(allGroupNames[0]);
+    if (allGroupNames.length && !allGroupNames.includes(bulkGroup)) setBulkGroup(allGroupNames[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allGroupNames.join("|")]);
+
   function applyGroupAdjustment() {
     const mm = n(adjMm);
     if (!Number.isFinite(mm)) return;
@@ -731,7 +771,8 @@ export default function App() {
       next[`${adjGroup}|L`] = (Number.isFinite(next[`${adjGroup}|L`]) ? next[`${adjGroup}|L`] : 0) + mm;
       next[`${adjGroup}|R`] = (Number.isFinite(next[`${adjGroup}|R`]) ? next[`${adjGroup}|R`] : 0) + mm;
     } else {
-      next[`${adjGroup}|${adjSide}`] = (Number.isFinite(next[`${adjGroup}|${adjSide}`]) ? next[`${adjGroup}|${adjSide}`] : 0) + mm;
+      next[`${adjGroup}|${adjSide}`] =
+        (Number.isFinite(next[`${adjGroup}|${adjSide}`]) ? next[`${adjGroup}|${adjSide}`] : 0) + mm;
     }
     persistAdjustments(next);
     setAdjMm("0");
@@ -774,18 +815,55 @@ export default function App() {
     persistLoopSetup(next);
   }
 
-  function syncRightToLeft() {
-    mirrorLoops("L", "R");
-  }
-
   function resetLoopsToSL() {
     const ok = confirm("Reset ALL loop selections back to SL?");
     if (!ok) return;
     persistLoopSetup({});
   }
 
+  function applyAllSL() {
+    const ok = confirm("Set ALL line loops (L/R) to SL?");
+    if (!ok) return;
+    persistLoopSetup({});
+  }
+
+  function saveLoopPreset() {
+    const name = presetName.trim();
+    if (!name) return alert("Enter a preset name first.");
+    const next = { ...loopPresets, [name]: loopSetup };
+    persistLoopPresets(next);
+    setPresetName("");
+    alert(`Saved preset "${name}".`);
+  }
+
+  function loadLoopPreset(name) {
+    const p = loopPresets?.[name];
+    if (!p || typeof p !== "object") return;
+    const ok = confirm(`Load preset "${name}"? This will overwrite current loop selections.`);
+    if (!ok) return;
+    persistLoopSetup(p);
+  }
+
+  function deleteLoopPreset(name) {
+    const ok = confirm(`Delete preset "${name}"?`);
+    if (!ok) return;
+    const next = { ...loopPresets };
+    delete next[name];
+    persistLoopPresets(next);
+  }
+
+  function resetSessionAll() {
+    const ok = confirm("Reset everything? (loops, adjustments, workflow step, loaded data)");
+    if (!ok) return;
+    setMeta({ input1: "", input2: "", tolerance: 0, correction: 0 });
+    setWideRows([]);
+    persistLoopSetup({});
+    persistAdjustments({});
+    setStep(1);
+  }
+
   /* ------------------------- Computations ------------------------- */
-  // We compute three states:
+  // We compute:
   // - Original: no loops, no adjustments
   // - LoopsOnly: loops applied, no adjustments (Before trimming)
   // - After: loops + adjustments applied (After trimming)
@@ -887,9 +965,7 @@ export default function App() {
       if (!Number.isFinite(mean)) continue;
       groupStatsAfter.push({ groupName, side, meanDelta: mean });
     }
-    groupStatsAfter.sort((a, b) =>
-      (groupSortKey(a.groupName) + a.side).localeCompare(groupSortKey(b.groupName) + b.side)
-    );
+    groupStatsAfter.sort((a, b) => (groupSortKey(a.groupName) + a.side).localeCompare(groupSortKey(b.groupName) + b.side));
 
     const suggestionsAfter = groupStatsAfter.map((s) => {
       const loopsSigned = Math.round(s.meanDelta / mmPerLoop);
@@ -905,16 +981,7 @@ export default function App() {
     });
 
     return { originalSeries, loopsOnlySeries, afterSeries, groupStatsAfter, suggestionsAfter };
-  }, [
-    wideRows,
-    meta.correction,
-    meta.tolerance,
-    activeProfile,
-    adjustments,
-    chartSideMode,
-    loopSetup,
-    loopTypes,
-  ]);
+  }, [wideRows, meta.correction, meta.tolerance, activeProfile, adjustments, chartSideMode, loopSetup, loopTypes]);
 
   const targetPlan = useMemo(() => {
     const mmPerLoop = Number.isFinite(activeProfile?.mmPerLoop) ? activeProfile.mmPerLoop : 10;
@@ -960,13 +1027,140 @@ export default function App() {
     persistAdjustments(next);
   }
 
+  // Workflow validation helpers
+  const hasCSV = wideRows.length > 0;
+  const hasLines = allLines.length > 0;
+  const groupsReady = extractGroupNames(wideRows, activeProfile).length > 0;
+
+  // Export report (Print to PDF)
+  function exportReportPDF() {
+    if (!hasCSV) return alert("Import a CSV first.");
+
+    const now = new Date();
+    const title = `Trim Report — ${now.toISOString().slice(0, 10)} ${now.toLocaleTimeString()}`;
+    const mmPerLoop = Number.isFinite(activeProfile?.mmPerLoop) ? activeProfile.mmPerLoop : 10;
+
+    // Simple summaries
+    const loopsSummary = allLines.map(({ lineId }) => {
+      const tL = loopSetup[`${lineId}|L`] || "SL";
+      const tR = loopSetup[`${lineId}|R`] || "SL";
+      return { lineId, left: tL, right: tR };
+    });
+
+    const adjustmentsList = Object.entries(adjustments).sort((a, b) => a[0].localeCompare(b[0]));
+
+    const html = `
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>${escapeHtml(title)}</title>
+<style>
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 24px; color: #111; }
+  h1 { margin: 0 0 6px 0; font-size: 20px; }
+  .muted { color: #555; font-size: 12px; }
+  .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; margin: 12px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border-bottom: 1px solid #eee; padding: 6px 8px; text-align: left; }
+  .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .warn { background: #fff3cd; border: 1px solid #ffeeba; }
+  .danger { background: #f8d7da; border: 1px solid #f5c6cb; }
+</style>
+</head>
+<body>
+  <h1>${escapeHtml(title)}</h1>
+  <div class="muted">App version: ${escapeHtml(APP_VERSION)} • Profile: ${escapeHtml(profileKey)} • mm/loop: ${mmPerLoop}</div>
+
+  <div class="card warn">
+    <b>Safety:</b> Simulation/analysis only. Verify with manufacturer/check-center procedures. After any change, re-measure and validate.
+  </div>
+
+  <div class="card">
+    <b>Session header</b>
+    <div class="muted">Input 1: ${escapeHtml(meta.input1)} • Input 2: ${escapeHtml(meta.input2)}</div>
+    <div class="muted">Tolerance: <span class="mono">${escapeHtml(String(meta.tolerance))}</span> mm • Correction: <span class="mono">${escapeHtml(String(meta.correction))}</span> mm</div>
+  </div>
+
+  <div class="card">
+    <b>Loops installed (baseline)</b>
+    <div class="muted">Each line side has one loop type. Deltas are defined in the app.</div>
+    <table>
+      <thead><tr><th>Line</th><th>Left</th><th>Right</th></tr></thead>
+      <tbody>
+        ${loopsSummary
+          .map(
+            (r) => `<tr><td class="mono">${escapeHtml(r.lineId)}</td><td class="mono">${escapeHtml(r.left)}</td><td class="mono">${escapeHtml(r.right)}</td></tr>`
+          )
+          .join("")}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <b>Adjustments (what-if)</b>
+    ${
+      adjustmentsList.length
+        ? `<table><thead><tr><th>Key</th><th>mm</th></tr></thead><tbody>${adjustmentsList
+            .map(([k, v]) => `<tr><td class="mono">${escapeHtml(k)}</td><td class="mono">${escapeHtml(String(v))}</td></tr>`)
+            .join("")}</tbody></table>`
+        : `<div class="muted">None</div>`
+    }
+  </div>
+
+  <div class="card">
+    <b>Target plan preview</b>
+    ${
+      targetPlan.length
+        ? `<table><thead><tr><th>Group</th><th>Side</th><th>Now (mm)</th><th>Loops</th><th>mm change</th></tr></thead><tbody>${targetPlan
+            .map(
+              (p) =>
+                `<tr><td class="mono">${escapeHtml(p.groupName)}</td><td>${escapeHtml(p.side)}</td><td class="mono">${escapeHtml(
+                  fmtSigned(p.currentMean, 1)
+                )}</td><td class="mono">${escapeHtml(String(p.loopsToApplySigned))}</td><td class="mono">${escapeHtml(String(p.extraMm))}</td></tr>`
+            )
+            .join("")}</tbody></table>`
+        : `<div class="muted">No target changes.</div>`
+    }
+  </div>
+
+  <div class="card">
+    <b>Notes</b>
+    <div class="muted">
+      Charts are visible in the app: “Before trimming” = loops-only (baseline) and “After” = loops + adjustments.
+      Print this report to PDF using your browser print dialog.
+    </div>
+  </div>
+
+<script>
+  window.onload = () => { window.print(); };
+</script>
+</body>
+</html>
+`;
+
+    const w = window.open("", "_blank", "noopener,noreferrer");
+    if (!w) return alert("Popup blocked. Allow popups to export PDF.");
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  }
+
   /* ------------------------- Styles ------------------------- */
 
   const page = { minHeight: "100vh", background: "#0b0c10", color: "#eef1ff", fontFamily: "system-ui, sans-serif" };
   const wrap = { maxWidth: 1200, margin: "0 auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 };
   const card = { border: "1px solid #2a2f3f", borderRadius: 14, background: "#11131a", padding: 12 };
   const muted = { color: "#aab1c3" };
-  const btn = { padding: "10px 12px", borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", cursor: "pointer", fontWeight: 650, fontSize: 13 };
+  const btn = {
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: "1px solid #2a2f3f",
+    background: "#0d0f16",
+    color: "#eef1ff",
+    cursor: "pointer",
+    fontWeight: 650,
+    fontSize: 13,
+  };
   const btnDanger = { ...btn, border: "1px solid rgba(255,107,107,0.55)", background: "rgba(255,107,107,0.12)" };
   const btnWarn = { ...btn, border: "1px solid rgba(255,214,102,0.65)", background: "rgba(255,214,102,0.12)" };
   const input = { width: "100%", borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", padding: "10px 10px", outline: "none" };
@@ -975,18 +1169,66 @@ export default function App() {
 
   const beforeSeries = beforeMode === "Original" ? computed.originalSeries : computed.loopsOnlySeries;
 
+  // Step guard
+  useEffect(() => {
+    if (step > 1 && !hasCSV) setStep(1);
+  }, [step, hasCSV]);
+
   return (
     <div style={page}>
       <div style={wrap}>
+        {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: 22 }}>Trim Tuning</h1>
+            <h1 style={{ margin: 0, fontSize: 22 }}>
+              Paraglider Trim Tuning <span style={{ ...muted, fontSize: 12, fontWeight: 700 }}>v{APP_VERSION}</span>
+            </h1>
             <div style={{ ...muted, fontSize: 12, marginTop: 6 }}>
-              Red: |Δ| ≥ tolerance. Yellow: within 3mm of tolerance. “Before trimming” can be loops-only.
+              Red: |Δ| ≥ tolerance. Yellow: within 3mm of tolerance. Workflow: set layout + loops before trimming.
             </div>
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <button onClick={exportReportPDF} style={{ ...btnWarn, opacity: hasCSV ? 1 : 0.5 }} disabled={!hasCSV}>
+              Export Trim Report (Print to PDF)
+            </button>
+            <button onClick={exportWideCSV} disabled={!wideRows.length} style={{ ...btn, opacity: wideRows.length ? 1 : 0.5 }}>
+              Export CSV
+            </button>
+            <button onClick={resetSessionAll} style={btnDanger}>Reset session</button>
+          </div>
+        </div>
+
+        {/* Safety */}
+        <div style={{ ...card, borderColor: "rgba(255,204,102,0.5)", background: "rgba(255,204,102,0.08)" }}>
+          <b>Safety notice:</b> This is an analysis + simulation tool. Trimming can be dangerous and may invalidate certification.
+          Always follow manufacturer / check-center procedures, and verify by re-measuring and test flying responsibly.
+        </div>
+
+        {/* Workflow Stepper */}
+        <div style={card}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontWeight: 900 }}>Workflow</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <StepButton current={step} num={1} setStep={setStep} enabled={true} label="1) Import CSV" />
+              <StepButton current={step} num={2} setStep={setStep} enabled={hasCSV} label="2) Wing layout" />
+              <StepButton current={step} num={3} setStep={setStep} enabled={hasCSV} label="3) Loops setup" />
+              <StepButton current={step} num={4} setStep={setStep} enabled={hasCSV && groupsReady} label="4) Trim & target" />
+            </div>
+          </div>
+          <div style={{ ...muted, fontSize: 12, marginTop: 10 }}>
+            Tip: do steps 2–3 before trimming, so “Before trimming” represents the real baseline.
+          </div>
+        </div>
+
+        {/* STEP 1 */}
+        {step === 1 ? (
+          <div style={card}>
+            <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 1 — Import measurement CSV</div>
+            <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
+              Upload your measurement file (wide layout with A/B/C/D blocks). After import, we’ll move to wing layout.
+            </div>
+            <div style={{ height: 10 }} />
             <input
               type="file"
               accept=".csv,text/csv"
@@ -997,46 +1239,37 @@ export default function App() {
               }}
               style={{ color: "#aab1c3" }}
             />
-            <button onClick={exportWideCSV} disabled={!wideRows.length} style={{ ...btn, opacity: wideRows.length ? 1 : 0.5 }}>
-              Export CSV
-            </button>
+            {!hasCSV ? null : (
+              <div style={{ marginTop: 12, ...muted, fontSize: 12 }}>
+                Loaded <b>{wideRows.length}</b> rows • Lines detected: <b>{allLines.length}</b>
+              </div>
+            )}
           </div>
-        </div>
+        ) : null}
 
-        <div style={{ ...card, borderColor: "rgba(255,204,102,0.5)", background: "rgba(255,204,102,0.08)" }}>
-          <b>Safety:</b> This is analysis + “what-if” simulation. Real trimming can be dangerous—follow manufacturer/check-center procedures and verify after changes.
-        </div>
-
-        {/* Header + Profile */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        {/* STEP 2 */}
+        {step === 2 ? (
           <div style={card}>
-            <div style={{ fontWeight: 850, marginBottom: 10 }}>Session Header</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
-              <Field label="Input 1" value={meta.input1} onChange={(v) => setMeta((m) => ({ ...m, input1: v }))} input={input} />
-              <Field label="Input 2" value={meta.input2} onChange={(v) => setMeta((m) => ({ ...m, input2: v }))} input={input} />
-              <Field label="Tolerance (mm)" value={meta.tolerance} onChange={(v) => setMeta((m) => ({ ...m, tolerance: n(v) ?? 0 }))} input={input} inputMode="numeric" />
-              <Field label="Correction (mm)" value={meta.correction} onChange={(v) => setMeta((m) => ({ ...m, correction: n(v) ?? 0 }))} input={input} inputMode="numeric" />
+            <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 2 — Wing profile & line layout</div>
+            <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
+              Choose (or build) a mapping so the app understands your rigging diagram grouping (AR1/BR2/…). This controls grouping, target, and the 3D view.
             </div>
-            <div style={{ ...muted, fontSize: 12, marginTop: 10 }}>
-              Yellow rule: <b>Tolerance − 3 ≤ |Δ| &lt; Tolerance</b> (and Red at/over tolerance).
-            </div>
-          </div>
 
-          <div style={card}>
-            <div style={{ fontWeight: 850, marginBottom: 10 }}>Wing Profile</div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, alignItems: "end" }}>
-              <div>
-                <label style={{ ...muted, fontSize: 12 }}>Selected profile</label>
-                <select value={profileKey} onChange={(e) => setProfileKey(e.target.value)} style={{ ...input, padding: "10px 10px" }}>
+            <div style={{ height: 10 }} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
+                <div style={{ fontWeight: 850, marginBottom: 10 }}>Select profile</div>
+                <label style={{ ...muted, fontSize: 12 }}>Profile</label>
+                <select value={profileKey} onChange={(e) => setProfileKey(e.target.value)} style={{ ...input, padding: "10px 10px", marginTop: 6 }}>
                   {Object.keys(profiles).map((k) => (
-                    <option key={k} value={k}>{k}</option>
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
                   ))}
                 </select>
-              </div>
 
-              <div>
-                <label style={{ ...muted, fontSize: 12 }}>mm per loop</label>
+                <div style={{ height: 10 }} />
+                <label style={{ ...muted, fontSize: 12 }}>mm per loop (for target plan)</label>
                 <input
                   value={activeProfile?.mmPerLoop ?? 10}
                   onChange={(e) => {
@@ -1049,472 +1282,561 @@ export default function App() {
                     setProfileJson(json);
                     localStorage.setItem("wingProfilesJson", json);
                   }}
-                  style={input}
+                  style={{ ...input, marginTop: 6 }}
                   inputMode="numeric"
+                />
+
+                <div style={{ height: 10 }} />
+                <div style={{ ...muted, fontSize: 12 }}>
+                  Groups detected from data: <b>{extractGroupNames(wideRows, activeProfile).length}</b>
+                </div>
+              </div>
+
+              <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
+                <div style={{ fontWeight: 850, marginBottom: 10 }}>Edit profile</div>
+                <ProfileEditor
+                  profiles={profiles}
+                  profileKey={profileKey}
+                  setProfileKey={setProfileKey}
+                  profileJson={profileJson}
+                  setProfileJson={(next) => {
+                    setProfileJson(next);
+                    localStorage.setItem("wingProfilesJson", next);
+                  }}
                 />
               </div>
             </div>
 
-            <ProfileEditor
-              profiles={profiles}
-              profileKey={profileKey}
-              setProfileKey={setProfileKey}
-              profileJson={profileJson}
-              setProfileJson={(next) => {
-                setProfileJson(next);
-                localStorage.setItem("wingProfilesJson", next);
-              }}
-            />
+            <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button onClick={() => setStep(3)} style={{ ...btnWarn, opacity: hasCSV ? 1 : 0.5 }} disabled={!hasCSV}>
+                Continue to Step 3 (Loops)
+              </button>
+              <button onClick={() => setStep(1)} style={btn}>Back</button>
+            </div>
           </div>
-        </div>
+        ) : null}
 
-        {/* Loops card */}
-        <div style={card}>
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>Maillon loop setup (before trimming)</div>
-          <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5 }}>
-            Choose which <b>single loop type</b> is installed on each line’s maillon (Left/Right).
-            Effective measured length is: <b>measured + loopDelta</b>.
-          </div>
-
-          <div style={{ height: 10 }} />
-
-          <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
-            <div style={{ fontWeight: 850, marginBottom: 8 }}>Loop types (editable)</div>
-            <div style={{ color: "#aab1c3", fontSize: 12, marginBottom: 10 }}>
-              Defaults are loaded. Edit the mm values to match your hardware/loops. Negative means the loop reduces length.
+        {/* STEP 3 */}
+        {step === 3 ? (
+          <div style={card}>
+            <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 3 — Maillon loop setup (baseline)</div>
+            <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
+              Set which loop type is installed on each line’s maillon (Left/Right). This defines the real “Before trimming” baseline.
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
-              {Object.entries(loopTypes).map(([name, mm]) => (
-                <div key={name} style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 10, background: "#0d0f16" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                    <div style={{ fontWeight: 850 }}>{name}</div>
-                    <div style={{ color: "#aab1c3", fontSize: 12 }}>mm</div>
-                  </div>
-                  <input
-                    value={mm}
-                    onChange={(e) => {
-                      const v = n(e.target.value);
-                      const next = { ...loopTypes, [name]: Number.isFinite(v) ? v : 0 };
-                      persistLoopTypes(next);
-                    }}
-                    style={{
-                      width: "100%",
-                      borderRadius: 10,
-                      border: "1px solid #2a2f3f",
-                      background: "#0b0c10",
-                      color: "#eef1ff",
-                      padding: "10px 10px",
-                      outline: "none",
-                      marginTop: 8,
-                      fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                      textAlign: "right",
-                    }}
-                    inputMode="numeric"
-                  />
-                </div>
-              ))}
-            </div>
+            <div style={{ height: 10 }} />
 
-            <div style={{ marginTop: 12, padding: 12, borderRadius: 14, border: "1px solid #2a2f3f", background: "#0b0c10" }}>
-              <div style={{ fontWeight: 850, marginBottom: 8 }}>Bulk tools</div>
+            {/* Loop types + presets */}
+            <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
+              <div style={{ fontWeight: 850, marginBottom: 8 }}>Loop types (editable)</div>
               <div style={{ color: "#aab1c3", fontSize: 12, marginBottom: 10 }}>
-                Apply a loop type to many lines at once. This does <b>not</b> add multiple loops; it sets the single loop type on the maillon.
+                Negative means the loop reduces line length (effective measured = measured + loopDelta).
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 0.9fr 0.9fr 0.9fr auto", gap: 10, alignItems: "end" }}>
-                <div>
-                  <label style={{ color: "#aab1c3", fontSize: 12 }}>Scope</label>
-                  <select value={bulkScope} onChange={(e) => setBulkScope(e.target.value)} style={{ ...input, padding: "10px 10px" }}>
-                    <option value="All">All lines</option>
-                    <option value="A">A lines</option>
-                    <option value="B">B lines</option>
-                    <option value="C">C lines</option>
-                    <option value="D">D lines</option>
-                    <option value="Group">Specific group…</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ color: "#aab1c3", fontSize: 12 }}>Group</label>
-                  <select
-                    value={bulkGroup}
-                    onChange={(e) => setBulkGroup(e.target.value)}
-                    disabled={bulkScope !== "Group"}
-                    style={{ ...input, padding: "10px 10px", opacity: bulkScope === "Group" ? 1 : 0.5 }}
-                  >
-                    {allGroupNames.map((g) => (
-                      <option key={g} value={g}>{g}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ color: "#aab1c3", fontSize: 12 }}>Side</label>
-                  <select value={bulkSide} onChange={(e) => setBulkSide(e.target.value)} style={{ ...input, padding: "10px 10px" }}>
-                    <option value="Both">Both</option>
-                    <option value="L">Left</option>
-                    <option value="R">Right</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ color: "#aab1c3", fontSize: 12 }}>Loop type</label>
-                  <select value={bulkLoopType} onChange={(e) => setBulkLoopType(e.target.value)} style={{ ...input, padding: "10px 10px" }}>
-                    {Object.keys(loopTypes).map((t) => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <button onClick={applyBulkLoop} style={btn} disabled={!allLines.length} title="Apply loop type to selected scope">
-                    Apply
-                  </button>
-                </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+                {Object.entries(loopTypes).map(([name, mm]) => (
+                  <div key={name} style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 10, background: "#0d0f16" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                      <div style={{ fontWeight: 850 }}>{name}</div>
+                      <div style={{ color: "#aab1c3", fontSize: 12 }}>mm</div>
+                    </div>
+                    <input
+                      value={mm}
+                      onChange={(e) => {
+                        const v = n(e.target.value);
+                        const next = { ...loopTypes, [name]: Number.isFinite(v) ? v : 0 };
+                        persistLoopTypes(next);
+                      }}
+                      style={{
+                        width: "100%",
+                        borderRadius: 10,
+                        border: "1px solid #2a2f3f",
+                        background: "#0b0c10",
+                        color: "#eef1ff",
+                        padding: "10px 10px",
+                        outline: "none",
+                        marginTop: 8,
+                        fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                        textAlign: "right",
+                      }}
+                      inputMode="numeric"
+                    />
+                  </div>
+                ))}
               </div>
 
-              <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button onClick={() => mirrorLoops("L", "R")} style={btn} disabled={!allLines.length}>Mirror L → R</button>
-                <button onClick={() => mirrorLoops("R", "L")} style={btn} disabled={!allLines.length}>Mirror R → L</button>
-                <button onClick={syncRightToLeft} style={btn} disabled={!allLines.length}>Set R = L</button>
-                <button onClick={resetLoopsToSL} style={btnDanger} disabled={!allLines.length}>Reset loops to SL</button>
-              </div>
-            </div>
-          </div>
+              <div style={{ height: 12 }} />
 
-          <div style={{ height: 12 }} />
-
-          <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
-            <div style={{ fontWeight: 850, marginBottom: 8 }}>Loops installed per line</div>
-            <div style={{ color: "#aab1c3", fontSize: 12, marginBottom: 10 }}>
-              Choose the loop type per line side. (Only one type per maillon.)
-            </div>
-
-            {!wideRows.length ? (
-              <div style={{ color: "#aab1c3", fontSize: 12 }}>Upload a CSV to list the lines here.</div>
-            ) : (
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 860 }}>
-                  <thead>
-                    <tr style={{ color: "#aab1c3", fontSize: 12 }}>
-                      <th style={{ textAlign: "left", padding: "8px 8px" }}>Line</th>
-                      <th style={{ textAlign: "left", padding: "8px 8px" }}>Group</th>
-                      <th style={{ textAlign: "left", padding: "8px 8px" }}>Left loop</th>
-                      <th style={{ textAlign: "right", padding: "8px 8px" }}>Left Δ(mm)</th>
-                      <th style={{ textAlign: "left", padding: "8px 8px" }}>Right loop</th>
-                      <th style={{ textAlign: "right", padding: "8px 8px" }}>Right Δ(mm)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allLines.map(({ lineId, letter }) => {
-                      const groupName = groupForLine(activeProfile, lineId) || `${letter}?`;
-
-                      const kL = `${lineId}|L`;
-                      const kR = `${lineId}|R`;
-                      const tL = loopSetup[kL] || "SL";
-                      const tR = loopSetup[kR] || "SL";
-
-                      const dL = Number.isFinite(loopTypes?.[tL]) ? loopTypes[tL] : 0;
-                      const dR = Number.isFinite(loopTypes?.[tR]) ? loopTypes[tR] : 0;
-
-                      return (
-                        <tr key={lineId} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
-                          <td style={{ padding: "8px 8px", fontWeight: 850 }}>{lineId}</td>
-                          <td style={{ padding: "8px 8px", color: "#aab1c3", fontSize: 12 }}>{groupName}</td>
-
-                          <td style={{ padding: "8px 8px" }}>
-                            <select
-                              value={tL}
-                              onChange={(e) => {
-                                const next = { ...loopSetup, [kL]: e.target.value };
-                                persistLoopSetup(next);
-                              }}
-                              style={{ width: 130, borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", padding: "8px 10px", outline: "none" }}
-                            >
-                              {Object.keys(loopTypes).map((name) => (
-                                <option key={name} value={name}>{name}</option>
-                              ))}
-                            </select>
-                          </td>
-
-                          <td style={{ padding: "8px 8px", textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace", color: "#aab1c3" }}>
-                            {dL > 0 ? `+${dL}` : `${dL}`}
-                          </td>
-
-                          <td style={{ padding: "8px 8px" }}>
-                            <select
-                              value={tR}
-                              onChange={(e) => {
-                                const next = { ...loopSetup, [kR]: e.target.value };
-                                persistLoopSetup(next);
-                              }}
-                              style={{ width: 130, borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", padding: "8px 10px", outline: "none" }}
-                            >
-                              {Object.keys(loopTypes).map((name) => (
-                                <option key={name} value={name}>{name}</option>
-                              ))}
-                            </select>
-                          </td>
-
-                          <td style={{ padding: "8px 8px", textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace", color: "#aab1c3" }}>
-                            {dR > 0 ? `+${dR}` : `${dR}`}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Adjustments + Target */}
-        <div style={card}>
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>What-if group adjustments + Factory target</div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: 12 }}>
-            {/* Manual adjustments */}
-            <div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 0.7fr 0.7fr 0.6fr", gap: 10, alignItems: "end" }}>
-                <div>
-                  <label style={{ ...muted, fontSize: 12 }}>Group</label>
-                  <select value={adjGroup} onChange={(e) => setAdjGroup(e.target.value)} style={{ ...input, padding: "10px 10px" }}>
-                    {allGroupNames.map((g) => (
-                      <option key={g} value={g}>{g}</option>
-                    ))}
-                  </select>
+              <div style={{ padding: 12, borderRadius: 14, border: "1px solid #2a2f3f", background: "#0b0c10" }}>
+                <div style={{ fontWeight: 850, marginBottom: 8 }}>Presets & bulk tools</div>
+                <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
+                  Use quick presets, bulk apply, and save/load named presets for different wings or setups.
                 </div>
-                <div>
-                  <label style={{ ...muted, fontSize: 12 }}>Side</label>
-                  <select value={adjSide} onChange={(e) => setAdjSide(e.target.value)} style={{ ...input, padding: "10px 10px" }}>
-                    <option value="Both">Both</option>
-                    <option value="L">Left</option>
-                    <option value="R">Right</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={{ ...muted, fontSize: 12 }}>Add mm</label>
-                  <input value={adjMm} onChange={(e) => setAdjMm(e.target.value)} style={input} inputMode="numeric" />
-                </div>
-                <div>
-                  <button onClick={applyGroupAdjustment} style={btn}>Apply</button>
-                </div>
-              </div>
 
-              <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <button onClick={resetAdjustments} style={btnDanger}>Reset all adjustments</button>
-                <span style={{ ...muted, fontSize: 12 }}>(Positive mm = longer, Negative mm = shorter)</span>
-              </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button onClick={applyAllSL} style={btn}>All SL</button>
+                  <button onClick={() => mirrorLoops("L", "R")} style={btn}>Mirror L → R</button>
+                  <button onClick={() => mirrorLoops("R", "L")} style={btn}>Mirror R → L</button>
+                  <button onClick={() => mirrorLoops("L", "R")} style={btn}>Set R = L</button>
+                  <button onClick={resetLoopsToSL} style={btnDanger}>Reset loops</button>
+                </div>
 
-              <div style={{ marginTop: 10, ...muted, fontSize: 12 }}>
-                Current adjustments:
-                <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
-                  {Object.keys(adjustments).length ? (
-                    Object.entries(adjustments)
-                      .sort((a, b) => a[0].localeCompare(b[0]))
-                      .map(([k, v]) => (
-                        <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 10px", border: "1px solid #2a2f3f", borderRadius: 12, background: "#0d0f16" }}>
-                          <div style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                            {k} = {v > 0 ? `+${v}` : v} mm
+                <div style={{ height: 12 }} />
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 0.9fr 0.9fr 0.9fr auto", gap: 10, alignItems: "end" }}>
+                  <div>
+                    <label style={{ ...muted, fontSize: 12 }}>Scope</label>
+                    <select value={bulkScope} onChange={(e) => setBulkScope(e.target.value)} style={{ ...input, padding: "10px 10px" }}>
+                      <option value="All">All lines</option>
+                      <option value="A">A lines</option>
+                      <option value="B">B lines</option>
+                      <option value="C">C lines</option>
+                      <option value="D">D lines</option>
+                      <option value="Group">Specific group…</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ ...muted, fontSize: 12 }}>Group</label>
+                    <select
+                      value={bulkGroup}
+                      onChange={(e) => setBulkGroup(e.target.value)}
+                      disabled={bulkScope !== "Group"}
+                      style={{ ...input, padding: "10px 10px", opacity: bulkScope === "Group" ? 1 : 0.5 }}
+                    >
+                      {allGroupNames.map((g) => (
+                        <option key={g} value={g}>
+                          {g}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ ...muted, fontSize: 12 }}>Side</label>
+                    <select value={bulkSide} onChange={(e) => setBulkSide(e.target.value)} style={{ ...input, padding: "10px 10px" }}>
+                      <option value="Both">Both</option>
+                      <option value="L">Left</option>
+                      <option value="R">Right</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ ...muted, fontSize: 12 }}>Loop type</label>
+                    <select value={bulkLoopType} onChange={(e) => setBulkLoopType(e.target.value)} style={{ ...input, padding: "10px 10px" }}>
+                      {Object.keys(loopTypes).map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <button onClick={applyBulkLoop} style={btn} disabled={!hasLines} title="Apply loop type to selected scope">
+                      Apply
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ height: 12 }} />
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "end" }}>
+                  <div>
+                    <label style={{ ...muted, fontSize: 12 }}>Save current setup as preset</label>
+                    <input value={presetName} onChange={(e) => setPresetName(e.target.value)} style={{ ...input, marginTop: 6 }} placeholder="e.g. Speedster3 factory maillons" />
+                  </div>
+                  <button onClick={saveLoopPreset} style={btnWarn}>Save preset</button>
+                </div>
+
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ ...muted, fontSize: 12, marginBottom: 6 }}>Saved presets:</div>
+                  {Object.keys(loopPresets).length ? (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {Object.keys(loopPresets)
+                        .sort((a, b) => a.localeCompare(b))
+                        .map((name) => (
+                          <div key={name} style={{ display: "flex", gap: 6, alignItems: "center", border: "1px solid #2a2f3f", borderRadius: 12, padding: "8px 10px", background: "#0d0f16" }}>
+                            <b style={{ fontSize: 12 }}>{name}</b>
+                            <button onClick={() => loadLoopPreset(name)} style={{ ...btn, padding: "6px 8px", fontSize: 12 }}>load</button>
+                            <button onClick={() => deleteLoopPreset(name)} style={{ ...btnDanger, padding: "6px 8px", fontSize: 12 }}>delete</button>
                           </div>
-                          <button
-                            onClick={() => {
-                              const next = { ...adjustments };
-                              delete next[k];
-                              persistAdjustments(next);
-                            }}
-                            style={{ ...btn, padding: "6px 8px", fontSize: 12 }}
-                          >
-                            remove
-                          </button>
-                        </div>
-                      ))
+                        ))}
+                    </div>
                   ) : (
-                    <div style={{ opacity: 0.8 }}>None</div>
+                    <div style={{ ...muted, fontSize: 12 }}>None yet.</div>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Factory target */}
+            <div style={{ height: 12 }} />
+
+            {/* Per-line setup */}
             <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
-              <div style={{ fontWeight: 900, marginBottom: 8 }}>Factory target</div>
+              <div style={{ fontWeight: 850, marginBottom: 8 }}>Loops installed per line</div>
               <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
-                Generates loop-sized adjustments to bring each group average Δ toward 0 mm.
+                Choose the loop type per line side (one type per maillon).
               </div>
 
-              <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
-                <div style={{ ...muted, fontSize: 12, fontWeight: 700 }}>Include in target:</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+              {!hasLines ? (
+                <div style={{ ...muted, fontSize: 12 }}>No lines found. Check your CSV import.</div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 860 }}>
+                    <thead>
+                      <tr style={{ color: "#aab1c3", fontSize: 12 }}>
+                        <th style={{ textAlign: "left", padding: "8px 8px" }}>Line</th>
+                        <th style={{ textAlign: "left", padding: "8px 8px" }}>Group</th>
+                        <th style={{ textAlign: "left", padding: "8px 8px" }}>Left loop</th>
+                        <th style={{ textAlign: "right", padding: "8px 8px" }}>Left Δ(mm)</th>
+                        <th style={{ textAlign: "left", padding: "8px 8px" }}>Right loop</th>
+                        <th style={{ textAlign: "right", padding: "8px 8px" }}>Right Δ(mm)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allLines.map(({ lineId, letter }) => {
+                        const groupName = groupForLine(activeProfile, lineId) || `${letter}?`;
+
+                        const kL = `${lineId}|L`;
+                        const kR = `${lineId}|R`;
+                        const tL = loopSetup[kL] || "SL";
+                        const tR = loopSetup[kR] || "SL";
+
+                        const dL = Number.isFinite(loopTypes?.[tL]) ? loopTypes[tL] : 0;
+                        const dR = Number.isFinite(loopTypes?.[tR]) ? loopTypes[tR] : 0;
+
+                        return (
+                          <tr key={lineId} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
+                            <td style={{ padding: "8px 8px", fontWeight: 850 }}>{lineId}</td>
+                            <td style={{ padding: "8px 8px", color: "#aab1c3", fontSize: 12 }}>{groupName}</td>
+
+                            <td style={{ padding: "8px 8px" }}>
+                              <select
+                                value={tL}
+                                onChange={(e) => persistLoopSetup({ ...loopSetup, [kL]: e.target.value })}
+                                style={{ width: 130, borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", padding: "8px 10px", outline: "none" }}
+                              >
+                                {Object.keys(loopTypes).map((name) => (
+                                  <option key={name} value={name}>{name}</option>
+                                ))}
+                              </select>
+                            </td>
+
+                            <td style={{ padding: "8px 8px", textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace", color: "#aab1c3" }}>
+                              {dL > 0 ? `+${dL}` : `${dL}`}
+                            </td>
+
+                            <td style={{ padding: "8px 8px" }}>
+                              <select
+                                value={tR}
+                                onChange={(e) => persistLoopSetup({ ...loopSetup, [kR]: e.target.value })}
+                                style={{ width: 130, borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", padding: "8px 10px", outline: "none" }}
+                              >
+                                {Object.keys(loopTypes).map((name) => (
+                                  <option key={name} value={name}>{name}</option>
+                                ))}
+                              </select>
+                            </td>
+
+                            <td style={{ padding: "8px 8px", textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace", color: "#aab1c3" }}>
+                              {dR > 0 ? `+${dR}` : `${dR}`}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                onClick={() => setStep(4)}
+                style={{ ...btnWarn, opacity: groupsReady ? 1 : 0.6 }}
+                disabled={!groupsReady}
+                title={!groupsReady ? "Set your wing layout so groups can be detected first (Step 2)" : ""}
+              >
+                Continue to Step 4 (Trimming)
+              </button>
+              <button onClick={() => setStep(2)} style={btn}>Back</button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* STEP 4 */}
+        {step === 4 ? (
+          <>
+            {/* Trimming + target */}
+            <div style={card}>
+              <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 4 — Trimming, target plan, and analysis</div>
+              <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
+                Dotted = “Before trimming” (loops-only baseline). Solid = “After” (loops + adjustments).
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: 12 }}>
+                {/* Manual adjustments */}
+                <div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 0.7fr 0.7fr 0.6fr", gap: 10, alignItems: "end" }}>
+                    <div>
+                      <label style={{ ...muted, fontSize: 12 }}>Group</label>
+                      <select value={adjGroup} onChange={(e) => setAdjGroup(e.target.value)} style={{ ...input, padding: "10px 10px" }}>
+                        {allGroupNames.map((g) => (
+                          <option key={g} value={g}>{g}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ ...muted, fontSize: 12 }}>Side</label>
+                      <select value={adjSide} onChange={(e) => setAdjSide(e.target.value)} style={{ ...input, padding: "10px 10px" }}>
+                        <option value="Both">Both</option>
+                        <option value="L">Left</option>
+                        <option value="R">Right</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ ...muted, fontSize: 12 }}>Add mm</label>
+                      <input value={adjMm} onChange={(e) => setAdjMm(e.target.value)} style={input} inputMode="numeric" />
+                    </div>
+                    <div>
+                      <button onClick={applyGroupAdjustment} style={btn}>Apply</button>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <button onClick={resetAdjustments} style={btnDanger}>Reset all adjustments</button>
+                    <span style={{ ...muted, fontSize: 12 }}>(Positive mm = longer, Negative mm = shorter)</span>
+                  </div>
+
+                  <div style={{ marginTop: 10, ...muted, fontSize: 12 }}>
+                    Current adjustments:
+                    <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+                      {Object.keys(adjustments).length ? (
+                        Object.entries(adjustments)
+                          .sort((a, b) => a[0].localeCompare(b[0]))
+                          .map(([k, v]) => (
+                            <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 10px", border: "1px solid #2a2f3f", borderRadius: 12, background: "#0d0f16" }}>
+                              <div style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
+                                {k} = {v > 0 ? `+${v}` : v} mm
+                              </div>
+                              <button
+                                onClick={() => {
+                                  const next = { ...adjustments };
+                                  delete next[k];
+                                  persistAdjustments(next);
+                                }}
+                                style={{ ...btn, padding: "6px 8px", fontSize: 12 }}
+                              >
+                                remove
+                              </button>
+                            </div>
+                          ))
+                      ) : (
+                        <div style={{ opacity: 0.8 }}>None</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Factory target */}
+                <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
+                  <div style={{ fontWeight: 900, marginBottom: 8 }}>Factory target</div>
+                  <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
+                    Generates loop-sized adjustments to bring each group average Δ toward 0 mm.
+                  </div>
+
+                  <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
+                    <div style={{ ...muted, fontSize: 12, fontWeight: 700 }}>Include in target:</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+                      <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#aab1c3" }}>
+                        <input type="checkbox" checked={targetUseA} onChange={(e) => setTargetUseA(e.target.checked)} /> A
+                      </label>
+                      <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#aab1c3" }}>
+                        <input type="checkbox" checked={targetUseB} onChange={(e) => setTargetUseB(e.target.checked)} /> B
+                      </label>
+                      <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#aab1c3" }}>
+                        <input type="checkbox" checked={targetUseC} onChange={(e) => setTargetUseC(e.target.checked)} /> C
+                      </label>
+                      <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#aab1c3" }}>
+                        <input type="checkbox" checked={targetUseD} onChange={(e) => setTargetUseD(e.target.checked)} /> D
+                      </label>
+                    </div>
+                  </div>
+
+                  <button onClick={applyTargetToAdjustments} style={{ ...btnWarn, width: "100%" }} disabled={!targetPlan.length}>
+                    Apply target plan (adds to adjustments)
+                  </button>
+
+                  <div style={{ ...muted, fontSize: 12, marginTop: 10 }}>Target plan preview:</div>
+
+                  <div style={{ marginTop: 8, maxHeight: 240, overflow: "auto" }}>
+                    {!targetPlan.length ? (
+                      <div style={{ ...muted, fontSize: 12 }}>No target changes.</div>
+                    ) : (
+                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr style={{ color: "#aab1c3", fontSize: 12 }}>
+                            <th style={{ textAlign: "left", padding: "6px 6px" }}>Group</th>
+                            <th style={{ textAlign: "left", padding: "6px 6px" }}>Side</th>
+                            <th style={{ textAlign: "right", padding: "6px 6px" }}>Now</th>
+                            <th style={{ textAlign: "right", padding: "6px 6px" }}>Loops</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {targetPlan.map((p, idx) => (
+                            <tr key={idx} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
+                              <td style={{ padding: "6px 6px" }}>
+                                <b>{p.groupName}</b>
+                              </td>
+                              <td style={{ padding: "6px 6px" }}>{p.side}</td>
+                              <td style={{ padding: "6px 6px", textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
+                                {fmtSigned(p.currentMean, 1)}
+                              </td>
+                              <td style={{ padding: "6px 6px", textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
+                                {p.loopsToApplySigned > 0 ? `+${p.loopsToApplySigned}` : `${p.loopsToApplySigned}`}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Overlay chart */}
+            <div style={card}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontWeight: 900 }}>Trim chart (Before vs After)</div>
+                  <div style={{ ...muted, fontSize: 12, marginTop: 6 }}>
+                    Dotted = Before (loops-only baseline). Solid = After (loops + adjustments). Optional dashed = Original reference.
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                   <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#aab1c3" }}>
-                    <input type="checkbox" checked={targetUseA} onChange={(e) => setTargetUseA(e.target.checked)} /> A
+                    Side mode
+                    <select value={chartSideMode} onChange={(e) => setChartSideMode(e.target.value)} style={{ ...input, padding: "6px 8px", width: 160 }}>
+                      <option value="Avg">Avg (L/R)</option>
+                      <option value="L">Left only</option>
+                      <option value="R">Right only</option>
+                    </select>
+                  </label>
+
+                  <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#aab1c3" }}>
+                    Before =
+                    <select value={beforeMode} onChange={(e) => setBeforeMode(e.target.value)} style={{ ...input, padding: "6px 8px", width: 160 }}>
+                      <option value="LoopsOnly">Loops only</option>
+                      <option value="Original">Original</option>
+                    </select>
+                  </label>
+
+                  <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#aab1c3" }}>
+                    <input type="checkbox" checked={showOriginalRef} onChange={(e) => setShowOriginalRef(e.target.checked)} />
+                    Show original reference
+                  </label>
+
+                  <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#aab1c3" }}>
+                    <input type="checkbox" checked={showA} onChange={(e) => setShowA(e.target.checked)} /> A
                   </label>
                   <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#aab1c3" }}>
-                    <input type="checkbox" checked={targetUseB} onChange={(e) => setTargetUseB(e.target.checked)} /> B
+                    <input type="checkbox" checked={showB} onChange={(e) => setShowB(e.target.checked)} /> B
                   </label>
                   <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#aab1c3" }}>
-                    <input type="checkbox" checked={targetUseC} onChange={(e) => setTargetUseC(e.target.checked)} /> C
+                    <input type="checkbox" checked={showC} onChange={(e) => setShowC(e.target.checked)} /> C
                   </label>
                   <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#aab1c3" }}>
-                    <input type="checkbox" checked={targetUseD} onChange={(e) => setTargetUseD(e.target.checked)} /> D
+                    <input type="checkbox" checked={showD} onChange={(e) => setShowD(e.target.checked)} /> D
                   </label>
                 </div>
               </div>
 
-              <button onClick={applyTargetToAdjustments} style={{ ...btnWarn, width: "100%" }} disabled={!targetPlan.length}>
-                Apply target plan (adds to adjustments)
-              </button>
+              <div style={{ height: 10 }} />
 
-              <div style={{ ...muted, fontSize: 12, marginTop: 10 }}>
-                Target plan preview:
-              </div>
-
-              <div style={{ marginTop: 8, maxHeight: 240, overflow: "auto" }}>
-                {!targetPlan.length ? (
-                  <div style={{ ...muted, fontSize: 12 }}>No target changes (or no data loaded / all filtered out).</div>
-                ) : (
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead>
-                      <tr style={{ color: "#aab1c3", fontSize: 12 }}>
-                        <th style={{ textAlign: "left", padding: "6px 6px" }}>Group</th>
-                        <th style={{ textAlign: "left", padding: "6px 6px" }}>Side</th>
-                        <th style={{ textAlign: "right", padding: "6px 6px" }}>Now</th>
-                        <th style={{ textAlign: "right", padding: "6px 6px" }}>Loops</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {targetPlan.map((p, idx) => (
-                        <tr key={idx} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
-                          <td style={{ padding: "6px 6px" }}><b>{p.groupName}</b></td>
-                          <td style={{ padding: "6px 6px" }}>{p.side}</td>
-                          <td style={{ padding: "6px 6px", textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                            {fmtSigned(p.currentMean, 1)}
-                          </td>
-                          <td style={{ padding: "6px 6px", textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                            {p.loopsToApplySigned > 0 ? `+${p.loopsToApplySigned}` : `${p.loopsToApplySigned}`}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Overlay chart */}
-        <div style={card}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-            <div>
-              <div style={{ fontWeight: 900 }}>Trim chart (Before vs After)</div>
-              <div style={{ ...muted, fontSize: 12, marginTop: 6 }}>
-                Dotted = Before trimming (loops only). Solid = After (loops + adjustments). Optional dashed = Original reference.
-              </div>
+              <ChartOverlay
+                width={1050}
+                height={360}
+                series1={
+                  showOriginalRef
+                    ? [
+                        { name: "A", values: computed.originalSeries.A.filter((x) => x !== null), visible: showA },
+                        { name: "B", values: computed.originalSeries.B.filter((x) => x !== null), visible: showB },
+                        { name: "C", values: computed.originalSeries.C.filter((x) => x !== null), visible: showC },
+                        { name: "D", values: computed.originalSeries.D.filter((x) => x !== null), visible: showD },
+                      ]
+                    : null
+                }
+                series2={[
+                  { name: "A", values: (beforeSeries.A || []).filter((x) => x !== null), visible: showA },
+                  { name: "B", values: (beforeSeries.B || []).filter((x) => x !== null), visible: showB },
+                  { name: "C", values: (beforeSeries.C || []).filter((x) => x !== null), visible: showC },
+                  { name: "D", values: (beforeSeries.D || []).filter((x) => x !== null), visible: showD },
+                ]}
+                series3={[
+                  { name: "A", values: computed.afterSeries.A.filter((x) => x !== null), visible: showA },
+                  { name: "B", values: computed.afterSeries.B.filter((x) => x !== null), visible: showB },
+                  { name: "C", values: computed.afterSeries.C.filter((x) => x !== null), visible: showC },
+                  { name: "D", values: computed.afterSeries.D.filter((x) => x !== null), visible: showD },
+                ]}
+              />
             </div>
 
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#aab1c3" }}>
-                Side mode
-                <select value={chartSideMode} onChange={(e) => setChartSideMode(e.target.value)} style={{ ...input, padding: "6px 8px", width: 160 }}>
-                  <option value="Avg">Avg (L/R)</option>
-                  <option value="L">Left only</option>
-                  <option value="R">Right only</option>
-                </select>
-              </label>
-
-              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#aab1c3" }}>
-                Before =
-                <select value={beforeMode} onChange={(e) => setBeforeMode(e.target.value)} style={{ ...input, padding: "6px 8px", width: 160 }}>
-                  <option value="LoopsOnly">Loops only</option>
-                  <option value="Original">Original</option>
-                </select>
-              </label>
-
-              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#aab1c3" }}>
-                <input type="checkbox" checked={showOriginalRef} onChange={(e) => setShowOriginalRef(e.target.checked)} />
-                Show original reference
-              </label>
-
-              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#aab1c3" }}>
-                <input type="checkbox" checked={showA} onChange={(e) => setShowA(e.target.checked)} /> A
-              </label>
-              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#aab1c3" }}>
-                <input type="checkbox" checked={showB} onChange={(e) => setShowB(e.target.checked)} /> B
-              </label>
-              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#aab1c3" }}>
-                <input type="checkbox" checked={showC} onChange={(e) => setShowC(e.target.checked)} /> C
-              </label>
-              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#aab1c3" }}>
-                <input type="checkbox" checked={showD} onChange={(e) => setShowD(e.target.checked)} /> D
-              </label>
+            {/* 3D wing */}
+            <div style={card}>
+              <div style={{ fontWeight: 900, marginBottom: 8 }}>Wing profile (3D column chart)</div>
+              <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
+                Uses group-average Δ after loops + adjustments. AR1 near center; higher Rn toward tips (mirrored).
+              </div>
+              <Wing3D groupStats={computed.groupStatsAfter} width={1050} height={420} />
             </div>
-          </div>
 
-          <div style={{ height: 10 }} />
+            {/* Compact tables */}
+            <div style={card}>
+              <div style={{ fontWeight: 900, marginBottom: 10 }}>Measurement tables (compact)</div>
+              <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
+                Δ values include loops + adjustments (current effective setup).
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
+                <BlockTable title="A" rows={compactBlocks.A} meta={meta} activeProfile={activeProfile} adjustments={adjustments} loopDeltaFor={loopDeltaFor} input={input} redCell={redCell} yellowCell={yellowCell} setCell={setCell} blockKey="A" />
+                <BlockTable title="B" rows={compactBlocks.B} meta={meta} activeProfile={activeProfile} adjustments={adjustments} loopDeltaFor={loopDeltaFor} input={input} redCell={redCell} yellowCell={yellowCell} setCell={setCell} blockKey="B" />
+                <BlockTable title="C" rows={compactBlocks.C} meta={meta} activeProfile={activeProfile} adjustments={adjustments} loopDeltaFor={loopDeltaFor} input={input} redCell={redCell} yellowCell={yellowCell} setCell={setCell} blockKey="C" />
+                <BlockTable title="D" rows={compactBlocks.D} meta={meta} activeProfile={activeProfile} adjustments={adjustments} loopDeltaFor={loopDeltaFor} input={input} redCell={redCell} yellowCell={yellowCell} setCell={setCell} blockKey="D" />
+              </div>
+            </div>
 
-          <ChartOverlay
-            width={1050}
-            height={360}
-            series1={
-              showOriginalRef
-                ? [
-                    { name: "A", values: computed.originalSeries.A.filter((x) => x !== null), visible: showA },
-                    { name: "B", values: computed.originalSeries.B.filter((x) => x !== null), visible: showB },
-                    { name: "C", values: computed.originalSeries.C.filter((x) => x !== null), visible: showC },
-                    { name: "D", values: computed.originalSeries.D.filter((x) => x !== null), visible: showD },
-                  ]
-                : null
-            }
-            series2={[
-              { name: "A", values: (beforeSeries.A || []).filter((x) => x !== null), visible: showA },
-              { name: "B", values: (beforeSeries.B || []).filter((x) => x !== null), visible: showB },
-              { name: "C", values: (beforeSeries.C || []).filter((x) => x !== null), visible: showC },
-              { name: "D", values: (beforeSeries.D || []).filter((x) => x !== null), visible: showD },
-            ]}
-            series3={[
-              { name: "A", values: computed.afterSeries.A.filter((x) => x !== null), visible: showA },
-              { name: "B", values: computed.afterSeries.B.filter((x) => x !== null), visible: showB },
-              { name: "C", values: computed.afterSeries.C.filter((x) => x !== null), visible: showC },
-              { name: "D", values: computed.afterSeries.D.filter((x) => x !== null), visible: showD },
-            ]}
-          />
-        </div>
-
-        {/* 3D wing */}
-        <div style={card}>
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>Wing profile (3D column chart)</div>
-          <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
-            Shows the “shape” using group-average Δ after loops + adjustments. AR1 near center, higher Rn toward tips (mirrored left/right). A is front row, D is back.
-          </div>
-          <Wing3D groupStats={computed.groupStatsAfter} width={1050} height={420} />
-        </div>
-
-        {/* Compact tables */}
-        <div style={card}>
-          <div style={{ fontWeight: 900, marginBottom: 10 }}>Measurement tables (compact)</div>
-          <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
-            Δ values include loops + adjustments (the current effective setup).
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
-            <BlockTable title="A" rows={compactBlocks.A} meta={meta} activeProfile={activeProfile} adjustments={adjustments} loopDeltaFor={loopDeltaFor} input={input} redCell={redCell} yellowCell={yellowCell} setCell={setCell} blockKey="A" />
-            <BlockTable title="B" rows={compactBlocks.B} meta={meta} activeProfile={activeProfile} adjustments={adjustments} loopDeltaFor={loopDeltaFor} input={input} redCell={redCell} yellowCell={yellowCell} setCell={setCell} blockKey="B" />
-            <BlockTable title="C" rows={compactBlocks.C} meta={meta} activeProfile={activeProfile} adjustments={adjustments} loopDeltaFor={loopDeltaFor} input={input} redCell={redCell} yellowCell={yellowCell} setCell={setCell} blockKey="C" />
-            <BlockTable title="D" rows={compactBlocks.D} meta={meta} activeProfile={activeProfile} adjustments={adjustments} loopDeltaFor={loopDeltaFor} input={input} redCell={redCell} yellowCell={yellowCell} setCell={setCell} blockKey="D" />
-          </div>
-        </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button onClick={() => setStep(3)} style={btn}>Back to Step 3 (Loops)</button>
+              <button onClick={() => setStep(2)} style={btn}>Back to Step 2 (Layout)</button>
+            </div>
+          </>
+        ) : null}
       </div>
     </div>
   );
 
-  function Field({ label, value, onChange, inputMode, input }) {
+  function StepButton({ current, num, setStep, enabled, label }) {
+    const active = current === num;
     return (
-      <div>
-        <label style={{ fontSize: 12, color: "#aab1c3" }}>{label}</label>
-        <input value={value} onChange={(e) => onChange(e.target.value)} style={input} inputMode={inputMode} />
-      </div>
+      <button
+        onClick={() => enabled && setStep(num)}
+        disabled={!enabled}
+        style={{
+          padding: "8px 10px",
+          borderRadius: 10,
+          border: "1px solid #2a2f3f",
+          background: active ? "rgba(176,132,255,0.14)" : "#0d0f16",
+          color: active ? "#eef1ff" : enabled ? "#aab1c3" : "rgba(170,177,195,0.4)",
+          cursor: enabled ? "pointer" : "not-allowed",
+          fontWeight: 800,
+          fontSize: 12,
+        }}
+        title={!enabled ? "Complete previous steps first" : ""}
+      >
+        {label}
+      </button>
     );
   }
 }
@@ -1545,7 +1867,11 @@ function BlockTable({ title, rows, meta, activeProfile, adjustments, loopDeltaFo
 
           <tbody>
             {!rows.length ? (
-              <tr><Td colSpan={5} style={{ color: "#aab1c3" }}>No {title} rows found.</Td></tr>
+              <tr>
+                <Td colSpan={5} style={{ color: "#aab1c3" }}>
+                  No {title} rows found.
+                </Td>
+              </tr>
             ) : (
               rows.map((b, idx) => {
                 const groupName = groupForLine(activeProfile, b.line) || `${title}?`;
@@ -1567,7 +1893,9 @@ function BlockTable({ title, rows, meta, activeProfile, adjustments, loopDeltaFo
 
                 return (
                   <tr key={`${b.line}-${idx}`} style={{ borderTop: "1px solid #2a2f3f" }}>
-                    <Td><b>{b.line}</b></Td>
+                    <Td>
+                      <b>{b.line}</b>
+                    </Td>
                     <Td style={{ color: "#aab1c3", fontSize: 12 }}>{groupName}</Td>
                     <Td align="right" style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
                       {b.nominal ?? ""}
@@ -1616,9 +1944,7 @@ function BlockTable({ title, rows, meta, activeProfile, adjustments, loopDeltaFo
         </table>
       </div>
 
-      <div style={{ padding: 10, color: "#aab1c3", fontSize: 12 }}>
-        Yellow: within 3mm of tolerance. Red: at/over tolerance.
-      </div>
+      <div style={{ padding: 10, color: "#aab1c3", fontSize: 12 }}>Yellow: within 3mm of tolerance. Red: at/over tolerance.</div>
     </div>
   );
 }
@@ -1626,13 +1952,13 @@ function BlockTable({ title, rows, meta, activeProfile, adjustments, loopDeltaFo
 /* ------------------------- Wing Profile Editor (friendly UI) ------------------------- */
 
 function ProfileEditor({ profiles, profileKey, setProfileKey, profileJson, setProfileJson }) {
-  const [open, setOpen] = React.useState(false);
-  const [tab, setTab] = React.useState("builder"); // builder | json | help
-  const [draftKey, setDraftKey] = React.useState(profileKey);
-  const [draft, setDraft] = React.useState(() => deepClone(profiles[profileKey] || {}));
-  const [message, setMessage] = React.useState("");
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState("builder"); // builder | json | help
+  const [draftKey, setDraftKey] = useState(profileKey);
+  const [draft, setDraft] = useState(() => deepClone(profiles[profileKey] || {}));
+  const [message, setMessage] = useState("");
 
-  React.useEffect(() => {
+  useEffect(() => {
     setDraftKey(profileKey);
     setDraft(deepClone(profiles[profileKey] || {}));
   }, [profileKey]); // eslint-disable-line
@@ -1729,17 +2055,15 @@ function ProfileEditor({ profiles, profileKey, setProfileKey, profileJson, setPr
     <div class="muted">
       Tips:
       <ul>
-        <li><code>mmPerLoop</code>: used for loop-size suggestions + target plan.</li>
+        <li><code>mmPerLoop</code>: used for target plan sizing.</li>
         <li><code>mapping.A</code>: ranges mapping A line numbers to group labels (example: <code>[1,4,"AR1"]</code>).</li>
         <li>Ranges should not overlap within the same letter.</li>
       </ul>
-      Workflow: edit JSON → click “Copy” → paste back in the app editor → Save.
     </div>
   </div>
   <textarea id="t"></textarea>
   <div style="display:flex; gap:10px; margin-top:10px; flex-wrap:wrap;">
     <button onclick="navigator.clipboard.writeText(document.getElementById('t').value)">Copy to clipboard</button>
-    <button onclick="document.getElementById('t').value='';">Clear</button>
   </div>
   <script>
     const initial = ${JSON.stringify(profileJson)};
@@ -1751,27 +2075,6 @@ function ProfileEditor({ profiles, profileKey, setProfileKey, profileJson, setPr
     w.document.close();
   }
 
-  const modalStyle = {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,0.55)",
-    display: open ? "flex" : "none",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 12,
-    zIndex: 50,
-  };
-
-  const panelStyle = {
-    width: "min(1100px, 100%)",
-    maxHeight: "90vh",
-    overflow: "auto",
-    borderRadius: 16,
-    border: "1px solid #2a2f3f",
-    background: "#11131a",
-    padding: 14,
-  };
-
   const btn = {
     padding: "10px 12px",
     borderRadius: 10,
@@ -1782,108 +2085,97 @@ function ProfileEditor({ profiles, profileKey, setProfileKey, profileJson, setPr
     fontWeight: 750,
     fontSize: 13,
   };
-
   const btnWarn = { ...btn, border: "1px solid rgba(255,214,102,0.65)", background: "rgba(255,214,102,0.12)" };
   const btnDanger = { ...btn, border: "1px solid rgba(255,107,107,0.55)", background: "rgba(255,107,107,0.12)" };
-
-  const input = {
-    width: "100%",
-    borderRadius: 10,
-    border: "1px solid #2a2f3f",
-    background: "#0d0f16",
-    color: "#eef1ff",
-    padding: "10px 10px",
-    outline: "none",
-  };
+  const input = { width: "100%", borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", padding: "10px 10px", outline: "none" };
 
   return (
     <>
-      <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <button style={btn} onClick={() => setOpen(true)}>Open Profile Editor</button>
         <button style={btn} onClick={openPopout}>Pop-out editor</button>
-        <span style={{ color: "#aab1c3", fontSize: 12 }}>(Guided editor + JSON view + validation)</span>
+        <span style={{ color: "#aab1c3", fontSize: 12 }}>(Builder + validation + raw JSON)</span>
       </div>
 
-      <div style={modalStyle} onMouseDown={() => setOpen(false)}>
-        <div style={panelStyle} onMouseDown={(e) => e.stopPropagation()}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <div>
-              <div style={{ fontWeight: 900, fontSize: 16 }}>Wing Profile Editor</div>
-              <div style={{ color: "#aab1c3", fontSize: 12, marginTop: 4 }}>
-                Edit how line IDs map into riser groups (AR1/BR2/CR4...). This affects grouping, target, and the 3D wing view.
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button style={btn} onClick={validateDraftClick}>Validate</button>
-              <button style={btnWarn} onClick={saveDraftToProfiles}>Save</button>
-              <button style={btn} onClick={() => setOpen(false)}>Close</button>
-            </div>
-          </div>
-
-          {message ? (
-            <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", fontSize: 12 }}>
-              {message}
-            </div>
-          ) : null}
-
-          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-            <TabButton active={tab === "builder"} onClick={() => setTab("builder")}>Builder</TabButton>
-            <TabButton active={tab === "json"} onClick={() => setTab("json")}>Raw JSON</TabButton>
-            <TabButton active={tab === "help"} onClick={() => setTab("help")}>Hints & Tips</TabButton>
-          </div>
-
-          <div style={{ marginTop: 12, border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 0.9fr 0.9fr", gap: 10, alignItems: "end" }}>
+      {!open ? null : (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12, zIndex: 50 }}
+          onMouseDown={() => setOpen(false)}
+        >
+          <div
+            style={{ width: "min(1100px, 100%)", maxHeight: "90vh", overflow: "auto", borderRadius: 16, border: "1px solid #2a2f3f", background: "#11131a", padding: 14 }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
               <div>
-                <label style={{ color: "#aab1c3", fontSize: 12 }}>Profile</label>
-                <select
-                  value={draftKey}
-                  onChange={(e) => {
-                    const k = e.target.value;
-                    setDraftKey(k);
-                    setDraft(deepClone(profiles[k] || {}));
-                    setMessage("");
-                  }}
-                  style={{ ...input, padding: "10px 10px" }}
-                >
-                  {allKeys.map((k) => (
-                    <option key={k} value={k}>{k}</option>
-                  ))}
-                </select>
+                <div style={{ fontWeight: 900, fontSize: 16 }}>Wing Profile Editor</div>
+                <div style={{ color: "#aab1c3", fontSize: 12, marginTop: 4 }}>
+                  Grouping affects: baseline grouping, target plan, chart aggregation, and the 3D wing view.
+                </div>
               </div>
-
-              <div>
-                <label style={{ color: "#aab1c3", fontSize: 12 }}>Display name</label>
-                <input
-                  value={draft?.name ?? draftKey}
-                  onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-                  style={input}
-                />
-              </div>
-
-              <div>
-                <label style={{ color: "#aab1c3", fontSize: 12 }}>mm per loop</label>
-                <input
-                  value={draft?.mmPerLoop ?? 10}
-                  onChange={(e) => setDraft((d) => ({ ...d, mmPerLoop: n(e.target.value) ?? 10 }))}
-                  style={input}
-                  inputMode="numeric"
-                />
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button style={btn} onClick={validateDraftClick}>Validate</button>
+                <button style={btnWarn} onClick={saveDraftToProfiles}>Save</button>
+                <button style={btn} onClick={() => setOpen(false)}>Close</button>
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-              <button style={btn} onClick={addNewProfile}>New</button>
-              <button style={btn} onClick={duplicateProfile}>Duplicate</button>
-              <button style={btnDanger} onClick={deleteProfile}>Delete</button>
+            {message ? (
+              <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", fontSize: 12 }}>
+                {message}
+              </div>
+            ) : null}
+
+            <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              <TabButton active={tab === "builder"} onClick={() => setTab("builder")}>Builder</TabButton>
+              <TabButton active={tab === "json"} onClick={() => setTab("json")}>Raw JSON</TabButton>
+              <TabButton active={tab === "help"} onClick={() => setTab("help")}>Hints & Tips</TabButton>
             </div>
+
+            <div style={{ marginTop: 12, border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 0.9fr 0.9fr", gap: 10, alignItems: "end" }}>
+                <div>
+                  <label style={{ color: "#aab1c3", fontSize: 12 }}>Profile</label>
+                  <select
+                    value={draftKey}
+                    onChange={(e) => {
+                      const k = e.target.value;
+                      setDraftKey(k);
+                      setDraft(deepClone(profiles[k] || {}));
+                      setMessage("");
+                    }}
+                    style={{ ...input, padding: "10px 10px" }}
+                  >
+                    {allKeys.map((k) => (
+                      <option key={k} value={k}>{k}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ color: "#aab1c3", fontSize: 12 }}>Display name</label>
+                  <input value={draft?.name ?? draftKey} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} style={input} />
+                </div>
+
+                <div>
+                  <label style={{ color: "#aab1c3", fontSize: 12 }}>mm per loop</label>
+                  <input value={draft?.mmPerLoop ?? 10} onChange={(e) => setDraft((d) => ({ ...d, mmPerLoop: n(e.target.value) ?? 10 }))} style={input} inputMode="numeric" />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                <button style={btn} onClick={addNewProfile}>New</button>
+                <button style={btn} onClick={duplicateProfile}>Duplicate</button>
+                <button style={btnDanger} onClick={deleteProfile}>Delete</button>
+              </div>
+            </div>
+
+            {tab === "builder" ? <ProfileBuilder draft={draft} setDraft={setDraft} /> : null}
+            {tab === "json" ? <ProfileJsonView profileJson={profileJson} setProfileJson={setProfileJson} /> : null}
+            {tab === "help" ? <ProfileHelp /> : null}
           </div>
-
-          {tab === "builder" ? <ProfileBuilder draft={draft} setDraft={setDraft} /> : null}
-          {tab === "json" ? <ProfileJsonView profileJson={profileJson} setProfileJson={setProfileJson} /> : null}
-          {tab === "help" ? <ProfileHelp /> : null}
         </div>
-      </div>
+      )}
     </>
   );
 }
@@ -1907,15 +2199,7 @@ function TabButton({ active, onClick, children }) {
 }
 
 function ProfileBuilder({ draft, setDraft }) {
-  const input = {
-    width: "100%",
-    borderRadius: 10,
-    border: "1px solid #2a2f3f",
-    background: "#0d0f16",
-    color: "#eef1ff",
-    padding: "10px 10px",
-    outline: "none",
-  };
+  const input = { width: "100%", borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", padding: "10px 10px", outline: "none" };
 
   const mapping = draft?.mapping || { A: [], B: [], C: [], D: [] };
 
@@ -2006,9 +2290,7 @@ function ProfileBuilder({ draft, setDraft }) {
 function ProfileJsonView({ profileJson, setProfileJson }) {
   return (
     <div style={{ marginTop: 12 }}>
-      <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5 }}>
-        Raw JSON view (advanced). If you edit here, use Validate then Save.
-      </div>
+      <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5 }}>Raw JSON view (advanced). If you edit here, use Validate then Save.</div>
       <textarea
         value={profileJson}
         onChange={(e) => setProfileJson(e.target.value)}
@@ -2038,7 +2320,7 @@ function ProfileHelp() {
         <li><b>Group labels must match your diagram</b> (AR1/BR2/CR4...).</li>
         <li><b>Ranges decide grouping</b>: [1,4,"AR1"] means A1–A4 belong to AR1.</li>
         <li><b>Avoid overlaps</b>: overlapping ranges make one line match multiple groups.</li>
-        <li><b>mmPerLoop affects loop suggestions</b> in the target plan.</li>
+        <li><b>mmPerLoop affects target plan</b> step sizing.</li>
       </ul>
     </div>
   );
@@ -2069,9 +2351,7 @@ function validateProfile(profileKey, profile) {
       return { min, max };
     });
 
-    const sorted = rows
-      .filter((r) => Number.isFinite(r.min) && Number.isFinite(r.max))
-      .sort((a, b) => a.min - b.min);
+    const sorted = rows.filter((r) => Number.isFinite(r.min) && Number.isFinite(r.max)).sort((a, b) => a.min - b.min);
 
     for (let i = 1; i < sorted.length; i++) {
       const prev = sorted[i - 1];
@@ -2105,4 +2385,15 @@ function Td({ children, colSpan, align, style }) {
       {children}
     </td>
   );
+}
+
+/* ------------------------- HTML escaping for report ------------------------- */
+
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
