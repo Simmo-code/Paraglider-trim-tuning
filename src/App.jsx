@@ -11,7 +11,7 @@ import * as XLSX from "xlsx";
  * - Keeps legacy per-line loops as fallback (won’t break older saved sessions)
  */
 
-const APP_VERSION = "0.2.2-patchE";
+const APP_VERSION = "0.2.2-patche";
 
 /* ------------------------- Built-in profiles ------------------------- */
 
