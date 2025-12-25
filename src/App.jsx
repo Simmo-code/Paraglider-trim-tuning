@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import * as XLSX from "xlsx";
 
 /**
  * Paraglider Trim Tuning — stable “patch A” build
@@ -398,28 +399,71 @@ export default function App() {
     setProfileKey(key);
   }
 
-  function onImportFile(file) {
+function onImportFile(file) {
+  const name = (file?.name || "").toLowerCase();
+
+  // XLSX
+  if (name.endsWith(".xlsx")) {
     const reader = new FileReader();
     reader.onload = () => {
-      const text = String(reader.result || "");
-      const parsed = parseDelimited(text);
+      try {
+        const data = reader.result;
+        const wb = XLSX.read(data, { type: "array" });
 
-      if (!isWideFormat(parsed.grid)) {
-        alert("CSV not recognized. Expected wide format with Eingabe/Toleranz/Korrektur and A/B/C/D blocks.");
-        return;
+        // first sheet
+        const sheetName = wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+
+        // 2D grid
+        const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
+
+        if (!isWideFormat(grid)) {
+          alert("Excel not recognized. Expected wide format with Eingabe/Toleranz/Korrektur and A/B/C/D blocks.");
+          return;
+        }
+
+        const w = parseWide(grid);
+        setMeta(w.meta);
+        setWideRows(w.rows);
+
+        const importName = makeProfileNameFromMeta(w.meta);
+        ensureProfileExistsByName(importName);
+
+        setSelectedFileName(file.name);
+        setStep(2);
+      } catch (err) {
+        console.error(err);
+        alert("Failed to read Excel file. Please check it is a .xlsx in the same format as the CSV.");
       }
-
-      const w = parseWide(parsed.grid);
-      setMeta(w.meta);
-      setWideRows(w.rows);
-
-      const importName = makeProfileNameFromMeta(w.meta);
-      ensureProfileExistsByName(importName);
-
-      setStep(2);
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
+    return;
   }
+
+  // CSV (existing)
+  const reader = new FileReader();
+  reader.onload = () => {
+    const text = String(reader.result || "");
+    const parsed = parseDelimited(text);
+
+    if (!isWideFormat(parsed.grid)) {
+      alert("CSV not recognized. Expected wide format with Eingabe/Toleranz/Korrektur and A/B/C/D blocks.");
+      return;
+    }
+
+    const w = parseWide(parsed.grid);
+    setMeta(w.meta);
+    setWideRows(w.rows);
+
+    const importName = makeProfileNameFromMeta(w.meta);
+    ensureProfileExistsByName(importName);
+
+    setSelectedFileName(file.name);
+    setStep(2);
+  };
+  reader.readAsText(file);
+}
+
 
   // Group-based loop delta
   function loopDeltaFor(lineId, side) {
@@ -639,7 +683,7 @@ export default function App() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               style={{ display: "none" }}
               onChange={(e) => {
                 const f = e.target.files?.[0];
