@@ -1,5 +1,4 @@
 import BUILTIN_PROFILES from "./wingProfiles.json";
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 
@@ -11,10 +10,9 @@ import * as XLSX from "xlsx";
  * - Keeps legacy per-line loops as fallback (won’t break older saved sessions)
  */
 
-const APP_VERSION = "0.2.2-patche";
+const APP_VERSION = "0.2.2-patchE";
 
 /* ------------------------- Built-in profiles ------------------------- */
-
 
 /* ------------------------- Helpers ------------------------- */
 
@@ -289,10 +287,9 @@ export default function App() {
     } catch {}
     return { ...BUILTIN_PROFILES };
   }, [profileJson]);
+	const [profileKey, setProfileKey] = useState(() => Object.keys(BUILTIN_PROFILES)[0] || "");
 
- const [profileKey, setProfileKey] = useState(() => Object.keys(BUILTIN_PROFILES)[0] || "");
-
-  const activeProfile =
+   const activeProfile =
     profiles[profileKey] || Object.values(profiles)[0] || Object.values(BUILTIN_PROFILES)[0];
 
   // Adjustments (per group)
