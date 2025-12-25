@@ -8,7 +8,7 @@ import * as XLSX from "xlsx";
  * - Keeps legacy per-line loops as fallback (won’t break older saved sessions)
  */
 
-const APP_VERSION = "0.2.2-patchc";
+const APP_VERSION = "0.2.2-patchD";
 
 /* ------------------------- Built-in profiles ------------------------- */
 
@@ -103,29 +103,80 @@ function parseDelimited(text) {
   return { delim, grid };
 }
 
-function isWideFormat(grid) {
-  if (!Array.isArray(grid) || grid.length < 3) return false;
+function isWideFormat(_grid) {
+  // Keep for backwards compatibility, but don't block imports anymore.
+  return true;
+}
 
-  const text = grid
-    .slice(0, 6) // only scan the first few rows
-    .flat()
-    .map((c) => String(c || "").toLowerCase())
-    .join(" ");
+function parseWideFlexible(grid) {
+  // 1) Try to detect meta header row (optional)
+  let headerRow = -1;
+  let inputCol = 0;
+  let tolCol = -1;
+  let corrCol = -1;
 
-  const hasMeta =
-    text.includes("eingabe") &&
-    (text.includes("toleranz") || text.includes("tolerance")) &&
-    (text.includes("korrektur") || text.includes("correction"));
+  const maxScan = Math.min(20, grid.length);
+  for (let r = 0; r < maxScan; r++) {
+    const row = grid[r] || [];
+    for (let c = 0; c < row.length; c++) {
+      const t = String(row[c] ?? "").toLowerCase();
+      if (!t) continue;
 
-  const hasNominal =
-    text.includes("soll") || text.includes("nominal");
+      if (t.includes("eingabe") || t.includes("input")) {
+        headerRow = r;
+        inputCol = c;
+      }
+      if (t.includes("toleranz") || t.includes("tolerance")) {
+        headerRow = r;
+        tolCol = c;
+      }
+      if (t.includes("korrektur") || t.includes("correction")) {
+        headerRow = r;
+        corrCol = c;
+      }
+    }
+    // if we found at least tolerance or correction headers, good enough
+    if (headerRow >= 0 && (tolCol >= 0 || corrCol >= 0)) break;
+  }
 
-  const hasBlocks =
-    text.includes("a") &&
-    text.includes("b") &&
-    text.includes("c");
+  const metaRow = headerRow >= 0 ? headerRow + 1 : 1;
+  const metaValues = grid[metaRow] || [];
 
-  return hasMeta && hasNominal && hasBlocks;
+  const meta = {
+    input1: String(metaValues[inputCol] ?? ""),
+    input2: String(metaValues[inputCol + 1] ?? ""),
+    tolerance: tolCol >= 0 ? (n(metaValues[tolCol]) ?? 0) : 0,
+    correction: corrCol >= 0 ? (n(metaValues[corrCol]) ?? 0) : 0,
+  };
+
+  // 2) Parse rows by scanning for line IDs like A1, B12, C03, D7
+  const rows = [];
+  for (let r = 0; r < grid.length; r++) {
+    const row = grid[r] || [];
+    const entry = { A: null, B: null, C: null, D: null };
+
+    for (let c = 0; c <= row.length - 4; c++) {
+      const cell = String(row[c] ?? "").trim();
+      const m = cell.match(/^([A-Da-d])\s*0*([0-9]+)$/);
+      if (!m) continue;
+
+      const letter = m[1].toUpperCase();
+      const line = `${letter}${parseInt(m[2], 10)}`;
+
+      const nominal = n(row[c + 1]);
+      const measL = n(row[c + 2]);
+      const measR = n(row[c + 3]);
+
+      entry[letter] = { line, nominal, measL, measR };
+
+      // Skip forward a bit; typical layout is 4-wide blocks
+      c += 3;
+    }
+
+    if (entry.A || entry.B || entry.C || entry.D) rows.push(entry);
+  }
+
+  return { meta, rows };
 }
 
 
@@ -416,67 +467,85 @@ export default function App() {
 function onImportFile(file) {
   const name = (file?.name || "").toLowerCase();
 
-  // XLSX
-  if (name.endsWith(".xlsx")) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const data = reader.result;
-        const wb = XLSX.read(data, { type: "array" });
+  // XLSX (Excel)
+if (file.name.toLowerCase().endsWith(".xlsx")) {
+  const reader = new FileReader();
 
-        // first sheet
-        const sheetName = wb.SheetNames[0];
-        const ws = wb.Sheets[sheetName];
+  reader.onload = () => {
+    try {
+      const data = reader.result;
 
-        // 2D grid
-        const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
+      // Read workbook
+      const workbook = XLSX.read(data, { type: "array" });
 
-        if (!isWideFormat(grid)) {
-          alert("Excel not recognized. Expected wide format with Eingabe/Toleranz/Korrektur and A/B/C/D blocks.");
-          return;
-        }
+      // Use first sheet
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
 
-        const w = parseWide(grid);
-        setMeta(w.meta);
-        setWideRows(w.rows);
+      // Convert to 2D grid (rows x columns)
+      const grid = XLSX.utils.sheet_to_json(worksheet, {
+        header: 1,
+        raw: false,
+        defval: "",
+      });
 
-        const importName = makeProfileNameFromMeta(w.meta);
-        ensureProfileExistsByName(importName);
+      // FLEXIBLE parsing (no header assumptions)
+      const w = parseWideFlexible(grid);
 
-        setSelectedFileName(file.name);
-        setStep(2);
-      } catch (err) {
-        console.error(err);
-        alert("Failed to read Excel file. Please check it is a .xlsx in the same format as the CSV.");
+      if (!w.rows.length) {
+        alert(
+          "Excel imported, but no line rows were detected.\n\n" +
+          "Check that line IDs look like A1, B12, C03 etc."
+        );
+        return;
       }
-    };
-    reader.readAsArrayBuffer(file);
+
+      setMeta(w.meta);
+      setWideRows(w.rows);
+
+      const importName = makeProfileNameFromMeta(w.meta);
+      ensureProfileExistsByName(importName);
+
+      setSelectedFileName(file.name);
+      setStep(2);
+    } catch (err) {
+      console.error(err);
+      alert(
+        "Failed to read Excel file.\n\n" +
+        "Make sure it is a .xlsx file in the same layout as the CSV."
+      );
+    }
+  };
+
+  reader.readAsArrayBuffer(file);
+  return;
+}
+
+
+// CSV (existing)
+const reader = new FileReader();
+reader.onload = () => {
+  const text = String(reader.result || "");
+  const parsed = parseDelimited(text);
+
+  const w = parseWideFlexible(parsed.grid);
+  if (!w.rows.length) {
+    alert("File imported, but no line rows were detected. Make sure line IDs look like A1, B12, C03 etc.");
     return;
   }
 
-  // CSV (existing)
-  const reader = new FileReader();
-  reader.onload = () => {
-    const text = String(reader.result || "");
-    const parsed = parseDelimited(text);
+  setMeta(w.meta);
+  setWideRows(w.rows);
 
-    if (!isWideFormat(parsed.grid)) {
-      alert("CSV not recognized. Expected wide format with Eingabe/Toleranz/Korrektur and A/B/C/D blocks.");
-      return;
-    }
+  const importName = makeProfileNameFromMeta(w.meta);
+  ensureProfileExistsByName(importName);
 
-    const w = parseWide(parsed.grid);
-    setMeta(w.meta);
-    setWideRows(w.rows);
-
-    const importName = makeProfileNameFromMeta(w.meta);
-    ensureProfileExistsByName(importName);
-
-    setSelectedFileName(file.name);
-    setStep(2);
-  };
-  reader.readAsText(file);
+  setSelectedFileName(file.name);
+  setStep(2);
+};
+reader.readAsText(file);
 }
+
 
 
   // Group-based loop delta
