@@ -1,7 +1,6 @@
-import BUILTIN_PROFILES from "./wingProfiles.json";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
-
+import BUILTIN_PROFILES from "./wingProfiles.json";
 
 /**
  * Paraglider Trim Tuning — stable “patch A” build
