@@ -1,5 +1,8 @@
+import BUILTIN_PROFILES from "./wingProfiles.json";
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
+
 
 /**
  * Paraglider Trim Tuning — stable “patch A” build
@@ -8,69 +11,10 @@ import * as XLSX from "xlsx";
  * - Keeps legacy per-line loops as fallback (won’t break older saved sessions)
  */
 
-const APP_VERSION = "0.2.2-patchD";
+const APP_VERSION = "0.2.2-patchE";
 
 /* ------------------------- Built-in profiles ------------------------- */
 
-const BUILTIN_PROFILES = {
-  "Speedster 3 (starter mapping)": {
-    name: "Speedster 3 (starter mapping)",
-    mmPerLoop: 10,
-    mapping: {
-      A: [
-        [1, 4, "AR1"],
-        [5, 8, "AR2"],
-        [9, 16, "AR3"],
-      ],
-      B: [
-        [1, 4, "BR1"],
-        [5, 8, "BR2"],
-        [9, 16, "BR3"],
-      ],
-      C: [
-        [1, 4, "CR1"],
-        [5, 8, "CR2"],
-        [9, 12, "CR3"],
-        [13, 16, "CR4"],
-      ],
-      D: [
-        [1, 4, "DR1"],
-        [5, 8, "DR2"],
-        [9, 14, "DR3"],
-      ],
-    },
-  },
-  "Generic 16 lines (demo)": {
-    name: "Generic 16 lines (demo)",
-    mmPerLoop: 10,
-    mapping: {
-      A: [
-        [1, 4, "AR1"],
-        [5, 8, "AR2"],
-        [9, 12, "AR3"],
-        [13, 16, "AR4"],
-      ],
-      B: [
-        [1, 4, "BR1"],
-        [5, 8, "BR2"],
-        [9, 12, "BR3"],
-        [13, 16, "BR4"],
-      ],
-      C: [
-        [1, 4, "CR1"],
-        [5, 8, "CR2"],
-        [9, 12, "CR3"],
-        [13, 16, "CR4"],
-      ],
-      D: [
-        [1, 4, "DR1"],
-        [5, 8, "DR2"],
-        [9, 12, "DR3"],
-        [13, 16, "DR4"],
-      ],
-    },
-  },
-};
 
 /* ------------------------- Helpers ------------------------- */
 
@@ -346,7 +290,8 @@ export default function App() {
     return { ...BUILTIN_PROFILES };
   }, [profileJson]);
 
-  const [profileKey, setProfileKey] = useState(Object.keys(BUILTIN_PROFILES)[0]);
+ const [profileKey, setProfileKey] = useState(() => Object.keys(BUILTIN_PROFILES)[0] || "");
+
   const activeProfile =
     profiles[profileKey] || Object.values(profiles)[0] || Object.values(BUILTIN_PROFILES)[0];
 
