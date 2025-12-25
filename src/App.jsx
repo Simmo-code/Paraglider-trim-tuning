@@ -8,7 +8,7 @@ import * as XLSX from "xlsx";
  * - Keeps legacy per-line loops as fallback (won’t break older saved sessions)
  */
 
-const APP_VERSION = "0.2.2-patchb";
+const APP_VERSION = "0.2.2-patchc";
 
 /* ------------------------- Built-in profiles ------------------------- */
 
@@ -104,16 +104,30 @@ function parseDelimited(text) {
 }
 
 function isWideFormat(grid) {
-  if (!grid || grid.length < 4) return false;
-  const r0 = (grid[0] || []).join(" ").toLowerCase();
-  const r2 = (grid[2] || []).join(" ").toLowerCase();
-  return (
-    r0.includes("eingabe") &&
-    r0.includes("toleranz") &&
-    r0.includes("korrektur") &&
-    r2.includes("soll")
-  );
+  if (!Array.isArray(grid) || grid.length < 3) return false;
+
+  const text = grid
+    .slice(0, 6) // only scan the first few rows
+    .flat()
+    .map((c) => String(c || "").toLowerCase())
+    .join(" ");
+
+  const hasMeta =
+    text.includes("eingabe") &&
+    (text.includes("toleranz") || text.includes("tolerance")) &&
+    (text.includes("korrektur") || text.includes("correction"));
+
+  const hasNominal =
+    text.includes("soll") || text.includes("nominal");
+
+  const hasBlocks =
+    text.includes("a") &&
+    text.includes("b") &&
+    text.includes("c");
+
+  return hasMeta && hasNominal && hasBlocks;
 }
+
 
 // Wide format parser (A/B/C/D blocks)
 function parseWide(grid) {
