@@ -1334,7 +1334,7 @@ export default function App() {
               </div>
 
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                {(["A", "B", "C", "D"] as const).map((L) => (
+                {["A", "B", "C", "D"].map((L) => (
                   <label key={L} style={{ display: "flex", gap: 8, alignItems: "center", ...muted, fontSize: 12 }}>
                     <input
                       type="checkbox"
