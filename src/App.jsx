@@ -1352,97 +1352,174 @@ export default function App() {
 
             <div style={{ height: 12 }} />
 
-            {/* Adjustment UI */}
-            <div style={{ ...card, background: "#0e1018" }}>
-              <div style={{ fontWeight: 850, marginBottom: 8 }}>Trim adjustments per line group (mm)</div>
-              <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
-                These simulate adding/removing length at the risers/maillons for each group.
-                Positive = longer; negative = shorter.
-              </div>
+{/* Adjustment UI */}
+<div style={{ ...card, background: "#0e1018" }}>
+  <div style={{ fontWeight: 850, marginBottom: 8 }}>Trim adjustments per line group (mm)</div>
+  <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
+    These simulate adding/removing length at the risers/maillons for each group.
+    Positive = longer; negative = shorter.
+    <div style={{ height: 6 }} />
+    Use the dropdowns to auto-fill the adjustment with a known loop type (SL/DL/AS/etc). You can still type any custom value.
+  </div>
 
-              <div style={{ height: 10 }} />
+  <div style={{ height: 10 }} />
 
-              {!allGroupNames.length ? (
-                <div style={{ ...muted, fontSize: 12 }}>No groups found. Check Step 2 mapping.</div>
-              ) : (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
-                    <thead>
-                      <tr style={{ color: "#aab1c3", fontSize: 12 }}>
-                        <th style={{ textAlign: "left", padding: "6px 8px" }}>Group</th>
-                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust L (mm)</th>
-                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust R (mm)</th>
-                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ before</th>
-                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ after</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {allGroupNames.map((g) => {
-                        const kL = `${g}|L`;
-                        const kR = `${g}|R`;
-                        const aL = getAdjustment(adjustments, g, "L");
-                        const aR = getAdjustment(adjustments, g, "R");
+  {!allGroupNames.length ? (
+    <div style={{ ...muted, fontSize: 12 }}>No groups found. Check Step 2 mapping.</div>
+  ) : (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
+        <thead>
+          <tr style={{ color: "#aab1c3", fontSize: 12 }}>
+            <th style={{ textAlign: "left", padding: "6px 8px" }}>Group</th>
+            <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust L (mm)</th>
+            <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust R (mm)</th>
+            <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ before</th>
+            <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ after</th>
+          </tr>
+        </thead>
 
-                        const statL = groupStats.find((s) => s.groupName === g && s.side === "L");
-                        const statR = groupStats.find((s) => s.groupName === g && s.side === "R");
-                        const beforeAvg = avg([statL?.before, statR?.before].filter((x) => Number.isFinite(x)));
-                        const afterAvg = avg([statL?.after, statR?.after].filter((x) => Number.isFinite(x)));
+        <tbody>
+          {allGroupNames.map((g) => {
+            const kL = `${g}|L`;
+            const kR = `${g}|R`;
+            const aL = getAdjustment(adjustments, g, "L");
+            const aR = getAdjustment(adjustments, g, "R");
 
-                        const tol = meta.tolerance || 0;
-                        const sevAfter = severity(afterAvg, tol);
+            const statL = groupStats.find((s) => s.groupName === g && s.side === "L");
+            const statR = groupStats.find((s) => s.groupName === g && s.side === "R");
+            const beforeAvg = avg([statL?.before, statR?.before].filter((x) => Number.isFinite(x)));
+            const afterAvg = avg([statL?.after, statR?.after].filter((x) => Number.isFinite(x)));
 
-                        return (
-                          <tr key={g} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
-                            <td style={{ padding: "6px 8px", fontWeight: 900 }}>{g}</td>
-                            <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                              <input
-                                value={aL}
-                                onChange={(e) => persistAdjustments({ ...adjustments, [kL]: n(e.target.value) ?? 0 })}
-                                style={{
-                                  ...input,
-                                  width: 110,
-                                  padding: "6px 8px",
-                                  textAlign: "right",
-                                  fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                                }}
-                                inputMode="numeric"
-                              />
-                            </td>
-                            <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                              <input
-                                value={aR}
-                                onChange={(e) => persistAdjustments({ ...adjustments, [kR]: n(e.target.value) ?? 0 })}
-                                style={{
-                                  ...input,
-                                  width: 110,
-                                  padding: "6px 8px",
-                                  textAlign: "right",
-                                  fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                                }}
-                                inputMode="numeric"
-                              />
-                            </td>
-                            <td style={{ padding: "6px 8px", textAlign: "right", color: "#aab1c3", fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                              {Number.isFinite(beforeAvg) ? Math.round(beforeAvg) : "—"}
-                            </td>
-                            <td
-                              style={{
-                                padding: "6px 8px",
-                                textAlign: "right",
-                                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                                ...(sevAfter === "red" ? redCell : sevAfter === "yellow" ? yellowCell : null),
-                              }}
-                            >
-                              {Number.isFinite(afterAvg) ? Math.round(afterAvg) : "—"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+            const tol = meta.tolerance || 0;
+            const sevAfter = severity(afterAvg, tol);
+
+            return (
+              <tr key={g} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
+                <td style={{ padding: "6px 8px", fontWeight: 900 }}>{g}</td>
+
+                {/* Adjust L (dropdown + input) */}
+                <td style={{ padding: "6px 8px", textAlign: "right" }}>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+                    <select
+                      value={loopTypeFromAdjustment(aL)}
+                      onChange={(e) => {
+                        const t = e.target.value;
+                        if (!t) return; // Custom selected: do nothing (user can type)
+                        const v = loopTypes[t];
+                        persistAdjustments({ ...adjustments, [kL]: Number.isFinite(v) ? v : 0 });
+                      }}
+                      style={{
+                        borderRadius: 10,
+                        border: "1px solid #2a2f3f",
+                        background: "#0d0f16",
+                        color: "#eef1ff",
+                        padding: "6px 8px",
+                        outline: "none",
+                        fontSize: 12,
+                      }}
+                      title="Select a loop type to auto-fill Adjust L"
+                    >
+                      <option value="">Custom</option>
+                      {Object.keys(loopTypes).map((name) => (
+                        <option key={name} value={name}>
+                          {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
+                        </option>
+                      ))}
+                    </select>
+
+                    <input
+                      value={aL}
+                      onChange={(e) => persistAdjustments({ ...adjustments, [kL]: n(e.target.value) ?? 0 })}
+                      style={{
+                        ...input,
+                        width: 110,
+                        padding: "6px 8px",
+                        textAlign: "right",
+                        fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                      }}
+                      inputMode="numeric"
+                      title="Manual override (mm)"
+                    />
+                  </div>
+                </td>
+
+                {/* Adjust R (dropdown + input) */}
+                <td style={{ padding: "6px 8px", textAlign: "right" }}>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+                    <select
+                      value={loopTypeFromAdjustment(aR)}
+                      onChange={(e) => {
+                        const t = e.target.value;
+                        if (!t) return; // Custom selected: do nothing
+                        const v = loopTypes[t];
+                        persistAdjustments({ ...adjustments, [kR]: Number.isFinite(v) ? v : 0 });
+                      }}
+                      style={{
+                        borderRadius: 10,
+                        border: "1px solid #2a2f3f",
+                        background: "#0d0f16",
+                        color: "#eef1ff",
+                        padding: "6px 8px",
+                        outline: "none",
+                        fontSize: 12,
+                      }}
+                      title="Select a loop type to auto-fill Adjust R"
+                    >
+                      <option value="">Custom</option>
+                      {Object.keys(loopTypes).map((name) => (
+                        <option key={name} value={name}>
+                          {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
+                        </option>
+                      ))}
+                    </select>
+
+                    <input
+                      value={aR}
+                      onChange={(e) => persistAdjustments({ ...adjustments, [kR]: n(e.target.value) ?? 0 })}
+                      style={{
+                        ...input,
+                        width: 110,
+                        padding: "6px 8px",
+                        textAlign: "right",
+                        fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                      }}
+                      inputMode="numeric"
+                      title="Manual override (mm)"
+                    />
+                  </div>
+                </td>
+
+                <td
+                  style={{
+                    padding: "6px 8px",
+                    textAlign: "right",
+                    color: "#aab1c3",
+                    fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                  }}
+                >
+                  {Number.isFinite(beforeAvg) ? Math.round(beforeAvg) : "—"}
+                </td>
+
+                <td
+                  style={{
+                    padding: "6px 8px",
+                    textAlign: "right",
+                    fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                    ...(sevAfter === "red" ? redCell : sevAfter === "yellow" ? yellowCell : null),
+                  }}
+                >
+                  {Number.isFinite(afterAvg) ? Math.round(afterAvg) : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  )}
+</div>
+
 
             <div style={{ height: 12 }} />
 
