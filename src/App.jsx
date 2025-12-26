@@ -1104,7 +1104,7 @@ export default function App() {
                 border: "1px solid #2a2f3f",
                 background: "#0b0c10",
                 color: "#eef1ff",
-                padding: "8px 10px",
+                padding: "6px 8px",
                 outline: "none",
                 fontFamily: "ui-monospace, Menlo, Consolas, monospace",
                 textAlign: "right",
