@@ -1045,65 +1045,94 @@ export default function App() {
 
             <div style={{ height: 10 }} />
 
-            <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
-              <div style={{ fontWeight: 850, marginBottom: 8 }}>Loop types (editable)</div>
-              <div style={{ color: "#aab1c3", fontSize: 12, marginBottom: 10 }}>
-                Negative means the loop reduces line length. Baseline uses:
-                <br />
-                <b>baseline = (rawMeasured + correction) + loopDelta</b>
-              </div>
+            {/* Loop types (editable) */}
+<div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
+  <div style={{ fontWeight: 850, marginBottom: 10 }}>Loop types (editable)</div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
-                {Object.entries(loopTypes).map(([name, mm]) => (
-                  <div
-                    key={name}
-                    style={{
-                      border: "1px solid #2a2f3f",
-                      borderRadius: 14,
-                      padding: 10,
-                      background: "#0d0f16",
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                      <div style={{ fontWeight: 850 }}>{name}</div>
-                      <div style={{ color: "#aab1c3", fontSize: 12 }}>mm</div>
-                    </div>
-                    <input
-                      value={mm}
-                      onChange={(e) => {
-                        const v = n(e.target.value);
-                        const next = { ...loopTypes, [name]: Number.isFinite(v) ? v : 0 };
-                        persistLoopTypes(next);
-                      }}
-                      style={{
-                        width: "100%",
-                        borderRadius: 10,
-                        border: "1px solid #2a2f3f",
-                        background: "#0b0c10",
-                        color: "#eef1ff",
-                        padding: "10px 10px",
-                        outline: "none",
-                        marginTop: 8,
-                        fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                        textAlign: "right",
-                      }}
-                      inputMode="numeric"
-                    />
-                  </div>
-                ))}
-              </div>
+  <div
+    style={{
+      display: "grid",
+      gridTemplateColumns: "1.3fr 0.7fr",
+      gap: 12,
+      alignItems: "start",
+    }}
+  >
+    {/* Left: text */}
+    <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.55 }}>
+      Negative means the loop reduces line length.
+      <div style={{ height: 6 }} />
+      Baseline uses:
+      <div style={{ height: 6 }} />
+      <div style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace", color: "#eef1ff" }}>
+        baseline = (rawMeasured + correction) + loopDelta
+      </div>
+      <div style={{ height: 8 }} />
+      Tip: keep these numbers matching your real loop set. Only one loop type per group side.
+    </div>
 
-              <div style={{ height: 12 }} />
+    {/* Right: smaller editable grid */}
+    <div
+      style={{
+        border: "1px solid #2a2f3f",
+        borderRadius: 14,
+        padding: 10,
+        background: "#0d0f16",
+      }}
+    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 84px",
+          gap: 8,
+        }}
+      >
+        {Object.entries(loopTypes).map(([name, mm]) => (
+          <React.Fragment key={name}>
+            <div style={{ fontWeight: 800, fontSize: 12, alignSelf: "center" }}>{name}</div>
+            <input
+              value={mm}
+              onChange={(e) => {
+                const v = n(e.target.value);
+                const next = { ...loopTypes, [name]: Number.isFinite(v) ? v : 0 };
+                persistLoopTypes(next);
+              }}
+              style={{
+                width: "100%",
+                borderRadius: 10,
+                border: "1px solid #2a2f3f",
+                background: "#0b0c10",
+                color: "#eef1ff",
+                padding: "8px 10px",
+                outline: "none",
+                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                textAlign: "right",
+                fontSize: 12,
+              }}
+              inputMode="numeric"
+              aria-label={`${name} mm`}
+            />
+          </React.Fragment>
+        ))}
+      </div>
 
-              <div style={{ padding: 12, borderRadius: 14, border: "1px solid #2a2f3f", background: "#0b0c10" }}>
-                <div style={{ fontWeight: 850, marginBottom: 8 }}>Quick tools</div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button onClick={applyAllSL} style={btn}>All SL</button>
-                  <button onClick={mirrorLtoR} style={btn}>Mirror L → R</button>
-                  <button onClick={mirrorRtoL} style={btn}>Mirror R → L</button>
-                </div>
-              </div>
-            </div>
+      <div style={{ color: "#aab1c3", fontSize: 11, marginTop: 8 }}>
+        mm (negative = shorter)
+      </div>
+    </div>
+  </div>
+
+  <div style={{ height: 12 }} />
+
+  <div style={{ padding: 12, borderRadius: 14, border: "1px solid #2a2f3f", background: "#0b0c10" }}>
+    <div style={{ fontWeight: 850, marginBottom: 8 }}>Quick tools</div>
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <button onClick={applyAllSL} style={btn}>All SL</button>
+      <button onClick={mirrorLtoR} style={btn}>Mirror L → R</button>
+      <button onClick={mirrorRtoL} style={btn}>Mirror R → L</button>
+    </div>
+  </div>
+</div>
+
 
             <div style={{ height: 12 }} />
 
