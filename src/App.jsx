@@ -244,6 +244,28 @@ function parseWideFlexible(grid) {
 }
 
 /* ------------------------- App ------------------------- */
+function median(values) {
+  const v = values.filter((x) => Number.isFinite(x)).slice().sort((a, b) => a - b);
+  if (!v.length) return null;
+  const mid = Math.floor(v.length / 2);
+  if (v.length % 2) return v[mid];
+  return (v[mid - 1] + v[mid]) / 2;
+}
+
+function suggestCorrectionFromWideRows(wideRows) {
+  const offsets = [];
+  for (const r of wideRows || []) {
+    for (const letter of ["A", "B", "C", "D"]) {
+      const b = r?.[letter];
+      if (!b || b.nominal == null) continue;
+
+      if (b.measL != null) offsets.push(b.nominal - b.measL);
+      if (b.measR != null) offsets.push(b.nominal - b.measR);
+    }
+  }
+  const med = median(offsets);
+  return med == null ? null : Math.round(med);
+}
 
 export default function App() {
   const [step, setStep] = useState(() => {
@@ -1231,6 +1253,28 @@ export default function App() {
             </div>
 
             <div style={{ height: 12 }} />
+<div style={{ marginTop: 10, padding: 12, borderRadius: 14, border: "1px solid #2a2f3f", background: "#0b0c10" }}>
+  <div style={{ fontWeight: 850, marginBottom: 6 }}>Zeroing wizard (auto-suggest correction)</div>
+  <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5 }}>
+    Suggests a correction using the <b>median</b> of (Soll − Ist) across all lines.
+    This removes a consistent offset (e.g. ≈ -507mm).
+  </div>
+
+  <div style={{ height: 10 }} />
+
+  <button
+    style={btnWarn}
+    onClick={() => {
+      const s = suggestCorrectionFromWideRows(wideRows);
+      if (s == null) return alert("Not enough data to suggest a correction.");
+      const ok = confirm(`Suggested correction: ${s}mm\n\nApply this to Correction now?`);
+      if (!ok) return;
+      setMeta((m) => ({ ...m, correction: s }));
+    }}
+  >
+    Suggest correction (median)
+  </button>
+</div>
 
             {/* Adjustment UI */}
             <div style={{ ...card, background: "#0e1018" }}>
@@ -1704,8 +1748,183 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
 
 function DeltaLineChart({ title, points, tolerance }) {
   const width = 1100;
-  const height = 220;
-  const pad = 24;
+  const height = 250;
+  const pad = 26;
+
+  const [hover, setHover] = useState(null); // {x,y, p}
+
+  // Split series by side
+  const series = useMemo(() => {
+    const bySide = { L: [], R: [] };
+    for (const p of points) {
+      if (!Number.isFinite(p.before) && !Number.isFinite(p.after)) continue;
+      bySide[p.side].push(p);
+    }
+    bySide.L.sort((a, b) => a.xIndex - b.xIndex);
+    bySide.R.sort((a, b) => a.xIndex - b.xIndex);
+    return bySide;
+  }, [points]);
+
+  const allValues = useMemo(() => {
+    const v = [];
+    for (const p of points) {
+      if (Number.isFinite(p.before)) v.push(p.before);
+      if (Number.isFinite(p.after)) v.push(p.after);
+    }
+    v.push(0);
+    if ((tolerance || 0) > 0) v.push(tolerance, -tolerance);
+    return v;
+  }, [points, tolerance]);
+
+  const { minY, maxY } = useMemo(() => {
+    if (!allValues.length) return { minY: -10, maxY: 10 };
+    let mn = Math.min(...allValues);
+    let mx = Math.max(...allValues);
+    if (mn === mx) {
+      mn -= 1;
+      mx += 1;
+    }
+    const span = mx - mn;
+    return { minY: mn - span * 0.12, maxY: mx + span * 0.12 };
+  }, [allValues]);
+
+  const maxX = useMemo(() => {
+    const mx = Math.max(0, ...points.map((p) => p.xIndex));
+    return mx <= 0 ? 1 : mx;
+  }, [points]);
+
+  function xScale(x) {
+    return pad + (x / maxX) * (width - pad * 2);
+  }
+  function yScale(y) {
+    return pad + ((maxY - y) / (maxY - minY)) * (height - pad * 2);
+  }
+
+  function polyPath(ps, field) {
+    const pts = ps
+      .filter((p) => Number.isFinite(p[field]))
+      .map((p) => `${xScale(p.xIndex)},${yScale(p[field])}`);
+    if (!pts.length) return "";
+    return `M ${pts[0]} ` + pts.slice(1).map((s) => `L ${s}`).join(" ");
+  }
+
+  const tol = tolerance || 0;
+  const y0 = yScale(0);
+  const yTolP = tol > 0 ? yScale(tol) : null;
+  const yTolN = tol > 0 ? yScale(-tol) : null;
+  const yWarnP = tol > 3 ? yScale(Math.max(0, tol - 3)) : null;
+  const yWarnN = tol > 3 ? yScale(-Math.max(0, tol - 3)) : null;
+
+  function sevColor(sev) {
+    if (sev === "red") return "rgba(255,107,107,1)";
+    if (sev === "yellow") return "rgba(255,214,102,1)";
+    return "rgba(170,177,195,0.9)";
+  }
+
+  return (
+    <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0d0f16" }}>
+      <div style={{ fontWeight: 850, marginBottom: 8 }}>{title}</div>
+
+      {!points.length ? (
+        <div style={{ color: "#aab1c3", fontSize: 12 }}>No chart data yet.</div>
+      ) : (
+        <div style={{ position: "relative" }}>
+          <svg
+            width="100%"
+            viewBox={`0 0 ${width} ${height}`}
+            style={{ display: "block" }}
+            onMouseLeave={() => setHover(null)}
+          >
+            {/* Target line */}
+            <line x1={pad} x2={width - pad} y1={y0} y2={y0} stroke="rgba(170,177,195,0.35)" strokeWidth="2" />
+
+            {/* Tolerance / Warning bands */}
+            {tol > 0 ? (
+              <>
+                <line x1={pad} x2={width - pad} y1={yTolP} y2={yTolP} stroke="rgba(255,107,107,0.45)" strokeWidth="2" />
+                <line x1={pad} x2={width - pad} y1={yTolN} y2={yTolN} stroke="rgba(255,107,107,0.45)" strokeWidth="2" />
+              </>
+            ) : null}
+            {tol > 3 ? (
+              <>
+                <line x1={pad} x2={width - pad} y1={yWarnP} y2={yWarnP} stroke="rgba(255,214,102,0.55)" strokeWidth="2" />
+                <line x1={pad} x2={width - pad} y1={yWarnN} y2={yWarnN} stroke="rgba(255,214,102,0.55)" strokeWidth="2" />
+              </>
+            ) : null}
+
+            {/* Before (dashed) */}
+            <path d={polyPath(series.L, "before")} fill="none" stroke="rgba(176,132,255,0.75)" strokeWidth="2" strokeDasharray="6 6" />
+            <path d={polyPath(series.R, "before")} fill="none" stroke="rgba(102,204,255,0.75)" strokeWidth="2" strokeDasharray="6 6" />
+
+            {/* After (solid) */}
+            <path d={polyPath(series.L, "after")} fill="none" stroke="rgba(176,132,255,1)" strokeWidth="3" />
+            <path d={polyPath(series.R, "after")} fill="none" stroke="rgba(102,204,255,1)" strokeWidth="3" />
+
+            {/* Points (After) */}
+            {points.map((p) => {
+              if (!Number.isFinite(p.after)) return null;
+              const cx = xScale(p.xIndex);
+              const cy = yScale(p.after);
+              return (
+                <circle
+                  key={`pt-${p.id}`}
+                  cx={cx}
+                  cy={cy}
+                  r={4.2}
+                  fill={sevColor(p.sevAfter)}
+                  stroke="rgba(0,0,0,0.35)"
+                  strokeWidth="1"
+                  onMouseEnter={() => setHover({ x: cx, y: cy, p })}
+                  onMouseMove={() => setHover({ x: cx, y: cy, p })}
+                />
+              );
+            })}
+          </svg>
+
+          {/* Tooltip */}
+          {hover ? (
+            <div
+              style={{
+                position: "absolute",
+                left: `${(hover.x / width) * 100}%`,
+                top: `${(hover.y / height) * 100}%`,
+                transform: "translate(12px, -12px)",
+                pointerEvents: "none",
+                background: "#0b0c10",
+                border: "1px solid #2a2f3f",
+                borderRadius: 12,
+                padding: 10,
+                minWidth: 220,
+                boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+                color: "#eef1ff",
+                fontSize: 12,
+              }}
+            >
+              <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                {hover.p.line} ({hover.p.side})
+              </div>
+              <div style={{ color: "#aab1c3", fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
+                Δ before: {Number.isFinite(hover.p.before) ? `${hover.p.before > 0 ? "+" : ""}${Math.round(hover.p.before)}mm` : "—"}
+                <br />
+                Δ after: {Number.isFinite(hover.p.after) ? `${hover.p.after > 0 ? "+" : ""}${Math.round(hover.p.after)}mm` : "—"}
+                <br />
+                Severity: <b>{hover.p.sevAfter}</b>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      <div style={{ color: "#aab1c3", fontSize: 12, marginTop: 8, display: "flex", gap: 14, flexWrap: "wrap" }}>
+        <span>Solid = After</span>
+        <span>Dashed = Before</span>
+        <span>Points = After (hover)</span>
+        <span>Target = 0mm</span>
+      </div>
+    </div>
+  );
+}
+
 
   // Two series: L and R, each with before/after overlay
   const series = useMemo(() => {
