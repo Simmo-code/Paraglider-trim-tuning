@@ -2032,7 +2032,7 @@ function DeltaLineChart({ title, points, tolerance }) {
       </div>
     </div>
   );
-}
+
 
 function WingProfileChart({ title, groupStats, tolerance }) {
   // Layout: Left side groups on left, Right on right; X axis is group order; Y is after/before
