@@ -1070,7 +1070,7 @@ export default function App() {
       Tip: keep these numbers matching your real loop set. Only one loop type per group side.
     </div>
 
-    {/* Right: smaller editable grid */}
+    {/* Right: smaller editable grid (2 columns of loop types) */}
     <div
       style={{
         border: "1px solid #2a2f3f",
@@ -1082,13 +1082,14 @@ export default function App() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr 84px",
+          gridTemplateColumns: "1fr 70px 1fr 70px",
           gap: 8,
+          alignItems: "center",
         }}
       >
         {Object.entries(loopTypes).map(([name, mm]) => (
           <React.Fragment key={name}>
-            <div style={{ fontWeight: 800, fontSize: 12, alignSelf: "center" }}>{name}</div>
+            <div style={{ fontWeight: 800, fontSize: 12 }}>{name}</div>
             <input
               value={mm}
               onChange={(e) => {
@@ -1132,6 +1133,7 @@ export default function App() {
     </div>
   </div>
 </div>
+
 
 
             <div style={{ height: 12 }} />
