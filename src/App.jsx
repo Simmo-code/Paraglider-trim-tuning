@@ -1052,7 +1052,7 @@ export default function App() {
   <div
     style={{
       display: "grid",
-      gridTemplateColumns: "minmax(320px, 1fr) minmax(360px, 520px)",
+      gridTemplateColumns: "1fr",
       gap: 12,
       alignItems: "start",
     }}
