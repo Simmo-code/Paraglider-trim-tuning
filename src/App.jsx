@@ -1049,95 +1049,69 @@ export default function App() {
 <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
   <div style={{ fontWeight: 850, marginBottom: 10 }}>Loop types (editable)</div>
 
-  <div
-    style={{
-      display: "grid",
-      gridTemplateColumns: "1.3fr 0.7fr",
-      gap: 12,
-      alignItems: "start",
-    }}
-  >
-    {/* Left: text */}
-    <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.55 }}>
-      Negative means the loop reduces line length.
-      <div style={{ height: 6 }} />
-      Baseline uses:
-      <div style={{ height: 6 }} />
-      <div style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace", color: "#eef1ff" }}>
-        baseline = (rawMeasured + correction) + loopDelta
-      </div>
-      <div style={{ height: 8 }} />
-      Tip: keep these numbers matching your real loop set. Only one loop type per group side.
-    </div>
-
-    {/* Right: smaller editable grid (2 columns of loop types) */}
 <div
   style={{
-    border: "1px solid #2a2f3f",
-    borderRadius: 14,
-    padding: 10,
-    background: "#0d0f16",
-    width: "100%",
-    maxWidth: 520,        // ✅ stops overhang
-    marginLeft: "auto",   // ✅ pushes it to the right
-    overflow: "hidden",   // ✅ prevents visual spill
-  }}
->
-
- <div
-  style={{
     display: "grid",
-    gridTemplateColumns: "auto 64px auto 64px",
-    gap: 8,
-    alignItems: "center",
+    gridTemplateColumns: "1fr 1fr", // ✅ two columns: left pair + right pair
+    gap: 10,
+    alignItems: "start",
   }}
 >
+  {(() => {
+    const entries = Object.entries(loopTypes);
+    const left = entries.filter((_, i) => i % 2 === 0);
+    const right = entries.filter((_, i) => i % 2 === 1);
 
-        {Object.entries(loopTypes).map(([name, mm]) => (
-          <React.Fragment key={name}>
-            <div style={{ fontWeight: 800, fontSize: 12 }}>{name}</div>
-            <input
-              value={mm}
-              onChange={(e) => {
-                const v = n(e.target.value);
-                const next = { ...loopTypes, [name]: Number.isFinite(v) ? v : 0 };
-                persistLoopTypes(next);
-              }}
-              style={{
-                width: "100%",
-                borderRadius: 10,
-                border: "1px solid #2a2f3f",
-                background: "#0b0c10",
-                color: "#eef1ff",
-                padding: "8px 10px",
-                outline: "none",
-                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                textAlign: "right",
-                fontSize: 12,
-              }}
-              inputMode="numeric"
-              aria-label={`${name} mm`}
-            />
-          </React.Fragment>
-        ))}
+    const Pair = ([name, mm]) => (
+      <div
+        key={name}
+        style={{
+          display: "grid",
+          gridTemplateColumns: "auto 86px", // label + input
+          gap: 8,
+          alignItems: "center",
+          minWidth: 0,
+        }}
+      >
+        <div style={{ fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" }}>{name}</div>
+        <input
+          value={mm}
+          onChange={(e) => {
+            const v = n(e.target.value);
+            const next = { ...loopTypes, [name]: Number.isFinite(v) ? v : 0 };
+            persistLoopTypes(next);
+          }}
+          style={{
+            width: "100%",
+            minWidth: 0,
+            borderRadius: 10,
+            border: "1px solid #2a2f3f",
+            background: "#0b0c10",
+            color: "#eef1ff",
+            padding: "6px 8px",
+            outline: "none",
+            fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+            textAlign: "right",
+            fontSize: 12,
+          }}
+          inputMode="numeric"
+          aria-label={`${name} mm`}
+        />
       </div>
+    );
 
-      <div style={{ color: "#aab1c3", fontSize: 11, marginTop: 8 }}>
-        mm (negative = shorter)
-      </div>
-    </div>
-  </div>
-
-  <div style={{ height: 12 }} />
-
-  <div style={{ padding: 12, borderRadius: 14, border: "1px solid #2a2f3f", background: "#0b0c10" }}>
-    <div style={{ fontWeight: 850, marginBottom: 8 }}>Quick tools</div>
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-      <button onClick={applyAllSL} style={btn}>All SL</button>
-      <button onClick={mirrorLtoR} style={btn}>Mirror L → R</button>
-      <button onClick={mirrorRtoL} style={btn}>Mirror R → L</button>
-    </div>
-  </div>
+    const rows = Math.max(left.length, right.length);
+    const out = [];
+    for (let i = 0; i < rows; i++) {
+      out.push(
+        <React.Fragment key={`row-${i}`}>
+          {left[i] ? Pair(left[i]) : <div key={`L-${i}`} />}
+          {right[i] ? Pair(right[i]) : <div key={`R-${i}`} />}
+        </React.Fragment>
+      );
+    }
+    return out;
+  })()}
 </div>
 
 
