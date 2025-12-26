@@ -285,11 +285,28 @@ export default function App() {
   });
   useEffect(() => localStorage.setItem("showCorrected", showCorrected ? "1" : "0"), [showCorrected]);
 
+ 
   // Profiles JSON (persisted)
   const [profileJson, setProfileJson] = useState(() => {
     const saved = localStorage.getItem("wingProfilesJson");
     return saved || JSON.stringify({ ...BUILTIN_PROFILES }, null, 2);
   });
+
+  /* ===============================
+     Loop → adjustment helper
+     =============================== */
+
+  function loopTypeFromAdjustment(mm) {
+    if (!Number.isFinite(mm)) return "";
+    for (const [name, val] of Object.entries(loopTypes)) {
+      if (Number.isFinite(val) && val === mm) return name;
+    }
+    return ""; // Custom / manual value
+  }
+
+  /* ===============================
+     rest of App logic
+     =============================== */
 
   const profiles = useMemo(() => {
     try {
@@ -1732,38 +1749,96 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
               <tbody>
                 {(mapping[L] || []).map((row, idx) => (
                   <tr key={idx} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
-                    <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                      <input
-                        value={row?.[0] ?? ""}
-                        onChange={(e) => updateCell(L, idx, 0, e.target.value)}
-                        style={{
-                          width: 70,
-                          padding: "6px 8px",
-                          borderRadius: 10,
-                          border: "1px solid #2a2f3f",
-                          background: "#0d0f16",
-                          color: "#eef1ff",
-                          textAlign: "right",
-                        }}
-                        inputMode="numeric"
-                      />
-                    </td>
-                    <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                      <input
-                        value={row?.[1] ?? ""}
-                        onChange={(e) => updateCell(L, idx, 1, e.target.value)}
-                        style={{
-                          width: 70,
-                          padding: "6px 8px",
-                          borderRadius: 10,
-                          border: "1px solid #2a2f3f",
-                          background: "#0d0f16",
-                          color: "#eef1ff",
-                          textAlign: "right",
-                        }}
-                        inputMode="numeric"
-                      />
-                    </td>
+<td style={{ padding: "6px 8px", textAlign: "right" }}>
+  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+    <select
+      value={loopTypeFromAdjustment(aL)}
+      onChange={(e) => {
+        const t = e.target.value;
+        if (!t) return; // Custom: leave number as-is
+        const v = loopTypes[t];
+        persistAdjustments({ ...adjustments, [kL]: Number.isFinite(v) ? v : 0 });
+      }}
+      style={{
+        borderRadius: 10,
+        border: "1px solid #2a2f3f",
+        background: "#0d0f16",
+        color: "#eef1ff",
+        padding: "6px 8px",
+        outline: "none",
+        fontSize: 12,
+      }}
+      title="Pick a loop type to auto-fill Adjust L"
+    >
+      <option value="">Custom</option>
+      {Object.keys(loopTypes).map((name) => (
+        <option key={name} value={name}>
+          {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
+        </option>
+      ))}
+    </select>
+
+    <input
+      value={aL}
+      onChange={(e) => persistAdjustments({ ...adjustments, [kL]: n(e.target.value) ?? 0 })}
+      style={{
+        ...input,
+        width: 110,
+        padding: "6px 8px",
+        textAlign: "right",
+        fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+      }}
+      inputMode="numeric"
+      title="Manual override (mm)"
+    />
+  </div>
+</td>
+
+<td style={{ padding: "6px 8px", textAlign: "right" }}>
+  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+    <select
+      value={loopTypeFromAdjustment(aR)}
+      onChange={(e) => {
+        const t = e.target.value;
+        if (!t) return; // Custom: leave number as-is
+        const v = loopTypes[t];
+        persistAdjustments({ ...adjustments, [kR]: Number.isFinite(v) ? v : 0 });
+      }}
+      style={{
+        borderRadius: 10,
+        border: "1px solid #2a2f3f",
+        background: "#0d0f16",
+        color: "#eef1ff",
+        padding: "6px 8px",
+        outline: "none",
+        fontSize: 12,
+      }}
+      title="Pick a loop type to auto-fill Adjust R"
+    >
+      <option value="">Custom</option>
+      {Object.keys(loopTypes).map((name) => (
+        <option key={name} value={name}>
+          {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
+        </option>
+      ))}
+    </select>
+
+    <input
+      value={aR}
+      onChange={(e) => persistAdjustments({ ...adjustments, [kR]: n(e.target.value) ?? 0 })}
+      style={{
+        ...input,
+        width: 110,
+        padding: "6px 8px",
+        textAlign: "right",
+        fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+      }}
+      inputMode="numeric"
+      title="Manual override (mm)"
+    />
+  </div>
+</td>
+
                     <td style={{ padding: "6px 8px" }}>
                       <input
                         value={row?.[2] ?? ""}
