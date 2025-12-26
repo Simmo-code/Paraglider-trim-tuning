@@ -9,17 +9,17 @@ import BUILTIN_PROFILES from "./wingProfiles.json";
  * - Step 3: Loops per LINE GROUP (AR1 affects A1–A4, etc.)
  * - Step 4: Compact measurement tables + Raw/Corrected toggle
  * - Graphs:
- *    (1) Δ line chart: Before vs After overlay
+ *    (1) Δ line chart: Before vs After overlay + points + hover tooltip
  *    (2) Wing profile chart: Group averages laid out left/right (updates live)
  *
- * Notes on math:
+ * Math:
  *   corrected = rawMeasured + correction
  *   baseline  = corrected + loopDelta
  *   after     = baseline + adjustment
  *   delta     = after - nominal
  */
 
-const APP_VERSION = "0.3.1a";
+const APP_VERSION = "0.3.2";
 
 /* ------------------------- Helpers ------------------------- */
 
@@ -233,7 +233,6 @@ function parseWideFlexible(grid) {
       const measR = n(row[c + 3]);
 
       entry[letter] = { line, nominal, measL, measR };
-
       c += 3;
     }
 
@@ -243,7 +242,8 @@ function parseWideFlexible(grid) {
   return { meta, rows };
 }
 
-/* ------------------------- App ------------------------- */
+/* -------- Zeroing wizard: median correction suggestion -------- */
+
 function median(values) {
   const v = values.filter((x) => Number.isFinite(x)).slice().sort((a, b) => a - b);
   if (!v.length) return null;
@@ -258,7 +258,6 @@ function suggestCorrectionFromWideRows(wideRows) {
     for (const letter of ["A", "B", "C", "D"]) {
       const b = r?.[letter];
       if (!b || b.nominal == null) continue;
-
       if (b.measL != null) offsets.push(b.nominal - b.measL);
       if (b.measR != null) offsets.push(b.nominal - b.measR);
     }
@@ -266,6 +265,8 @@ function suggestCorrectionFromWideRows(wideRows) {
   const med = median(offsets);
   return med == null ? null : Math.round(med);
 }
+
+/* ------------------------- App ------------------------- */
 
 export default function App() {
   const [step, setStep] = useState(() => {
@@ -665,7 +666,7 @@ export default function App() {
     const points = []; // {id, xIndex, letter, side, before, after, severityAfter}
     let x = 0;
 
-    // Build stable order by A/B/C/D then numeric, L/R as separate series
+    // Stable order by A/B/C/D then numeric
     const all = [];
     for (const r of wideRows) {
       for (const letter of ["A", "B", "C", "D"]) {
@@ -1250,31 +1251,33 @@ export default function App() {
 
                 <button onClick={resetAdjustments} style={btnDanger}>Reset all adjustments</button>
               </div>
+
+              {/* Zeroing wizard */}
+              <div style={{ marginTop: 10, padding: 12, borderRadius: 14, border: "1px solid #2a2f3f", background: "#0b0c10" }}>
+                <div style={{ fontWeight: 850, marginBottom: 6 }}>Zeroing wizard (auto-suggest correction)</div>
+                <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5 }}>
+                  Suggests a correction using the <b>median</b> of (Soll − Ist) across all lines. This removes a consistent offset
+                  (e.g. ≈ -507mm).
+                </div>
+
+                <div style={{ height: 10 }} />
+
+                <button
+                  style={btnWarn}
+                  onClick={() => {
+                    const s = suggestCorrectionFromWideRows(wideRows);
+                    if (s == null) return alert("Not enough data to suggest a correction.");
+                    const ok = confirm(`Suggested correction: ${s}mm\n\nApply this to Correction now?`);
+                    if (!ok) return;
+                    setMeta((m) => ({ ...m, correction: s }));
+                  }}
+                >
+                  Suggest correction (median)
+                </button>
+              </div>
             </div>
 
             <div style={{ height: 12 }} />
-<div style={{ marginTop: 10, padding: 12, borderRadius: 14, border: "1px solid #2a2f3f", background: "#0b0c10" }}>
-  <div style={{ fontWeight: 850, marginBottom: 6 }}>Zeroing wizard (auto-suggest correction)</div>
-  <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5 }}>
-    Suggests a correction using the <b>median</b> of (Soll − Ist) across all lines.
-    This removes a consistent offset (e.g. ≈ -507mm).
-  </div>
-
-  <div style={{ height: 10 }} />
-
-  <button
-    style={btnWarn}
-    onClick={() => {
-      const s = suggestCorrectionFromWideRows(wideRows);
-      if (s == null) return alert("Not enough data to suggest a correction.");
-      const ok = confirm(`Suggested correction: ${s}mm\n\nApply this to Correction now?`);
-      if (!ok) return;
-      setMeta((m) => ({ ...m, correction: s }));
-    }}
-  >
-    Suggest correction (median)
-  </button>
-</div>
 
             {/* Adjustment UI */}
             <div style={{ ...card, background: "#0e1018" }}>
@@ -1393,7 +1396,7 @@ export default function App() {
               <div style={{ height: 10 }} />
 
               <DeltaLineChart
-                title="Δ Line chart (Before vs After)"
+                title="Δ Line chart (Before vs After) — hover points"
                 points={chartPoints}
                 tolerance={meta.tolerance || 0}
               />
@@ -1753,7 +1756,6 @@ function DeltaLineChart({ title, points, tolerance }) {
 
   const [hover, setHover] = useState(null); // {x,y, p}
 
-  // Split series by side
   const series = useMemo(() => {
     const bySide = { L: [], R: [] };
     for (const p of points) {
@@ -1904,9 +1906,15 @@ function DeltaLineChart({ title, points, tolerance }) {
                 {hover.p.line} ({hover.p.side})
               </div>
               <div style={{ color: "#aab1c3", fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                Δ before: {Number.isFinite(hover.p.before) ? `${hover.p.before > 0 ? "+" : ""}${Math.round(hover.p.before)}mm` : "—"}
+                Δ before:{" "}
+                {Number.isFinite(hover.p.before)
+                  ? `${hover.p.before > 0 ? "+" : ""}${Math.round(hover.p.before)}mm`
+                  : "—"}
                 <br />
-                Δ after: {Number.isFinite(hover.p.after) ? `${hover.p.after > 0 ? "+" : ""}${Math.round(hover.p.after)}mm` : "—"}
+                Δ after:{" "}
+                {Number.isFinite(hover.p.after)
+                  ? `${hover.p.after > 0 ? "+" : ""}${Math.round(hover.p.after)}mm`
+                  : "—"}
                 <br />
                 Severity: <b>{hover.p.sevAfter}</b>
               </div>
@@ -1925,117 +1933,7 @@ function DeltaLineChart({ title, points, tolerance }) {
   );
 }
 
-
-  // Two series: L and R, each with before/after overlay
-  const series = useMemo(() => {
-    const bySide = { L: [], R: [] };
-    for (const p of points) {
-      if (!Number.isFinite(p.before) && !Number.isFinite(p.after)) continue;
-      bySide[p.side].push(p);
-    }
-    bySide.L.sort((a, b) => a.xIndex - b.xIndex);
-    bySide.R.sort((a, b) => a.xIndex - b.xIndex);
-    return bySide;
-  }, [points]);
-
-  const allValues = useMemo(() => {
-    const v = [];
-    for (const p of points) {
-      if (Number.isFinite(p.before)) v.push(p.before);
-      if (Number.isFinite(p.after)) v.push(p.after);
-    }
-    // Ensure target and tolerance lines are within view
-    v.push(0);
-    if (tolerance > 0) {
-      v.push(tolerance, -tolerance);
-    }
-    return v;
-  }, [points, tolerance]);
-
-  const { minY, maxY } = useMemo(() => {
-    if (!allValues.length) return { minY: -10, maxY: 10 };
-    let mn = Math.min(...allValues);
-    let mx = Math.max(...allValues);
-    if (mn === mx) {
-      mn -= 1;
-      mx += 1;
-    }
-    // add margin
-    const span = mx - mn;
-    return { minY: mn - span * 0.12, maxY: mx + span * 0.12 };
-  }, [allValues]);
-
-  const maxX = useMemo(() => {
-    const mx = Math.max(0, ...points.map((p) => p.xIndex));
-    return mx <= 0 ? 1 : mx;
-  }, [points]);
-
-  function xScale(x) {
-    return pad + (x / maxX) * (width - pad * 2);
-  }
-  function yScale(y) {
-    return pad + ((maxY - y) / (maxY - minY)) * (height - pad * 2);
-  }
-
-  function polyPath(ps, field) {
-    const pts = ps
-      .filter((p) => Number.isFinite(p[field]))
-      .map((p) => `${xScale(p.xIndex)},${yScale(p[field])}`);
-    if (!pts.length) return "";
-    return `M ${pts[0]} ` + pts.slice(1).map((s) => `L ${s}`).join(" ");
-  }
-
-  const tol = tolerance || 0;
-  const y0 = yScale(0);
-  const yTolP = tol > 0 ? yScale(tol) : null;
-  const yTolN = tol > 0 ? yScale(-tol) : null;
-  const yWarnP = tol > 3 ? yScale(Math.max(0, tol - 3)) : null;
-  const yWarnN = tol > 3 ? yScale(-Math.max(0, tol - 3)) : null;
-
-  return (
-    <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0d0f16" }}>
-      <div style={{ fontWeight: 850, marginBottom: 8 }}>{title}</div>
-      {!points.length ? (
-        <div style={{ color: "#aab1c3", fontSize: 12 }}>No chart data yet.</div>
-      ) : (
-        <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>
-          {/* Target line */}
-          <line x1={pad} x2={width - pad} y1={y0} y2={y0} stroke="rgba(170,177,195,0.35)" strokeWidth="2" />
-          {/* Tolerance bands */}
-          {tol > 0 ? (
-            <>
-              <line x1={pad} x2={width - pad} y1={yTolP} y2={yTolP} stroke="rgba(255,107,107,0.45)" strokeWidth="2" />
-              <line x1={pad} x2={width - pad} y1={yTolN} y2={yTolN} stroke="rgba(255,107,107,0.45)" strokeWidth="2" />
-            </>
-          ) : null}
-          {tol > 3 ? (
-            <>
-              <line x1={pad} x2={width - pad} y1={yWarnP} y2={yWarnP} stroke="rgba(255,214,102,0.55)" strokeWidth="2" />
-              <line x1={pad} x2={width - pad} y1={yWarnN} y2={yWarnN} stroke="rgba(255,214,102,0.55)" strokeWidth="2" />
-            </>
-          ) : null}
-
-          {/* Before paths (dashed) */}
-          <path d={polyPath(series.L, "before")} fill="none" stroke="rgba(176,132,255,0.75)" strokeWidth="2" strokeDasharray="6 6" />
-          <path d={polyPath(series.R, "before")} fill="none" stroke="rgba(102,204,255,0.75)" strokeWidth="2" strokeDasharray="6 6" />
-
-          {/* After paths (solid) */}
-          <path d={polyPath(series.L, "after")} fill="none" stroke="rgba(176,132,255,1)" strokeWidth="3" />
-          <path d={polyPath(series.R, "after")} fill="none" stroke="rgba(102,204,255,1)" strokeWidth="3" />
-        </svg>
-      )}
-
-      <div style={{ color: "#aab1c3", fontSize: 12, marginTop: 8, display: "flex", gap: 14, flexWrap: "wrap" }}>
-        <span>Solid = After</span>
-        <span>Dashed = Before</span>
-        <span>Target = 0mm</span>
-      </div>
-    </div>
-  );
-
-
 function WingProfileChart({ title, groupStats, tolerance }) {
-  // Layout: Left side groups on left, Right on right; X axis is group order; Y is after/before
   const width = 1100;
   const height = 260;
   const pad = 24;
@@ -2043,7 +1941,6 @@ function WingProfileChart({ title, groupStats, tolerance }) {
   const tol = tolerance || 0;
 
   const rows = useMemo(() => {
-    // Merge L/R into single row per group
     const byGroup = new Map();
     for (const s of groupStats) {
       if (!byGroup.has(s.groupName)) byGroup.set(s.groupName, { group: s.groupName });
@@ -2092,7 +1989,6 @@ function WingProfileChart({ title, groupStats, tolerance }) {
   const yTolP = tol > 0 ? yScale(tol) : null;
   const yTolN = tol > 0 ? yScale(-tol) : null;
 
-  // Simple bars: L after (purple), R after (cyan). Before shown as small tick.
   const barW = Math.max(10, Math.min(18, (width - pad * 2) / (rows.length * 4)));
 
   return (
@@ -2102,9 +1998,7 @@ function WingProfileChart({ title, groupStats, tolerance }) {
         <div style={{ color: "#aab1c3", fontSize: 12 }}>No group data yet.</div>
       ) : (
         <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>
-          {/* target */}
           <line x1={pad} x2={width - pad} y1={y0} y2={y0} stroke="rgba(170,177,195,0.35)" strokeWidth="2" />
-          {/* tol */}
           {tol > 0 ? (
             <>
               <line x1={pad} x2={width - pad} y1={yTolP} y2={yTolP} stroke="rgba(255,107,107,0.45)" strokeWidth="2" />
@@ -2128,7 +2022,6 @@ function WingProfileChart({ title, groupStats, tolerance }) {
 
             return (
               <g key={r.group}>
-                {/* L bar (left offset) */}
                 {yL != null ? (
                   <rect
                     x={x - barW - 3}
@@ -2138,7 +2031,6 @@ function WingProfileChart({ title, groupStats, tolerance }) {
                     fill="rgba(176,132,255,0.9)"
                   />
                 ) : null}
-                {/* R bar (right offset) */}
                 {yR != null ? (
                   <rect
                     x={x + 3}
@@ -2149,7 +2041,6 @@ function WingProfileChart({ title, groupStats, tolerance }) {
                   />
                 ) : null}
 
-                {/* Before ticks */}
                 {yLb != null ? (
                   <line x1={x - barW - 6} x2={x - 2} y1={yLb} y2={yLb} stroke="rgba(176,132,255,0.6)" strokeWidth="3" />
                 ) : null}
@@ -2157,7 +2048,6 @@ function WingProfileChart({ title, groupStats, tolerance }) {
                   <line x1={x + 2} x2={x + barW + 6} y1={yRb} y2={yRb} stroke="rgba(102,204,255,0.6)" strokeWidth="3" />
                 ) : null}
 
-                {/* Group label (sparse) */}
                 {rows.length <= 18 || i % 2 === 0 ? (
                   <text x={x} y={height - 8} textAnchor="middle" fontSize="10" fill="rgba(170,177,195,0.9)">
                     {r.group}
@@ -2237,19 +2127,15 @@ function BlockTable({
                 const adjL = getAdjustment(adjustments, groupName, "L");
                 const adjR = getAdjustment(adjustments, groupName, "R");
 
-                // corrected = raw + correction
                 const correctedL = b.measL == null ? null : b.measL + corr;
                 const correctedR = b.measR == null ? null : b.measR + corr;
 
-                // baseline = corrected + loopDelta
                 const baseL = correctedL == null ? null : correctedL + loopL;
                 const baseR = correctedR == null ? null : correctedR + loopR;
 
-                // after = baseline + adjustment
                 const afterL = baseL == null ? null : baseL + adjL;
                 const afterR = baseR == null ? null : baseR + adjR;
 
-                // delta vs nominal
                 const dL_before = baseL == null || b.nominal == null ? null : baseL - b.nominal;
                 const dR_before = baseR == null || b.nominal == null ? null : baseR - b.nominal;
 
@@ -2273,7 +2159,6 @@ function BlockTable({
                     </td>
 
                     <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                      {/* Editable raw measured */}
                       <input
                         value={b.measL ?? ""}
                         onChange={(e) => setCell(b.rowIndex, blockKey, "measL", e.target.value)}
@@ -2289,10 +2174,12 @@ function BlockTable({
                         title="Edit raw measured (Ist). Correction/loops/adjustments are applied automatically."
                       />
                       <div style={{ color: "#aab1c3", fontSize: 10, marginTop: 4, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                        show {displayL == null ? "—" : Math.round(displayL)} | loop {loopL > 0 ? `+${loopL}` : `${loopL}`} | adj {adjL > 0 ? `+${adjL}` : `${adjL}`}
+                        show {displayL == null ? "—" : Math.round(displayL)} | loop {loopL > 0 ? `+${loopL}` : `${loopL}`} | adj{" "}
+                        {adjL > 0 ? `+${adjL}` : `${adjL}`}
                       </div>
                       <div style={{ color: "#aab1c3", fontSize: 10, marginTop: 2, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                        Δ(before) {Number.isFinite(dL_before) ? `${dL_before > 0 ? "+" : ""}${Math.round(dL_before)}mm` : "–"} → Δ(after){" "}
+                        Δ(before){" "}
+                        {Number.isFinite(dL_before) ? `${dL_before > 0 ? "+" : ""}${Math.round(dL_before)}mm` : "–"} → Δ(after){" "}
                         {Number.isFinite(dL_after) ? `${dL_after > 0 ? "+" : ""}${Math.round(dL_after)}mm` : "–"}
                       </div>
                     </td>
@@ -2313,10 +2200,12 @@ function BlockTable({
                         title="Edit raw measured (Ist). Correction/loops/adjustments are applied automatically."
                       />
                       <div style={{ color: "#aab1c3", fontSize: 10, marginTop: 4, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                        show {displayR == null ? "—" : Math.round(displayR)} | loop {loopR > 0 ? `+${loopR}` : `${loopR}`} | adj {adjR > 0 ? `+${adjR}` : `${adjR}`}
+                        show {displayR == null ? "—" : Math.round(displayR)} | loop {loopR > 0 ? `+${loopR}` : `${loopR}`} | adj{" "}
+                        {adjR > 0 ? `+${adjR}` : `${adjR}`}
                       </div>
                       <div style={{ color: "#aab1c3", fontSize: 10, marginTop: 2, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                        Δ(before) {Number.isFinite(dR_before) ? `${dR_before > 0 ? "+" : ""}${Math.round(dR_before)}mm` : "–"} → Δ(after){" "}
+                        Δ(before){" "}
+                        {Number.isFinite(dR_before) ? `${dR_before > 0 ? "+" : ""}${Math.round(dR_before)}mm` : "–"} → Δ(after){" "}
                         {Number.isFinite(dR_after) ? `${dR_after > 0 ? "+" : ""}${Math.round(dR_after)}mm` : "–"}
                       </div>
                     </td>
