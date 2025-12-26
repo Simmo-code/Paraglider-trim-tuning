@@ -1071,14 +1071,19 @@ export default function App() {
     </div>
 
     {/* Right: smaller editable grid (2 columns of loop types) */}
-    <div
-      style={{
-        border: "1px solid #2a2f3f",
-        borderRadius: 14,
-        padding: 10,
-        background: "#0d0f16",
-      }}
-    >
+<div
+  style={{
+    border: "1px solid #2a2f3f",
+    borderRadius: 14,
+    padding: 10,
+    background: "#0d0f16",
+    width: "100%",
+    maxWidth: 520,        // ✅ stops overhang
+    marginLeft: "auto",   // ✅ pushes it to the right
+    overflow: "hidden",   // ✅ prevents visual spill
+  }}
+>
+
  <div
   style={{
     display: "grid",
