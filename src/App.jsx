@@ -1082,7 +1082,8 @@ export default function App() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr 70px 1fr 70px",
+          gridTemplateColumns: "auto 64px auto 64px",
+
           gap: 8,
           alignItems: "center",
         }}
