@@ -1079,15 +1079,15 @@ export default function App() {
         background: "#0d0f16",
       }}
     >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "auto 64px auto 64px",
+ <div
+  style={{
+    display: "grid",
+    gridTemplateColumns: "auto 64px auto 64px",
+    gap: 8,
+    alignItems: "center",
+  }}
+>
 
-          gap: 8,
-          alignItems: "center",
-        }}
-      >
         {Object.entries(loopTypes).map(([name, mm]) => (
           <React.Fragment key={name}>
             <div style={{ fontWeight: 800, fontSize: 12 }}>{name}</div>
