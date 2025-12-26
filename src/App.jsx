@@ -10,7 +10,7 @@ import BUILTIN_PROFILES from "./wingProfiles.json";
  * - Keeps legacy per-line loops as fallback (won’t break older saved sessions)
  */
 
-const APP_VERSION = "0.2.2-patchf";
+const APP_VERSION = "0.2.2-patchG";
 
 /* ------------------------- Built-in profiles ------------------------- */
 
@@ -292,6 +292,19 @@ export default function App() {
 
   const [meta, setMeta] = useState({ input1: "", input2: "", tolerance: 0, correction: 0 });
   const [wideRows, setWideRows] = useState([]);
+  
+const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false);
+const [draftProfileKey, setDraftProfileKey] = useState(profileKey);
+const [draftProfile, setDraftProfile] = useState(() =>
+  JSON.parse(JSON.stringify(profiles[profileKey] || activeProfile || {}))
+);
+const [showAdvancedJson, setShowAdvancedJson] = useState(false);
+
+useEffect(() => {
+  // when selection changes, refresh draft
+  setDraftProfileKey(profileKey);
+  setDraftProfile(JSON.parse(JSON.stringify(profiles[profileKey] || activeProfile || {})));
+}, [profileKey]); // eslint-disable-line
 
   // Profiles JSON (persisted)
   const [profileJson, setProfileJson] = useState(() => {
@@ -316,6 +329,59 @@ function setProfilesObject(nextProfiles) {
   const json = JSON.stringify(nextProfiles, null, 2);
   setProfileJson(json);
   localStorage.setItem("wingProfilesJson", json);
+}
+function deepClone(x) {
+  return JSON.parse(JSON.stringify(x));
+}
+
+function openProfileEditor() {
+  setDraftProfileKey(profileKey);
+  setDraftProfile(deepClone(profiles[profileKey] || activeProfile || {}));
+  setShowAdvancedJson(false);
+  setIsProfileEditorOpen(true);
+}
+
+function saveDraftProfile() {
+  const nextProfiles = { ...profiles };
+  const key = String(draftProfileKey || "").trim();
+  if (!key) return alert("Profile name cannot be empty.");
+
+  const p = deepClone(draftProfile || {});
+  p.name = key;
+  p.mmPerLoop = Number.isFinite(n(p.mmPerLoop)) ? n(p.mmPerLoop) : 10;
+  p.mapping = p.mapping && typeof p.mapping === "object" ? p.mapping : { A: [], B: [], C: [], D: [] };
+
+  nextProfiles[key] = p;
+
+  const json = JSON.stringify(nextProfiles, null, 2);
+  setProfileJson(json);
+  localStorage.setItem("wingProfilesJson", json);
+  setProfileKey(key);
+  setIsProfileEditorOpen(false);
+}
+
+function newProfileFromCurrent() {
+  const base = deepClone(profiles[profileKey] || activeProfile || {});
+  const name = prompt("New profile name?", `${profileKey} (copy)`);
+  if (!name) return;
+  setDraftProfileKey(name);
+  base.name = name;
+  setDraftProfile(base);
+  setShowAdvancedJson(false);
+  setIsProfileEditorOpen(true);
+}
+
+function deleteSelectedProfile() {
+  if (!confirm(`Delete profile "${profileKey}"? This cannot be undone.`)) return;
+  const nextProfiles = { ...profiles };
+  delete nextProfiles[profileKey];
+
+  const json = JSON.stringify(nextProfiles, null, 2);
+  setProfileJson(json);
+  localStorage.setItem("wingProfilesJson", json);
+
+  const first = Object.keys(nextProfiles)[0] || Object.keys(BUILTIN_PROFILES)[0] || "";
+  setProfileKey(first);
 }
 
 function exportAllProfiles() {
@@ -535,6 +601,120 @@ if (file.name.toLowerCase().endsWith(".xlsx")) {
   return;
 }
 
+// JS edit think it goes here
+function MappingEditor({ draftProfile, setDraftProfile, btn }) {
+  const mapping = draftProfile.mapping || { A: [], B: [], C: [], D: [] };
+  const letters = ["A", "B", "C", "D"];
+
+  function setRows(letter, rows) {
+    const next = { ...draftProfile, mapping: { ...mapping, [letter]: rows } };
+    setDraftProfile(next);
+  }
+
+  function addRow(letter) {
+    const rows = (mapping[letter] || []).slice();
+    rows.push([1, 1, `${letter}R1`]);
+    setRows(letter, rows);
+  }
+
+  function updateCell(letter, idx, col, value) {
+    const rows = (mapping[letter] || []).slice();
+    const r = rows[idx] ? rows[idx].slice() : [1, 1, `${letter}R1`];
+    if (col === 0 || col === 1) {
+      const v = parseInt(String(value || "0"), 10);
+      r[col] = Number.isFinite(v) ? v : r[col];
+    } else {
+      r[col] = String(value || "");
+    }
+    rows[idx] = r;
+    setRows(letter, rows);
+  }
+
+  function removeRow(letter, idx) {
+    const rows = (mapping[letter] || []).slice();
+    rows.splice(idx, 1);
+    setRows(letter, rows);
+  }
+
+  function sortRows(letter) {
+    const rows = (mapping[letter] || []).slice().sort((a, b) => (a?.[0] ?? 0) - (b?.[0] ?? 0));
+    setRows(letter, rows);
+  }
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
+      {letters.map((L) => (
+        <div key={L} style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+            <div style={{ fontWeight: 900 }}>{L} mapping</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button style={btn} onClick={() => addRow(L)}>Add row</button>
+              <button style={btn} onClick={() => sortRows(L)}>Sort</button>
+            </div>
+          </div>
+
+          <div style={{ height: 10 }} />
+
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 420 }}>
+              <thead>
+                <tr style={{ color: "#aab1c3", fontSize: 12 }}>
+                  <th style={{ textAlign: "right", padding: "6px 8px" }}>From</th>
+                  <th style={{ textAlign: "right", padding: "6px 8px" }}>To</th>
+                  <th style={{ textAlign: "left", padding: "6px 8px" }}>Group</th>
+                  <th style={{ padding: "6px 8px" }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {(mapping[L] || []).map((row, idx) => (
+                  <tr key={idx} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
+                    <td style={{ padding: "6px 8px", textAlign: "right" }}>
+                      <input
+                        value={row?.[0] ?? ""}
+                        onChange={(e) => updateCell(L, idx, 0, e.target.value)}
+                        style={{ width: 70, padding: "6px 8px", borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", textAlign: "right" }}
+                        inputMode="numeric"
+                      />
+                    </td>
+                    <td style={{ padding: "6px 8px", textAlign: "right" }}>
+                      <input
+                        value={row?.[1] ?? ""}
+                        onChange={(e) => updateCell(L, idx, 1, e.target.value)}
+                        style={{ width: 70, padding: "6px 8px", borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", textAlign: "right" }}
+                        inputMode="numeric"
+                      />
+                    </td>
+                    <td style={{ padding: "6px 8px" }}>
+                      <input
+                        value={row?.[2] ?? ""}
+                        onChange={(e) => updateCell(L, idx, 2, e.target.value)}
+                        style={{ width: "100%", padding: "6px 8px", borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff" }}
+                      />
+                    </td>
+                    <td style={{ padding: "6px 8px", textAlign: "right" }}>
+                      <button style={btn} onClick={() => removeRow(L, idx)}>Delete</button>
+                    </td>
+                  </tr>
+                ))}
+                {(!mapping[L] || mapping[L].length === 0) ? (
+                  <tr>
+                    <td colSpan={4} style={{ padding: "8px 8px", color: "#aab1c3", fontSize: 12 }}>
+                      No ranges yet. Click “Add row”.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ color: "#aab1c3", fontSize: 12, marginTop: 10 }}>
+            Tip: If your diagram says AR1 controls A1–A4, set A: 1 → 4 = AR1.
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // CSV (existing)
 const reader = new FileReader();
@@ -878,6 +1058,11 @@ reader.readAsText(file);
     e.target.value = "";
   }}
 />
+<div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+  <button style={btnWarn} onClick={openProfileEditor}>Edit selected profile…</button>
+  <button style={btn} onClick={newProfileFromCurrent}>New profile (copy)…</button>
+  <button style={btnDanger} onClick={deleteSelectedProfile}>Delete selected</button>
+</div>
 
 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
   <button onClick={exportAllProfiles} style={btn}>
@@ -933,6 +1118,119 @@ reader.readAsText(file);
             </div>
           </div>
         ) : null}
+{isProfileEditorOpen ? (
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.6)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 16,
+      zIndex: 9999,
+    }}
+    onMouseDown={(e) => {
+      if (e.target === e.currentTarget) setIsProfileEditorOpen(false);
+    }}
+  >
+    <div style={{ width: "min(1100px, 100%)", maxHeight: "92vh", overflow: "auto", borderRadius: 16, border: "1px solid #2a2f3f", background: "#11131a", padding: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+        <div style={{ fontWeight: 950, fontSize: 16 }}>Wing Profile Editor</div>
+        <button style={btn} onClick={() => setIsProfileEditorOpen(false)}>Close</button>
+      </div>
+
+      <div style={{ height: 10 }} />
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
+          <div style={{ fontWeight: 850, marginBottom: 8 }}>Profile basics</div>
+
+          <label style={{ color: "#aab1c3", fontSize: 12 }}>Profile name</label>
+          <input
+            value={draftProfileKey}
+            onChange={(e) => setDraftProfileKey(e.target.value)}
+            style={{ width: "100%", borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", padding: "10px 10px", outline: "none", marginTop: 6 }}
+          />
+
+          <div style={{ height: 10 }} />
+
+          <label style={{ color: "#aab1c3", fontSize: 12 }}>mm per loop (step size)</label>
+          <input
+            value={draftProfile?.mmPerLoop ?? 10}
+            onChange={(e) => setDraftProfile({ ...draftProfile, mmPerLoop: n(e.target.value) ?? 10 })}
+            style={{ width: "100%", borderRadius: 10, border: "1px solid #2a2f3f", background: "#0d0f16", color: "#eef1ff", padding: "10px 10px", outline: "none", marginTop: 6 }}
+            inputMode="numeric"
+          />
+
+          <div style={{ height: 10 }} />
+          <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5 }}>
+            Hints:
+            <ul style={{ margin: "8px 0 0 18px" }}>
+              <li>Ranges should match your rigging diagram groupings.</li>
+              <li>Example: A1–A4 → AR1 means changes on AR1 affect all A1..A4 lines.</li>
+              <li>Keep ranges non-overlapping for best results.</li>
+            </ul>
+          </div>
+
+          <div style={{ height: 12 }} />
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button style={btnWarn} onClick={saveDraftProfile}>Save profile</button>
+            <button style={btn} onClick={() => setIsProfileEditorOpen(false)}>Cancel</button>
+          </div>
+        </div>
+
+        <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <div style={{ fontWeight: 850 }}>Advanced (JSON)</div>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#aab1c3", fontSize: 12 }}>
+              <input
+                type="checkbox"
+                checked={showAdvancedJson}
+                onChange={(e) => setShowAdvancedJson(e.target.checked)}
+              />
+              Show JSON
+            </label>
+          </div>
+
+          {showAdvancedJson ? (
+            <textarea
+              value={JSON.stringify(draftProfile || {}, null, 2)}
+              onChange={(e) => {
+                try {
+                  const obj = JSON.parse(e.target.value);
+                  setDraftProfile(obj);
+                } catch {
+                  // ignore while typing
+                }
+              }}
+              style={{
+                width: "100%",
+                minHeight: 240,
+                borderRadius: 12,
+                border: "1px solid #2a2f3f",
+                background: "#0d0f16",
+                color: "#eef1ff",
+                padding: 10,
+                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                fontSize: 12,
+                outline: "none",
+                marginTop: 10,
+              }}
+            />
+          ) : (
+            <div style={{ color: "#aab1c3", fontSize: 12, marginTop: 10 }}>
+              Use the guided table editor instead. Enable this only for edge cases.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ height: 12 }} />
+      <MappingEditor draftProfile={draftProfile} setDraftProfile={setDraftProfile} btn={btn} />
+    </div>
+  </div>
+) : null}
 
         {/* STEP 3 */}
         {step === 3 ? (
