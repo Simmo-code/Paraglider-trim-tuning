@@ -3,16 +3,23 @@ import * as XLSX from "xlsx";
 import BUILTIN_PROFILES from "./wingProfiles.json";
 
 /**
- * Paraglider Trim Tuning — stable build with:
+ * Paraglider Trim Tuning
  * - CSV + XLSX import (flexible scan)
- * - Step 3 loops per LINE GROUP
- * - Compact tables
- * - Profiles sourced from src/wingProfiles.json + user edits saved to localStorage
- * - Profile library Export/Import/Reset
- * - Guided Profile Editor (modal) + optional Advanced JSON
+ * - Step 2: Guided profile editor (mapping)
+ * - Step 3: Loops per LINE GROUP (AR1 affects A1–A4, etc.)
+ * - Step 4: Compact measurement tables + Raw/Corrected toggle
+ * - Graphs:
+ *    (1) Δ line chart: Before vs After overlay
+ *    (2) Wing profile chart: Group averages laid out left/right (updates live)
+ *
+ * Notes on math:
+ *   corrected = rawMeasured + correction
+ *   baseline  = corrected + loopDelta
+ *   after     = baseline + adjustment
+ *   delta     = after - nominal
  */
 
-const APP_VERSION = "0.3.0";
+const APP_VERSION = "0.3.1";
 
 /* ------------------------- Helpers ------------------------- */
 
@@ -119,17 +126,12 @@ function getAllLinesFromWide(wideRows) {
   return out;
 }
 
-function deltaMm({ nominal, measured, correction, adjustment }) {
-  if (nominal == null || measured == null) return null;
-  return measured + (correction || 0) + (adjustment || 0) - nominal;
-}
-
 function severity(delta, tolerance) {
   if (!Number.isFinite(delta)) return "none";
   const a = Math.abs(delta);
   const tol = tolerance || 0;
   if (tol <= 0) return "ok";
-  const warnBand = Math.max(0, tol - 3);
+  const warnBand = Math.max(0, tol - 3); // yellow band within 3mm of tolerance
   if (a >= tol) return "red";
   if (a >= warnBand) return "yellow";
   return "ok";
@@ -168,8 +170,9 @@ function safeParseProfilesJson(text) {
 
 /**
  * Flexible parser for BOTH CSV + XLSX:
- * - Finds meta row if "Eingabe/Input" + "Toleranz/Tolerance" + "Korrektur/Correction" present (optional).
- * - Finds measurement rows by scanning for line IDs (A1, B12, C03, D7) and reading next 3 cells (Nominal/MeasL/MeasR).
+ * - Attempts to read meta (Eingabe/Input + Toleranz/Tolerance + Korrektur/Correction) if present
+ * - Reads measurement rows by scanning for line IDs like A1, B12, C03, D7 and reading next 3 cells:
+ *      [LineId] [Soll] [Ist L] [Ist R]
  */
 function parseWideFlexible(grid) {
   // 1) Meta header detection (optional)
@@ -253,6 +256,12 @@ export default function App() {
   const [meta, setMeta] = useState({ input1: "", input2: "", tolerance: 0, correction: 0 });
   const [wideRows, setWideRows] = useState([]);
 
+  const [showCorrected, setShowCorrected] = useState(() => {
+    const s = localStorage.getItem("showCorrected");
+    return s ? s === "1" : true;
+  });
+  useEffect(() => localStorage.setItem("showCorrected", showCorrected ? "1" : "0"), [showCorrected]);
+
   // Profiles JSON (persisted)
   const [profileJson, setProfileJson] = useState(() => {
     const saved = localStorage.getItem("wingProfilesJson");
@@ -271,7 +280,7 @@ export default function App() {
   const activeProfile =
     profiles[profileKey] || Object.values(profiles)[0] || Object.values(BUILTIN_PROFILES)[0];
 
-  // Guided Profile Editor state (declared AFTER profileKey/profiles exist)
+  // Guided Profile Editor state
   const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false);
   const [draftProfileKey, setDraftProfileKey] = useState("");
   const [draftProfile, setDraftProfile] = useState({});
@@ -310,20 +319,6 @@ export default function App() {
   function persistLoopTypes(next) {
     setLoopTypes(next);
     localStorage.setItem("loopTypes", JSON.stringify(next));
-  }
-
-  // Legacy per-line loop setup (fallback only)
-  const [loopSetup, setLoopSetup] = useState(() => {
-    try {
-      const s = localStorage.getItem("loopSetup");
-      return s ? JSON.parse(s) : {};
-    } catch {
-      return {};
-    }
-  });
-  function persistLoopSetup(next) {
-    setLoopSetup(next);
-    localStorage.setItem("loopSetup", JSON.stringify(next));
   }
 
   // Group loop setup (AR1|L -> "SL")
@@ -509,12 +504,7 @@ export default function App() {
       const v = loopTypes?.[type];
       return Number.isFinite(v) ? v : 0;
     }
-
-    // legacy fallback
-    const legacyKey = `${lineId}|${side}`;
-    const legacyType = loopSetup?.[legacyKey] || "SL";
-    const lv = loopTypes?.[legacyType];
-    return Number.isFinite(lv) ? lv : 0;
+    return 0;
   }
 
   function applyAllSL() {
@@ -525,19 +515,16 @@ export default function App() {
     }
     persistGroupLoopSetup(next);
   }
-
   function mirrorLtoR() {
     const next = { ...groupLoopSetup };
     for (const g of allGroupNames) next[`${g}|R`] = next[`${g}|L`] || "SL";
     persistGroupLoopSetup(next);
   }
-
   function mirrorRtoL() {
     const next = { ...groupLoopSetup };
     for (const g of allGroupNames) next[`${g}|L`] = next[`${g}|R`] || "SL";
     persistGroupLoopSetup(next);
   }
-
   function resetAdjustments() {
     persistAdjustments({});
   }
@@ -567,10 +554,13 @@ export default function App() {
     });
   }
 
-  const computed = useMemo(() => {
+  // Group average deltas (before vs after)
+  const groupStats = useMemo(() => {
     const corr = meta.correction || 0;
 
-    const bucket = new Map(); // group|side -> [delta]
+    const bucketBefore = new Map(); // group|side -> [delta]
+    const bucketAfter = new Map();
+
     for (const r of wideRows) {
       for (const letter of ["A", "B", "C", "D"]) {
         const b = r[letter];
@@ -581,50 +571,154 @@ export default function App() {
         const loopL = loopDeltaFor(b.line, "L");
         const loopR = loopDeltaFor(b.line, "R");
 
-        const effL = b.measL == null ? null : b.measL + loopL;
-        const effR = b.measR == null ? null : b.measR + loopR;
-
         const adjL = getAdjustment(adjustments, g, "L");
         const adjR = getAdjustment(adjustments, g, "R");
 
-        const dL = deltaMm({ nominal: b.nominal, measured: effL, correction: corr, adjustment: adjL });
-        const dR = deltaMm({ nominal: b.nominal, measured: effR, correction: corr, adjustment: adjR });
+        const baseL = b.measL == null ? null : b.measL + corr + loopL;
+        const baseR = b.measR == null ? null : b.measR + corr + loopR;
 
-        if (Number.isFinite(dL)) {
+        const afterL = baseL == null ? null : baseL + adjL;
+        const afterR = baseR == null ? null : baseR + adjR;
+
+        const dL_before = baseL == null ? null : baseL - b.nominal;
+        const dR_before = baseR == null ? null : baseR - b.nominal;
+
+        const dL_after = afterL == null ? null : afterL - b.nominal;
+        const dR_after = afterR == null ? null : afterR - b.nominal;
+
+        if (Number.isFinite(dL_before)) {
           const k = `${g}|L`;
-          if (!bucket.has(k)) bucket.set(k, []);
-          bucket.get(k).push(dL);
+          if (!bucketBefore.has(k)) bucketBefore.set(k, []);
+          bucketBefore.get(k).push(dL_before);
         }
-        if (Number.isFinite(dR)) {
+        if (Number.isFinite(dR_before)) {
           const k = `${g}|R`;
-          if (!bucket.has(k)) bucket.set(k, []);
-          bucket.get(k).push(dR);
+          if (!bucketBefore.has(k)) bucketBefore.set(k, []);
+          bucketBefore.get(k).push(dR_before);
+        }
+        if (Number.isFinite(dL_after)) {
+          const k = `${g}|L`;
+          if (!bucketAfter.has(k)) bucketAfter.set(k, []);
+          bucketAfter.get(k).push(dL_after);
+        }
+        if (Number.isFinite(dR_after)) {
+          const k = `${g}|R`;
+          if (!bucketAfter.has(k)) bucketAfter.set(k, []);
+          bucketAfter.get(k).push(dR_after);
         }
       }
     }
 
-    const groupStats = [];
-    for (const [key, arr] of bucket.entries()) {
+    const out = [];
+    const keys = new Set([...bucketBefore.keys(), ...bucketAfter.keys()]);
+    for (const key of keys) {
       const [groupName, side] = key.split("|");
-      const mean = avg(arr);
-      if (!Number.isFinite(mean)) continue;
-      groupStats.push({ groupName, side, meanDelta: mean });
+      const before = avg(bucketBefore.get(key) || []);
+      const after = avg(bucketAfter.get(key) || []);
+      if (!Number.isFinite(before) && !Number.isFinite(after)) continue;
+      out.push({ groupName, side, before, after });
     }
-    groupStats.sort((a, b) =>
+
+    out.sort((a, b) =>
       (groupSortKey(a.groupName) + a.side).localeCompare(groupSortKey(b.groupName) + b.side)
     );
+    return out;
+  }, [wideRows, meta.correction, activeProfile, adjustments, groupLoopSetup, loopTypes]);
 
-    return { groupStats };
-  }, [wideRows, meta.correction, activeProfile, adjustments, groupLoopSetup, loopSetup, loopTypes]);
+  // Chart toggles (A/B/C/D)
+  const [chartLetters, setChartLetters] = useState(() => {
+    try {
+      const s = localStorage.getItem("chartLetters");
+      return s ? JSON.parse(s) : { A: true, B: true, C: false, D: false };
+    } catch {
+      return { A: true, B: true, C: false, D: false };
+    }
+  });
+  useEffect(() => localStorage.setItem("chartLetters", JSON.stringify(chartLetters)), [chartLetters]);
 
-  // Page styles
+  const chartPoints = useMemo(() => {
+    const corr = meta.correction || 0;
+    const tol = meta.tolerance || 0;
+
+    const points = []; // {id, xIndex, letter, side, before, after, severityAfter}
+    let x = 0;
+
+    // Build stable order by A/B/C/D then numeric, L/R as separate series
+    const all = [];
+    for (const r of wideRows) {
+      for (const letter of ["A", "B", "C", "D"]) {
+        const b = r[letter];
+        if (!b?.line || b.nominal == null) continue;
+        all.push({ letter, ...b });
+      }
+    }
+    all.sort((u, v) => {
+      const pu = parseLineId(u.line);
+      const pv = parseLineId(v.line);
+      const lu = pu?.prefix || u.letter;
+      const lv = pv?.prefix || v.letter;
+      if (lu !== lv) return lu.localeCompare(lv);
+      return (pu?.num ?? 0) - (pv?.num ?? 0);
+    });
+
+    for (const b of all) {
+      if (!chartLetters[b.letter]) continue;
+
+      const g = groupForLine(activeProfile, b.line) || `${b.letter}?`;
+
+      const loopL = loopDeltaFor(b.line, "L");
+      const loopR = loopDeltaFor(b.line, "R");
+
+      const adjL = getAdjustment(adjustments, g, "L");
+      const adjR = getAdjustment(adjustments, g, "R");
+
+      const baseL = b.measL == null ? null : b.measL + corr + loopL;
+      const baseR = b.measR == null ? null : b.measR + corr + loopR;
+
+      const afterL = baseL == null ? null : baseL + adjL;
+      const afterR = baseR == null ? null : baseR + adjR;
+
+      const dL_before = baseL == null ? null : baseL - b.nominal;
+      const dR_before = baseR == null ? null : baseR - b.nominal;
+
+      const dL_after = afterL == null ? null : afterL - b.nominal;
+      const dR_after = afterR == null ? null : afterR - b.nominal;
+
+      points.push({
+        id: `${b.line}-L`,
+        xIndex: x,
+        line: b.line,
+        letter: b.letter,
+        side: "L",
+        before: dL_before,
+        after: dL_after,
+        sevAfter: severity(dL_after, tol),
+      });
+      points.push({
+        id: `${b.line}-R`,
+        xIndex: x,
+        line: b.line,
+        letter: b.letter,
+        side: "R",
+        before: dR_before,
+        after: dR_after,
+        sevAfter: severity(dR_after, tol),
+      });
+
+      x += 1;
+    }
+
+    return points;
+  }, [wideRows, meta.correction, meta.tolerance, activeProfile, adjustments, chartLetters, groupLoopSetup, loopTypes]);
+
+  // Styles
   const page = {
     minHeight: "100vh",
     background: "#0b0c10",
     color: "#eef1ff",
     fontFamily: "system-ui, sans-serif",
   };
-  const wrap = { maxWidth: 1200, margin: "0 auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 };
+  const wrap = { maxWidth: 1250, margin: "0 auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 };
   const card = { border: "1px solid #2a2f3f", borderRadius: 14, background: "#11131a", padding: 12 };
   const muted = { color: "#aab1c3" };
   const btn = {
@@ -656,18 +750,16 @@ export default function App() {
     if (step > 1 && !hasCSV) setStep(1);
   }, [step, hasCSV]);
 
-  // Guided editor helpers (must be inside App)
+  // Guided editor helpers
   function deepClone(x) {
     return JSON.parse(JSON.stringify(x));
   }
-
   function openProfileEditor() {
     setDraftProfileKey(profileKey);
     setDraftProfile(deepClone(profiles[profileKey] || activeProfile || {}));
     setShowAdvancedJson(false);
     setIsProfileEditorOpen(true);
   }
-
   function saveDraftProfile() {
     const nextProfiles = { ...profiles };
     const key = String(draftProfileKey || "").trim();
@@ -679,12 +771,10 @@ export default function App() {
     p.mapping = p.mapping && typeof p.mapping === "object" ? p.mapping : { A: [], B: [], C: [], D: [] };
 
     nextProfiles[key] = p;
-
     setProfilesObject(nextProfiles);
     setProfileKey(key);
     setIsProfileEditorOpen(false);
   }
-
   function newProfileFromCurrent() {
     const base = deepClone(profiles[profileKey] || activeProfile || {});
     const name = prompt("New profile name?", `${profileKey} (copy)`);
@@ -695,7 +785,6 @@ export default function App() {
     setShowAdvancedJson(false);
     setIsProfileEditorOpen(true);
   }
-
   function deleteSelectedProfile() {
     if (!confirm(`Delete profile "${profileKey}"? This cannot be undone.`)) return;
     const nextProfiles = { ...profiles };
@@ -705,6 +794,29 @@ export default function App() {
 
     const first = Object.keys(nextProfiles)[0] || Object.keys(BUILTIN_PROFILES)[0] || "";
     setProfileKey(first);
+  }
+
+  function StepButton({ current, num, setStep, enabled, label }) {
+    const active = current === num;
+    return (
+      <button
+        onClick={() => enabled && setStep(num)}
+        disabled={!enabled}
+        style={{
+          padding: "8px 10px",
+          borderRadius: 10,
+          border: "1px solid #2a2f3f",
+          background: active ? "rgba(176,132,255,0.14)" : "#0d0f16",
+          color: active ? "#eef1ff" : enabled ? "#aab1c3" : "rgba(170,177,195,0.4)",
+          cursor: enabled ? "pointer" : "not-allowed",
+          fontWeight: 800,
+          fontSize: 12,
+        }}
+        title={!enabled ? "Complete previous steps first" : ""}
+      >
+        {label}
+      </button>
+    );
   }
 
   return (
@@ -722,8 +834,7 @@ export default function App() {
             </div>
           </div>
           <div style={{ ...muted, fontSize: 12 }}>
-            Profile name (from CSV/XLSX meta):{" "}
-            <b style={{ color: "#eef1ff" }}>{csvProfileName}</b>
+            Profile (from CSV/XLSX meta): <b style={{ color: "#eef1ff" }}>{csvProfileName}</b>
           </div>
         </div>
 
@@ -733,7 +844,7 @@ export default function App() {
           Always follow manufacturer/check-center procedures and re-measure after any change.
         </div>
 
-        {/* Workflow Stepper */}
+        {/* Workflow */}
         <div style={card}>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ fontWeight: 900 }}>Workflow</div>
@@ -741,11 +852,11 @@ export default function App() {
               <StepButton current={step} num={1} setStep={setStep} enabled={true} label="1) Import" />
               <StepButton current={step} num={2} setStep={setStep} enabled={hasCSV} label="2) Wing layout" />
               <StepButton current={step} num={3} setStep={setStep} enabled={hasCSV} label="3) Loops setup" />
-              <StepButton current={step} num={4} setStep={setStep} enabled={hasCSV && allGroupNames.length > 0} label="4) Trim tables" />
+              <StepButton current={step} num={4} setStep={setStep} enabled={hasCSV && allGroupNames.length > 0} label="4) Trim tables + graphs" />
             </div>
           </div>
           <div style={{ ...muted, fontSize: 12, marginTop: 10 }}>
-            Tip: do Step 2–3 before trimming so “before” matches the real baseline.
+            Tip: set Step 2–3 before trimming so “before” matches the real baseline.
           </div>
         </div>
 
@@ -754,8 +865,10 @@ export default function App() {
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 1 — Import measurement CSV / Excel</div>
             <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
-              Upload your measurement file. CSV or XLSX is supported. The paraglider name is read from the meta cells (usually A2 + B2),
-              if present.
+              Upload your measurement file. CSV or XLSX is supported.
+              If the file contains a correction value (Korrektur), it is applied as:
+              <br />
+              <b>corrected = rawMeasured + correction</b> (e.g. 7220 + (-507) = 6713)
             </div>
 
             <div style={{ height: 10 }} />
@@ -798,8 +911,8 @@ export default function App() {
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 2 — Wing layout (profile mapping)</div>
             <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
-              Choose the wing profile mapping so the app understands your diagram groupings (AR1/BR2/etc). Imported wing name will
-              auto-create a profile if it doesn’t exist.
+              Choose the wing profile mapping so the app understands your diagram groupings (AR1/BR2/etc).
+              Imported wing name will auto-create a profile if it doesn’t exist.
             </div>
 
             <div style={{ height: 10 }} />
@@ -836,7 +949,7 @@ export default function App() {
 
                 <div style={{ height: 10 }} />
                 <div style={{ ...muted, fontSize: 12 }}>
-                  Note: Built-in profiles come from <b>src/wingProfiles.json</b>. Your edits/custom profiles are saved to this browser.
+                  Built-in profiles: <b>src/wingProfiles.json</b>. Your edits/custom profiles are saved in this browser.
                 </div>
               </div>
 
@@ -856,18 +969,10 @@ export default function App() {
                 />
 
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-                  <button onClick={exportAllProfiles} style={btn}>
-                    Export profiles (download)
-                  </button>
-                  <button onClick={exportCurrentProfileOnly} style={btn}>
-                    Export selected profile
-                  </button>
-                  <button onClick={() => profilesImportRef.current?.click()} style={btnWarn}>
-                    Import profiles JSON…
-                  </button>
-                  <button onClick={resetProfilesToBuiltIn} style={btnDanger}>
-                    Reset to built-in
-                  </button>
+                  <button onClick={exportAllProfiles} style={btn}>Export profiles</button>
+                  <button onClick={exportCurrentProfileOnly} style={btn}>Export selected</button>
+                  <button onClick={() => profilesImportRef.current?.click()} style={btnWarn}>Import profiles JSON…</button>
+                  <button onClick={resetProfilesToBuiltIn} style={btnDanger}>Reset to built-in</button>
                 </div>
 
                 <details>
@@ -902,9 +1007,7 @@ export default function App() {
               <button onClick={() => setStep(3)} style={btnWarn} disabled={!hasCSV}>
                 Continue to Step 3 (Loops)
               </button>
-              <button onClick={() => setStep(1)} style={btn}>
-                Back
-              </button>
+              <button onClick={() => setStep(1)} style={btn}>Back</button>
             </div>
           </div>
         ) : null}
@@ -919,11 +1022,12 @@ export default function App() {
 
             <div style={{ height: 10 }} />
 
-            {/* Loop types */}
             <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
               <div style={{ fontWeight: 850, marginBottom: 8 }}>Loop types (editable)</div>
               <div style={{ color: "#aab1c3", fontSize: 12, marginBottom: 10 }}>
-                Negative means the loop reduces line length (effective measured = measured + loopDelta).
+                Negative means the loop reduces line length. Baseline uses:
+                <br />
+                <b>baseline = (rawMeasured + correction) + loopDelta</b>
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
@@ -980,7 +1084,6 @@ export default function App() {
 
             <div style={{ height: 12 }} />
 
-            {/* Group loop setup table */}
             <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
               <div style={{ fontWeight: 850, marginBottom: 8 }}>Loops installed per line group</div>
 
@@ -994,9 +1097,9 @@ export default function App() {
                         <th style={{ textAlign: "left", padding: "8px 8px" }}>Group</th>
                         <th style={{ textAlign: "left", padding: "8px 8px" }}>Lines included</th>
                         <th style={{ textAlign: "left", padding: "8px 8px" }}>Left loop</th>
-                        <th style={{ textAlign: "right", padding: "8px 8px" }}>Δ (mm)</th>
+                        <th style={{ textAlign: "right", padding: "8px 8px" }}>Δ(mm)</th>
                         <th style={{ textAlign: "left", padding: "8px 8px" }}>Right loop</th>
-                        <th style={{ textAlign: "right", padding: "8px 8px" }}>Δ (mm)</th>
+                        <th style={{ textAlign: "right", padding: "8px 8px" }}>Δ(mm)</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1070,11 +1173,9 @@ export default function App() {
 
             <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
               <button onClick={() => setStep(4)} style={btnWarn} disabled={!allGroupNames.length}>
-                Continue to Step 4 (Tables)
+                Continue to Step 4 (Tables + Graphs)
               </button>
-              <button onClick={() => setStep(2)} style={btn}>
-                Back
-              </button>
+              <button onClick={() => setStep(2)} style={btn}>Back</button>
             </div>
           </div>
         ) : null}
@@ -1082,15 +1183,189 @@ export default function App() {
         {/* STEP 4 */}
         {step === 4 ? (
           <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 4 — Measurement tables (compact)</div>
-            <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
-              Inputs are Measured L/R from the file. Table shows Δ after group loops + adjustments.
+            <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 4 — Tables + Graphs</div>
+
+            {/* Meta controls */}
+            <div style={{ ...card, background: "#0e1018" }}>
+              <div style={{ fontWeight: 850, marginBottom: 8 }}>Meta controls</div>
+              <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
+                Correction is applied to raw measured values (Ist):
+                <br />
+                <b>corrected = rawMeasured + correction</b> (e.g. 7220 + (-507) = 6713)
+              </div>
+
+              <div style={{ height: 10 }} />
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+                <div style={{ minWidth: 220 }}>
+                  <div style={{ ...muted, fontSize: 12, marginBottom: 6 }}>Tolerance (mm)</div>
+                  <input
+                    value={meta.tolerance ?? 0}
+                    onChange={(e) => setMeta((m) => ({ ...m, tolerance: n(e.target.value) ?? 0 }))}
+                    style={{ ...input, textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}
+                    inputMode="numeric"
+                  />
+                </div>
+
+                <div style={{ minWidth: 220 }}>
+                  <div style={{ ...muted, fontSize: 12, marginBottom: 6 }}>Correction (mm)</div>
+                  <input
+                    value={meta.correction ?? 0}
+                    onChange={(e) => setMeta((m) => ({ ...m, correction: n(e.target.value) ?? 0 }))}
+                    style={{ ...input, textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}
+                    inputMode="numeric"
+                  />
+                </div>
+
+                <label style={{ display: "flex", gap: 10, alignItems: "center", ...muted, fontSize: 12, paddingBottom: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={showCorrected}
+                    onChange={(e) => setShowCorrected(e.target.checked)}
+                  />
+                  Show corrected values (Ist + Korrektur)
+                </label>
+
+                <button onClick={resetAdjustments} style={btnDanger}>Reset all adjustments</button>
+              </div>
             </div>
 
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-              <button onClick={resetAdjustments} style={btnDanger}>Reset all adjustments</button>
+            <div style={{ height: 12 }} />
+
+            {/* Adjustment UI */}
+            <div style={{ ...card, background: "#0e1018" }}>
+              <div style={{ fontWeight: 850, marginBottom: 8 }}>Trim adjustments per line group (mm)</div>
+              <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
+                These simulate adding/removing length at the risers/maillons for each group.
+                Positive = longer; negative = shorter.
+              </div>
+
+              <div style={{ height: 10 }} />
+
+              {!allGroupNames.length ? (
+                <div style={{ ...muted, fontSize: 12 }}>No groups found. Check Step 2 mapping.</div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
+                    <thead>
+                      <tr style={{ color: "#aab1c3", fontSize: 12 }}>
+                        <th style={{ textAlign: "left", padding: "6px 8px" }}>Group</th>
+                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust L (mm)</th>
+                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust R (mm)</th>
+                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ before</th>
+                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ after</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allGroupNames.map((g) => {
+                        const kL = `${g}|L`;
+                        const kR = `${g}|R`;
+                        const aL = getAdjustment(adjustments, g, "L");
+                        const aR = getAdjustment(adjustments, g, "R");
+
+                        const statL = groupStats.find((s) => s.groupName === g && s.side === "L");
+                        const statR = groupStats.find((s) => s.groupName === g && s.side === "R");
+                        const beforeAvg = avg([statL?.before, statR?.before].filter((x) => Number.isFinite(x)));
+                        const afterAvg = avg([statL?.after, statR?.after].filter((x) => Number.isFinite(x)));
+
+                        const tol = meta.tolerance || 0;
+                        const sevAfter = severity(afterAvg, tol);
+
+                        return (
+                          <tr key={g} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
+                            <td style={{ padding: "6px 8px", fontWeight: 900 }}>{g}</td>
+                            <td style={{ padding: "6px 8px", textAlign: "right" }}>
+                              <input
+                                value={aL}
+                                onChange={(e) => persistAdjustments({ ...adjustments, [kL]: n(e.target.value) ?? 0 })}
+                                style={{
+                                  ...input,
+                                  width: 110,
+                                  padding: "6px 8px",
+                                  textAlign: "right",
+                                  fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                                }}
+                                inputMode="numeric"
+                              />
+                            </td>
+                            <td style={{ padding: "6px 8px", textAlign: "right" }}>
+                              <input
+                                value={aR}
+                                onChange={(e) => persistAdjustments({ ...adjustments, [kR]: n(e.target.value) ?? 0 })}
+                                style={{
+                                  ...input,
+                                  width: 110,
+                                  padding: "6px 8px",
+                                  textAlign: "right",
+                                  fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                                }}
+                                inputMode="numeric"
+                              />
+                            </td>
+                            <td style={{ padding: "6px 8px", textAlign: "right", color: "#aab1c3", fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
+                              {Number.isFinite(beforeAvg) ? Math.round(beforeAvg) : "—"}
+                            </td>
+                            <td
+                              style={{
+                                padding: "6px 8px",
+                                textAlign: "right",
+                                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                                ...(sevAfter === "red" ? redCell : sevAfter === "yellow" ? yellowCell : null),
+                              }}
+                            >
+                              {Number.isFinite(afterAvg) ? Math.round(afterAvg) : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
+            <div style={{ height: 12 }} />
+
+            {/* Graph controls */}
+            <div style={{ ...card, background: "#0e1018" }}>
+              <div style={{ fontWeight: 850, marginBottom: 8 }}>Graphs</div>
+              <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
+                Before vs After overlay uses Δ = (after - nominal). Target is 0mm (factory trim).
+              </div>
+
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                {(["A", "B", "C", "D"] as const).map((L) => (
+                  <label key={L} style={{ display: "flex", gap: 8, alignItems: "center", ...muted, fontSize: 12 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!chartLetters[L]}
+                      onChange={(e) => setChartLetters({ ...chartLetters, [L]: e.target.checked })}
+                    />
+                    {L}
+                  </label>
+                ))}
+              </div>
+
+              <div style={{ height: 10 }} />
+
+              <DeltaLineChart
+                title="Δ Line chart (Before vs After)"
+                points={chartPoints}
+                tolerance={meta.tolerance || 0}
+              />
+
+              <div style={{ height: 12 }} />
+
+              <WingProfileChart
+                title="Wing profile (Group average Δ)"
+                groupStats={groupStats}
+                tolerance={meta.tolerance || 0}
+              />
+            </div>
+
+            <div style={{ height: 12 }} />
+
+            {/* Tables */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
               <BlockTable
                 title="A"
@@ -1104,6 +1379,7 @@ export default function App() {
                 yellowCell={yellowCell}
                 setCell={setCell}
                 blockKey="A"
+                showCorrected={showCorrected}
               />
               <BlockTable
                 title="B"
@@ -1117,6 +1393,7 @@ export default function App() {
                 yellowCell={yellowCell}
                 setCell={setCell}
                 blockKey="B"
+                showCorrected={showCorrected}
               />
               <BlockTable
                 title="C"
@@ -1130,6 +1407,7 @@ export default function App() {
                 yellowCell={yellowCell}
                 setCell={setCell}
                 blockKey="C"
+                showCorrected={showCorrected}
               />
               <BlockTable
                 title="D"
@@ -1143,48 +1421,13 @@ export default function App() {
                 yellowCell={yellowCell}
                 setCell={setCell}
                 blockKey="D"
+                showCorrected={showCorrected}
               />
             </div>
 
-            <div style={{ height: 12 }} />
-
-            <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
-              <div style={{ fontWeight: 850, marginBottom: 6 }}>Group average Δ (after loops + adjustments)</div>
-              <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
-                Useful for deciding which group to change at the risers/maillons.
-              </div>
-
-              {!computed.groupStats.length ? (
-                <div style={{ ...muted, fontSize: 12 }}>No stats yet.</div>
-              ) : (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 700 }}>
-                    <thead>
-                      <tr style={{ color: "#aab1c3", fontSize: 12 }}>
-                        <th style={{ textAlign: "left", padding: "6px 8px" }}>Group</th>
-                        <th style={{ textAlign: "left", padding: "6px 8px" }}>Side</th>
-                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Mean Δ (mm)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {computed.groupStats.map((s) => (
-                        <tr key={`${s.groupName}|${s.side}`} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
-                          <td style={{ padding: "6px 8px", fontWeight: 900 }}>{s.groupName}</td>
-                          <td style={{ padding: "6px 8px" }}>{s.side}</td>
-                          <td style={{ padding: "6px 8px", textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                            {Math.round(s.meanDelta)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
             <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button onClick={() => setStep(3)} style={btn}>Back to Step 3 (Loops)</button>
-              <button onClick={() => setStep(2)} style={btn}>Back to Step 2 (Layout)</button>
+              <button onClick={() => setStep(3)} style={btn}>Back to Step 3</button>
+              <button onClick={() => setStep(2)} style={btn}>Back to Step 2</button>
             </div>
           </div>
         ) : null}
@@ -1316,29 +1559,6 @@ export default function App() {
       </div>
     </div>
   );
-
-  function StepButton({ current, num, setStep, enabled, label }) {
-    const active = current === num;
-    return (
-      <button
-        onClick={() => enabled && setStep(num)}
-        disabled={!enabled}
-        style={{
-          padding: "8px 10px",
-          borderRadius: 10,
-          border: "1px solid #2a2f3f",
-          background: active ? "rgba(176,132,255,0.14)" : "#0d0f16",
-          color: active ? "#eef1ff" : enabled ? "#aab1c3" : "rgba(170,177,195,0.4)",
-          cursor: enabled ? "pointer" : "not-allowed",
-          fontWeight: 800,
-          fontSize: 12,
-        }}
-        title={!enabled ? "Complete previous steps first" : ""}
-      >
-        {label}
-      </button>
-    );
-  }
 }
 
 /* ------------------------- Guided Mapping Editor ------------------------- */
@@ -1480,9 +1700,281 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
   );
 }
 
+/* ------------------------- Charts ------------------------- */
+
+function DeltaLineChart({ title, points, tolerance }) {
+  const width = 1100;
+  const height = 220;
+  const pad = 24;
+
+  // Two series: L and R, each with before/after overlay
+  const series = useMemo(() => {
+    const bySide = { L: [], R: [] };
+    for (const p of points) {
+      if (!Number.isFinite(p.before) && !Number.isFinite(p.after)) continue;
+      bySide[p.side].push(p);
+    }
+    bySide.L.sort((a, b) => a.xIndex - b.xIndex);
+    bySide.R.sort((a, b) => a.xIndex - b.xIndex);
+    return bySide;
+  }, [points]);
+
+  const allValues = useMemo(() => {
+    const v = [];
+    for (const p of points) {
+      if (Number.isFinite(p.before)) v.push(p.before);
+      if (Number.isFinite(p.after)) v.push(p.after);
+    }
+    // Ensure target and tolerance lines are within view
+    v.push(0);
+    if (tolerance > 0) {
+      v.push(tolerance, -tolerance);
+    }
+    return v;
+  }, [points, tolerance]);
+
+  const { minY, maxY } = useMemo(() => {
+    if (!allValues.length) return { minY: -10, maxY: 10 };
+    let mn = Math.min(...allValues);
+    let mx = Math.max(...allValues);
+    if (mn === mx) {
+      mn -= 1;
+      mx += 1;
+    }
+    // add margin
+    const span = mx - mn;
+    return { minY: mn - span * 0.12, maxY: mx + span * 0.12 };
+  }, [allValues]);
+
+  const maxX = useMemo(() => {
+    const mx = Math.max(0, ...points.map((p) => p.xIndex));
+    return mx <= 0 ? 1 : mx;
+  }, [points]);
+
+  function xScale(x) {
+    return pad + (x / maxX) * (width - pad * 2);
+  }
+  function yScale(y) {
+    return pad + ((maxY - y) / (maxY - minY)) * (height - pad * 2);
+  }
+
+  function polyPath(ps, field) {
+    const pts = ps
+      .filter((p) => Number.isFinite(p[field]))
+      .map((p) => `${xScale(p.xIndex)},${yScale(p[field])}`);
+    if (!pts.length) return "";
+    return `M ${pts[0]} ` + pts.slice(1).map((s) => `L ${s}`).join(" ");
+  }
+
+  const tol = tolerance || 0;
+  const y0 = yScale(0);
+  const yTolP = tol > 0 ? yScale(tol) : null;
+  const yTolN = tol > 0 ? yScale(-tol) : null;
+  const yWarnP = tol > 3 ? yScale(Math.max(0, tol - 3)) : null;
+  const yWarnN = tol > 3 ? yScale(-Math.max(0, tol - 3)) : null;
+
+  return (
+    <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0d0f16" }}>
+      <div style={{ fontWeight: 850, marginBottom: 8 }}>{title}</div>
+      {!points.length ? (
+        <div style={{ color: "#aab1c3", fontSize: 12 }}>No chart data yet.</div>
+      ) : (
+        <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>
+          {/* Target line */}
+          <line x1={pad} x2={width - pad} y1={y0} y2={y0} stroke="rgba(170,177,195,0.35)" strokeWidth="2" />
+          {/* Tolerance bands */}
+          {tol > 0 ? (
+            <>
+              <line x1={pad} x2={width - pad} y1={yTolP} y2={yTolP} stroke="rgba(255,107,107,0.45)" strokeWidth="2" />
+              <line x1={pad} x2={width - pad} y1={yTolN} y2={yTolN} stroke="rgba(255,107,107,0.45)" strokeWidth="2" />
+            </>
+          ) : null}
+          {tol > 3 ? (
+            <>
+              <line x1={pad} x2={width - pad} y1={yWarnP} y2={yWarnP} stroke="rgba(255,214,102,0.55)" strokeWidth="2" />
+              <line x1={pad} x2={width - pad} y1={yWarnN} y2={yWarnN} stroke="rgba(255,214,102,0.55)" strokeWidth="2" />
+            </>
+          ) : null}
+
+          {/* Before paths (dashed) */}
+          <path d={polyPath(series.L, "before")} fill="none" stroke="rgba(176,132,255,0.75)" strokeWidth="2" strokeDasharray="6 6" />
+          <path d={polyPath(series.R, "before")} fill="none" stroke="rgba(102,204,255,0.75)" strokeWidth="2" strokeDasharray="6 6" />
+
+          {/* After paths (solid) */}
+          <path d={polyPath(series.L, "after")} fill="none" stroke="rgba(176,132,255,1)" strokeWidth="3" />
+          <path d={polyPath(series.R, "after")} fill="none" stroke="rgba(102,204,255,1)" strokeWidth="3" />
+        </svg>
+      )}
+
+      <div style={{ color: "#aab1c3", fontSize: 12, marginTop: 8, display: "flex", gap: 14, flexWrap: "wrap" }}>
+        <span>Solid = After</span>
+        <span>Dashed = Before</span>
+        <span>Target = 0mm</span>
+      </div>
+    </div>
+  );
+}
+
+function WingProfileChart({ title, groupStats, tolerance }) {
+  // Layout: Left side groups on left, Right on right; X axis is group order; Y is after/before
+  const width = 1100;
+  const height = 260;
+  const pad = 24;
+
+  const tol = tolerance || 0;
+
+  const rows = useMemo(() => {
+    // Merge L/R into single row per group
+    const byGroup = new Map();
+    for (const s of groupStats) {
+      if (!byGroup.has(s.groupName)) byGroup.set(s.groupName, { group: s.groupName });
+      const obj = byGroup.get(s.groupName);
+      obj[s.side] = s;
+    }
+    const out = Array.from(byGroup.values());
+    out.sort((a, b) => groupSortKey(a.group).localeCompare(groupSortKey(b.group)));
+    return out;
+  }, [groupStats]);
+
+  const values = useMemo(() => {
+    const v = [0];
+    for (const r of rows) {
+      if (Number.isFinite(r.L?.after)) v.push(r.L.after);
+      if (Number.isFinite(r.R?.after)) v.push(r.R.after);
+      if (Number.isFinite(r.L?.before)) v.push(r.L.before);
+      if (Number.isFinite(r.R?.before)) v.push(r.R.before);
+    }
+    if (tol > 0) v.push(tol, -tol);
+    return v;
+  }, [rows, tol]);
+
+  const { minY, maxY } = useMemo(() => {
+    if (!values.length) return { minY: -10, maxY: 10 };
+    let mn = Math.min(...values);
+    let mx = Math.max(...values);
+    if (mn === mx) {
+      mn -= 1;
+      mx += 1;
+    }
+    const span = mx - mn;
+    return { minY: mn - span * 0.12, maxY: mx + span * 0.12 };
+  }, [values]);
+
+  function yScale(y) {
+    return pad + ((maxY - y) / (maxY - minY)) * (height - pad * 2);
+  }
+
+  const xCount = Math.max(1, rows.length);
+  function xScale(i) {
+    return pad + (i / (xCount - 1 || 1)) * (width - pad * 2);
+  }
+
+  const y0 = yScale(0);
+  const yTolP = tol > 0 ? yScale(tol) : null;
+  const yTolN = tol > 0 ? yScale(-tol) : null;
+
+  // Simple bars: L after (purple), R after (cyan). Before shown as small tick.
+  const barW = Math.max(10, Math.min(18, (width - pad * 2) / (rows.length * 4)));
+
+  return (
+    <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0d0f16" }}>
+      <div style={{ fontWeight: 850, marginBottom: 8 }}>{title}</div>
+      {!rows.length ? (
+        <div style={{ color: "#aab1c3", fontSize: 12 }}>No group data yet.</div>
+      ) : (
+        <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>
+          {/* target */}
+          <line x1={pad} x2={width - pad} y1={y0} y2={y0} stroke="rgba(170,177,195,0.35)" strokeWidth="2" />
+          {/* tol */}
+          {tol > 0 ? (
+            <>
+              <line x1={pad} x2={width - pad} y1={yTolP} y2={yTolP} stroke="rgba(255,107,107,0.45)" strokeWidth="2" />
+              <line x1={pad} x2={width - pad} y1={yTolN} y2={yTolN} stroke="rgba(255,107,107,0.45)" strokeWidth="2" />
+            </>
+          ) : null}
+
+          {rows.map((r, i) => {
+            const x = xScale(i);
+
+            const L_after = r.L?.after;
+            const R_after = r.R?.after;
+            const L_before = r.L?.before;
+            const R_before = r.R?.before;
+
+            const yL = Number.isFinite(L_after) ? yScale(L_after) : null;
+            const yR = Number.isFinite(R_after) ? yScale(R_after) : null;
+
+            const yLb = Number.isFinite(L_before) ? yScale(L_before) : null;
+            const yRb = Number.isFinite(R_before) ? yScale(R_before) : null;
+
+            return (
+              <g key={r.group}>
+                {/* L bar (left offset) */}
+                {yL != null ? (
+                  <rect
+                    x={x - barW - 3}
+                    y={Math.min(y0, yL)}
+                    width={barW}
+                    height={Math.abs(y0 - yL)}
+                    fill="rgba(176,132,255,0.9)"
+                  />
+                ) : null}
+                {/* R bar (right offset) */}
+                {yR != null ? (
+                  <rect
+                    x={x + 3}
+                    y={Math.min(y0, yR)}
+                    width={barW}
+                    height={Math.abs(y0 - yR)}
+                    fill="rgba(102,204,255,0.9)"
+                  />
+                ) : null}
+
+                {/* Before ticks */}
+                {yLb != null ? (
+                  <line x1={x - barW - 6} x2={x - 2} y1={yLb} y2={yLb} stroke="rgba(176,132,255,0.6)" strokeWidth="3" />
+                ) : null}
+                {yRb != null ? (
+                  <line x1={x + 2} x2={x + barW + 6} y1={yRb} y2={yRb} stroke="rgba(102,204,255,0.6)" strokeWidth="3" />
+                ) : null}
+
+                {/* Group label (sparse) */}
+                {rows.length <= 18 || i % 2 === 0 ? (
+                  <text x={x} y={height - 8} textAnchor="middle" fontSize="10" fill="rgba(170,177,195,0.9)">
+                    {r.group}
+                  </text>
+                ) : null}
+              </g>
+            );
+          })}
+        </svg>
+      )}
+
+      <div style={{ color: "#aab1c3", fontSize: 12, marginTop: 8, display: "flex", gap: 14, flexWrap: "wrap" }}>
+        <span>Purple = Left (after)</span>
+        <span>Cyan = Right (after)</span>
+        <span>Small tick = Before</span>
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------- Compact measurement table ------------------------- */
 
-function BlockTable({ title, rows, meta, activeProfile, adjustments, loopDeltaFor, input, redCell, yellowCell, setCell, blockKey }) {
+function BlockTable({
+  title,
+  rows,
+  meta,
+  activeProfile,
+  adjustments,
+  loopDeltaFor,
+  input,
+  redCell,
+  yellowCell,
+  setCell,
+  blockKey,
+  showCorrected,
+}) {
   const corr = meta.correction || 0;
   const tol = meta.tolerance || 0;
 
@@ -1490,17 +1982,22 @@ function BlockTable({ title, rows, meta, activeProfile, adjustments, loopDeltaFo
 
   return (
     <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, overflow: "hidden", background: "#0e1018" }}>
-      <div style={{ padding: 10, borderBottom: "1px solid #2a2f3f", fontWeight: 900 }}>{title} lines</div>
+      <div style={{ padding: 10, borderBottom: "1px solid #2a2f3f", fontWeight: 900 }}>
+        {title} lines{" "}
+        <span style={{ color: "#aab1c3", fontSize: 12, fontWeight: 700 }}>
+          ({showCorrected ? "showing corrected" : "showing raw"})
+        </span>
+      </div>
 
       <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 520 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
           <thead>
             <tr style={{ color: "#aab1c3", fontSize: 12 }}>
               <th style={{ textAlign: "left", padding: "6px 8px" }}>Line</th>
               <th style={{ textAlign: "left", padding: "6px 8px" }}>Group</th>
-              <th style={{ textAlign: "right", padding: "6px 8px" }}>Nom</th>
-              <th style={{ textAlign: "right", padding: "6px 8px" }}>Meas L</th>
-              <th style={{ textAlign: "right", padding: "6px 8px" }}>Meas R</th>
+              <th style={{ textAlign: "right", padding: "6px 8px" }}>Soll</th>
+              <th style={{ textAlign: "right", padding: "6px 8px" }}>{showCorrected ? "Ist L (corr)" : "Ist L (raw)"}</th>
+              <th style={{ textAlign: "right", padding: "6px 8px" }}>{showCorrected ? "Ist R (corr)" : "Ist R (raw)"}</th>
             </tr>
           </thead>
 
@@ -1521,14 +2018,30 @@ function BlockTable({ title, rows, meta, activeProfile, adjustments, loopDeltaFo
                 const adjL = getAdjustment(adjustments, groupName, "L");
                 const adjR = getAdjustment(adjustments, groupName, "R");
 
-                const effL = b.measL == null ? null : b.measL + loopL;
-                const effR = b.measR == null ? null : b.measR + loopR;
+                // corrected = raw + correction
+                const correctedL = b.measL == null ? null : b.measL + corr;
+                const correctedR = b.measR == null ? null : b.measR + corr;
 
-                const dL = deltaMm({ nominal: b.nominal, measured: effL, correction: corr, adjustment: adjL });
-                const dR = deltaMm({ nominal: b.nominal, measured: effR, correction: corr, adjustment: adjR });
+                // baseline = corrected + loopDelta
+                const baseL = correctedL == null ? null : correctedL + loopL;
+                const baseR = correctedR == null ? null : correctedR + loopR;
 
-                const sevL = severity(dL, tol);
-                const sevR = severity(dR, tol);
+                // after = baseline + adjustment
+                const afterL = baseL == null ? null : baseL + adjL;
+                const afterR = baseR == null ? null : baseR + adjR;
+
+                // delta vs nominal
+                const dL_before = baseL == null || b.nominal == null ? null : baseL - b.nominal;
+                const dR_before = baseR == null || b.nominal == null ? null : baseR - b.nominal;
+
+                const dL_after = afterL == null || b.nominal == null ? null : afterL - b.nominal;
+                const dR_after = afterR == null || b.nominal == null ? null : afterR - b.nominal;
+
+                const sevL = severity(dL_after, tol);
+                const sevR = severity(dR_after, tol);
+
+                const displayL = showCorrected ? correctedL : b.measL;
+                const displayR = showCorrected ? correctedR : b.measR;
 
                 return (
                   <tr key={`${b.line}-${idx}`} style={{ borderTop: "1px solid #2a2f3f" }}>
@@ -1541,6 +2054,7 @@ function BlockTable({ title, rows, meta, activeProfile, adjustments, loopDeltaFo
                     </td>
 
                     <td style={{ padding: "6px 8px", textAlign: "right" }}>
+                      {/* Editable raw measured */}
                       <input
                         value={b.measL ?? ""}
                         onChange={(e) => setCell(b.rowIndex, blockKey, "measL", e.target.value)}
@@ -1553,10 +2067,14 @@ function BlockTable({ title, rows, meta, activeProfile, adjustments, loopDeltaFo
                           fontFamily: "ui-monospace, Menlo, Consolas, monospace",
                         }}
                         inputMode="numeric"
+                        title="Edit raw measured (Ist). Correction/loops/adjustments are applied automatically."
                       />
                       <div style={{ color: "#aab1c3", fontSize: 10, marginTop: 4, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                        loop {loopL > 0 ? `+${loopL}` : `${loopL}`} | Δ{" "}
-                        {Number.isFinite(dL) ? `${dL > 0 ? "+" : ""}${Math.round(dL)}mm` : "–"}
+                        show {displayL == null ? "—" : Math.round(displayL)} | loop {loopL > 0 ? `+${loopL}` : `${loopL}`} | adj {adjL > 0 ? `+${adjL}` : `${adjL}`}
+                      </div>
+                      <div style={{ color: "#aab1c3", fontSize: 10, marginTop: 2, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
+                        Δ(before) {Number.isFinite(dL_before) ? `${dL_before > 0 ? "+" : ""}${Math.round(dL_before)}mm` : "–"} → Δ(after){" "}
+                        {Number.isFinite(dL_after) ? `${dL_after > 0 ? "+" : ""}${Math.round(dL_after)}mm` : "–"}
                       </div>
                     </td>
 
@@ -1573,10 +2091,14 @@ function BlockTable({ title, rows, meta, activeProfile, adjustments, loopDeltaFo
                           fontFamily: "ui-monospace, Menlo, Consolas, monospace",
                         }}
                         inputMode="numeric"
+                        title="Edit raw measured (Ist). Correction/loops/adjustments are applied automatically."
                       />
                       <div style={{ color: "#aab1c3", fontSize: 10, marginTop: 4, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                        loop {loopR > 0 ? `+${loopR}` : `${loopR}`} | Δ{" "}
-                        {Number.isFinite(dR) ? `${dR > 0 ? "+" : ""}${Math.round(dR)}mm` : "–"}
+                        show {displayR == null ? "—" : Math.round(displayR)} | loop {loopR > 0 ? `+${loopR}` : `${loopR}`} | adj {adjR > 0 ? `+${adjR}` : `${adjR}`}
+                      </div>
+                      <div style={{ color: "#aab1c3", fontSize: 10, marginTop: 2, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
+                        Δ(before) {Number.isFinite(dR_before) ? `${dR_before > 0 ? "+" : ""}${Math.round(dR_before)}mm` : "–"} → Δ(after){" "}
+                        {Number.isFinite(dR_after) ? `${dR_after > 0 ? "+" : ""}${Math.round(dR_after)}mm` : "–"}
                       </div>
                     </td>
                   </tr>
@@ -1588,7 +2110,7 @@ function BlockTable({ title, rows, meta, activeProfile, adjustments, loopDeltaFo
       </div>
 
       <div style={{ padding: 10, color: "#aab1c3", fontSize: 12 }}>
-        Yellow: within 3mm of tolerance. Red: at/over tolerance.
+        Yellow: within 3mm of tolerance. Red: at/over tolerance. Target is 0mm (factory trim).
       </div>
     </div>
   );
