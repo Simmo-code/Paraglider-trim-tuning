@@ -10,7 +10,7 @@ import BUILTIN_PROFILES from "./wingProfiles.json";
  * - Keeps legacy per-line loops as fallback (won’t break older saved sessions)
  */
 
-const APP_VERSION = "0.2.2-patchEE";
+const APP_VERSION = "0.2.2-patchf";
 
 /* ------------------------- Built-in profiles ------------------------- */
 
@@ -260,6 +260,25 @@ function getAdjustment(adjustments, groupName, side) {
   const key = `${groupName}|${side}`;
   return Number.isFinite(adjustments[key]) ? adjustments[key] : 0;
 }
+function downloadTextFile(filename, text) {
+  const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function safeParseProfilesJson(text) {
+  const obj = JSON.parse(text);
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
+    throw new Error("Profiles JSON must be an object of { profileName: { ... } }");
+  }
+  return obj;
+}
 
 /* ------------------------- App ------------------------- */
 
@@ -291,6 +310,59 @@ export default function App() {
 
    const activeProfile =
     profiles[profileKey] || Object.values(profiles)[0] || Object.values(BUILTIN_PROFILES)[0];
+const profilesImportRef = useRef(null);
+
+function setProfilesObject(nextProfiles) {
+  const json = JSON.stringify(nextProfiles, null, 2);
+  setProfileJson(json);
+  localStorage.setItem("wingProfilesJson", json);
+}
+
+function exportAllProfiles() {
+  // Exports the exact library currently in use (built-in + any custom user edits)
+  const filename = `wing-profiles-${new Date().toISOString().slice(0, 10)}.json`;
+  downloadTextFile(filename, JSON.stringify(profiles, null, 2));
+}
+
+function exportCurrentProfileOnly() {
+  const p = profiles[profileKey];
+  if (!p) return alert("No profile selected.");
+  const filename = `${(profileKey || "profile").replace(/[^\w\- ]+/g, "")}.json`;
+  downloadTextFile(filename, JSON.stringify({ [profileKey]: p }, null, 2));
+}
+
+function resetProfilesToBuiltIn() {
+  localStorage.removeItem("wingProfilesJson");
+  setProfileJson(JSON.stringify({ ...BUILTIN_PROFILES }, null, 2));
+  const first = Object.keys(BUILTIN_PROFILES)[0] || "";
+  setProfileKey(first);
+}
+
+async function importProfilesFromFile(file) {
+  try {
+    const text = await file.text();
+    const incoming = safeParseProfilesJson(text);
+
+    // Merge incoming into current profiles (incoming overwrites on name collisions)
+    const merged = { ...profiles, ...incoming };
+
+    // Enforce name field if missing
+    for (const [k, v] of Object.entries(merged)) {
+      if (v && typeof v === "object" && !v.name) v.name = k;
+    }
+
+    setProfilesObject(merged);
+
+    // If exactly one profile was imported, auto-select it
+    const keys = Object.keys(incoming);
+    if (keys.length === 1) setProfileKey(keys[0]);
+
+    alert(`Imported ${Object.keys(incoming).length} profile(s).`);
+  } catch (e) {
+    console.error(e);
+    alert("Could not import profiles JSON. Make sure the file is valid JSON exported from this app.");
+  }
+}
 
   // Adjustments (per group)
   const [adjustments, setAdjustments] = useState(() => {
@@ -795,6 +867,37 @@ reader.readAsText(file);
                 <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
                   Advanced: edit mappings here if your wing has different group ranges.
                 </div>
+				<input
+  ref={profilesImportRef}
+  type="file"
+  accept="application/json,.json"
+  style={{ display: "none" }}
+  onChange={(e) => {
+    const f = e.target.files?.[0];
+    if (f) importProfilesFromFile(f);
+    e.target.value = "";
+  }}
+/>
+
+<div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+  <button onClick={exportAllProfiles} style={btn}>
+    Export profiles (download)
+  </button>
+  <button onClick={exportCurrentProfileOnly} style={btn}>
+    Export selected profile
+  </button>
+  <button onClick={() => profilesImportRef.current?.click()} style={btnWarn}>
+    Import profiles JSON…
+  </button>
+  <button onClick={resetProfilesToBuiltIn} style={btnDanger}>
+    Reset to built-in
+  </button>
+</div>
+
+<div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
+  Tip: GitHub Pages can’t update files on the server. Use Export/Import to back up or share profiles.
+</div>
+
                 <textarea
                   value={profileJson}
                   onChange={(e) => {
