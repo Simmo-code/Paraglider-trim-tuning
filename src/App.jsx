@@ -481,7 +481,7 @@ export default function App() {
     localStorage.setItem("wingProfilesJson", json);
     setProfileKey(key);
   }
-function newProfileFromCurrent(name) {
+function ensureProfileExistsByName(name) {
   const key = String(name || "").trim() || "Imported Wing";
   const nextProfiles = { ...profiles };
 
@@ -992,7 +992,7 @@ reader.readAsText(file);
 />
 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
   <button style={btnWarn} onClick={openProfileEditor}>Edit selected profile…</button>
-  <button style={btn} onClick={newProfileFromCurrent}>New profile (copy)…</button>
+  <button style={btn} onClick={ensureProfileExistsByName}>New profile (copy)…</button>
   <button style={btnDanger} onClick={deleteSelectedProfile}>Delete selected</button>
 </div>
 
