@@ -1550,18 +1550,7 @@ export default function App() {
                 points={chartPoints}
                 tolerance={meta.tolerance || 0}
               />
-<div style={{ height: 12 }} />
 
-<RearViewWingChart
-  title="Rear View Wing Trim (A/B/C/D span) — Before vs After"
-  wideRows={wideRows}
-  meta={meta}
-  showCorrected={showCorrected}
-  groupLoopSetup={groupLoopSetup}
-  loopTypes={loopTypes}
-  adjustments={adjustments}
-  activeProfile={activeProfile}
-/>
               <div style={{ height: 12 }} />
 
               <WingProfileChart
