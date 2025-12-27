@@ -1519,7 +1519,18 @@ export default function App() {
     </div>
   )}
 </div>
+<div style={{ height: 12 }} />
 
+<RearViewWingChart
+  title="Rear View Wing Trim (A/B/C/D span) — Before vs After"
+  wideRows={wideRows}
+  meta={meta}
+  showCorrected={showCorrected}
+  groupLoopSetup={groupLoopSetup}
+  loopTypes={loopTypes}
+  adjustments={adjustments}
+  activeProfile={activeProfile}
+/>
 
             <div style={{ height: 12 }} />
 
