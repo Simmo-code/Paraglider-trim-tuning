@@ -1550,7 +1550,18 @@ export default function App() {
                 points={chartPoints}
                 tolerance={meta.tolerance || 0}
               />
+<div style={{ height: 12 }} />
 
+<RearViewWingChart
+  title="Rear View Wing Trim (A/B/C/D span) — Before vs After"
+  wideRows={wideRows}
+  meta={meta}
+  showCorrected={showCorrected}
+  groupLoopSetup={groupLoopSetup}
+  loopTypes={loopTypes}
+  adjustments={adjustments}
+  activeProfile={activeProfile}
+/>
               <div style={{ height: 12 }} />
 
               <WingProfileChart
@@ -2140,7 +2151,297 @@ function DeltaLineChart({ title, points, tolerance }) {
     </div>
   );
 }
+function RearViewWingChart({ title, wideRows, meta, showCorrected, groupLoopSetup, loopTypes, adjustments, activeProfile }) {
+  const width = 1100;
+  const height = 420;
+  const pad = 26;
 
+  const tol = meta?.tolerance ?? 0;
+  const corr = showCorrected ? (meta?.correction ?? 0) : 0;
+
+  // Build per-letter arrays of line points (left/right) in outward order (1..N)
+  const dataByLetter = React.useMemo(() => {
+    const map = { A: [], B: [], C: [], D: [] };
+
+    // Gather all line occurrences
+    for (const r of wideRows || []) {
+      for (const L of ["A", "B", "C", "D"]) {
+        const b = r?.[L];
+        if (!b?.line) continue;
+
+        const p = parseLineId(b.line);
+        if (!p) continue;
+
+        // Which group does this line belong to? (AR1 etc)
+        const groupName = groupForLine(activeProfile, b.line) || `${L}R?`;
+        const kLoopL = `${groupName}|L`;
+        const kLoopR = `${groupName}|R`;
+
+        const loopTypeL = groupLoopSetup?.[kLoopL] || "SL";
+        const loopTypeR = groupLoopSetup?.[kLoopR] || "SL";
+        const loopDeltaL = Number.isFinite(loopTypes?.[loopTypeL]) ? loopTypes[loopTypeL] : 0;
+        const loopDeltaR = Number.isFinite(loopTypes?.[loopTypeR]) ? loopTypes[loopTypeR] : 0;
+
+        const adjL = getAdjustment(adjustments || {}, groupName, "L");
+        const adjR = getAdjustment(adjustments || {}, groupName, "R");
+
+        const nominal = b.nominal;
+
+        // BEFORE: correctedMeasured + baseline loopDelta
+        const beforeL = deltaMm({ nominal, measured: b.measL, correction: corr, adjustment: loopDeltaL });
+        const beforeR = deltaMm({ nominal, measured: b.measR, correction: corr, adjustment: loopDeltaR });
+
+        // AFTER: BEFORE + trim adjustment
+        const afterL = Number.isFinite(beforeL) ? beforeL + (adjL || 0) : null;
+        const afterR = Number.isFinite(beforeR) ? beforeR + (adjR || 0) : null;
+
+        map[L].push({
+          lineId: b.line,
+          num: p.num,
+          groupName,
+          nominal,
+          beforeL,
+          beforeR,
+          afterL,
+          afterR,
+        });
+      }
+    }
+
+    // Sort outward (A1..Axx)
+    for (const L of ["A", "B", "C", "D"]) {
+      map[L].sort((a, b) => (a.num ?? 0) - (b.num ?? 0));
+    }
+
+    return map;
+  }, [wideRows, meta, showCorrected, groupLoopSetup, loopTypes, adjustments, activeProfile]);
+
+  const [hover, setHover] = React.useState(null);
+
+  // Compute y-scale across all letters and both sides using after values (fallback to before)
+  const yDomain = React.useMemo(() => {
+    let vals = [];
+    for (const L of ["A", "B", "C", "D"]) {
+      for (const p of dataByLetter[L] || []) {
+        if (Number.isFinite(p.beforeL)) vals.push(p.beforeL);
+        if (Number.isFinite(p.beforeR)) vals.push(p.beforeR);
+        if (Number.isFinite(p.afterL)) vals.push(p.afterL);
+        if (Number.isFinite(p.afterR)) vals.push(p.afterR);
+      }
+    }
+    if (!vals.length) return { min: -10, max: 10 };
+    const min = Math.min(...vals);
+    const max = Math.max(...vals);
+    const pad = Math.max(6, Math.round((max - min) * 0.15));
+    return { min: min - pad, max: max + pad };
+  }, [dataByLetter]);
+
+  const yScale = (v) => {
+    const h = height - pad * 2;
+    const t = (v - yDomain.min) / (yDomain.max - yDomain.min || 1);
+    return pad + (1 - t) * h;
+  };
+
+  // Span layout: each letter is one horizontal band (rear view rows)
+  const bands = React.useMemo(() => {
+    const bandH = (height - pad * 2) / 4;
+    return {
+      A: { y0: pad + bandH * 0, y1: pad + bandH * 1 },
+      B: { y0: pad + bandH * 1, y1: pad + bandH * 2 },
+      C: { y0: pad + bandH * 2, y1: pad + bandH * 3 },
+      D: { y0: pad + bandH * 3, y1: pad + bandH * 4 },
+    };
+  }, []);
+
+  const xFor = (side, idx, count) => {
+    // Center at mid; left side goes left, right side goes right
+    const cx = width / 2;
+    const maxSpan = (width / 2) - pad - 40;
+    const step = count > 1 ? maxSpan / (count - 1) : 0;
+    if (side === "L") return cx - idx * step;
+    return cx + idx * step;
+  };
+
+  const bandY = (letter, v) => {
+    // Map value into that band's vertical space (re-using global yScale but compress into band)
+    const b = bands[letter];
+    const global = yScale(v);
+    // Normalize global y to 0..1 then map into band
+    const t = (global - pad) / (height - pad * 2);
+    return b.y0 + t * (b.y1 - b.y0);
+  };
+
+  const severityColor = (sev) => {
+    if (sev === "red") return "rgba(255,90,90,1)";
+    if (sev === "yellow") return "rgba(255,210,90,1)";
+    return "rgba(185,198,255,1)";
+  };
+
+  return (
+    <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
+      <div style={{ fontWeight: 900, marginBottom: 6 }}>{title}</div>
+      <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5 }}>
+        Rear view (center → tips). Each band is A/B/C/D. Dashed = Before, solid = After. Hover points for details.
+      </div>
+
+      <div style={{ height: 10 }} />
+
+      <div style={{ overflowX: "auto" }}>
+        <svg width={width} height={height} style={{ display: "block", background: "#0b0c10", borderRadius: 12 }}>
+          {/* Center line */}
+          <line x1={width / 2} y1={pad} x2={width / 2} y2={height - pad} stroke="rgba(170,177,195,0.25)" strokeWidth="1" />
+
+          {/* Band separators + labels */}
+          {["A", "B", "C", "D"].map((L) => {
+            const b = bands[L];
+            return (
+              <g key={L}>
+                <line x1={pad} y1={b.y0} x2={width - pad} y2={b.y0} stroke="rgba(42,47,63,0.8)" />
+                <text x={pad + 6} y={b.y0 + 16} fill="rgba(170,177,195,0.85)" fontSize="12" fontFamily="ui-monospace, Menlo, Consolas, monospace">
+                  {L}-row
+                </text>
+              </g>
+            );
+          })}
+          <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="rgba(42,47,63,0.8)" />
+
+          {/* Tolerance shading (global) */}
+          {Number.isFinite(tol) && tol > 0 ? (
+            <>
+              {/* “target” baseline is 0mm: draw a faint 0 line through each band */}
+              {["A", "B", "C", "D"].map((L) => {
+                const y0 = bandY(L, 0);
+                return <line key={`zero-${L}`} x1={pad} y1={y0} x2={width - pad} y2={y0} stroke="rgba(170,177,195,0.25)" strokeWidth="1" />;
+              })}
+            </>
+          ) : null}
+
+          {/* Plot each band */}
+          {["A", "B", "C", "D"].map((L) => {
+            const arr = dataByLetter[L] || [];
+            const count = arr.length || 1;
+
+            // Build polyline paths for each side (before/after)
+            const buildPath = (side, which) => {
+              let d = "";
+              for (let i = 0; i < arr.length; i++) {
+                const p = arr[i];
+                const v = side === "L" ? (which === "before" ? p.beforeL : p.afterL) : (which === "before" ? p.beforeR : p.afterR);
+                if (!Number.isFinite(v)) continue;
+                const x = xFor(side, i, count);
+                const y = bandY(L, v);
+                d += d ? ` L ${x} ${y}` : `M ${x} ${y}`;
+              }
+              return d;
+            };
+
+            const beforeL = buildPath("L", "before");
+            const beforeR = buildPath("R", "before");
+            const afterL = buildPath("L", "after");
+            const afterR = buildPath("R", "after");
+
+            return (
+              <g key={`plot-${L}`}>
+                {/* Before dashed */}
+                <path d={beforeL} fill="none" stroke="rgba(176,132,255,0.65)" strokeWidth="2" strokeDasharray="6 6" />
+                <path d={beforeR} fill="none" stroke="rgba(102,204,255,0.65)" strokeWidth="2" strokeDasharray="6 6" />
+                {/* After solid */}
+                <path d={afterL} fill="none" stroke="rgba(176,132,255,1)" strokeWidth="3" />
+                <path d={afterR} fill="none" stroke="rgba(102,204,255,1)" strokeWidth="3" />
+
+                {/* Points with hover */}
+                {arr.map((p, i) => {
+                  const items = [
+                    { side: "L", before: p.beforeL, after: p.afterL },
+                    { side: "R", before: p.beforeR, after: p.afterR },
+                  ];
+
+                  return items.map((it) => {
+                    const v = it.after;
+                    if (!Number.isFinite(v)) return null;
+                    const x = xFor(it.side, i, count);
+                    const y = bandY(L, v);
+                    const sev = severity(v, tol);
+                    const fill = severityColor(sev);
+
+                    return (
+                      <circle
+                        key={`${p.lineId}-${it.side}`}
+                        cx={x}
+                        cy={y}
+                        r={5}
+                        fill={fill}
+                        stroke="rgba(10,12,16,0.9)"
+                        strokeWidth="2"
+                        onMouseEnter={() =>
+                          setHover({
+                            letter: L,
+                            lineId: p.lineId,
+                            groupName: p.groupName,
+                            side: it.side,
+                            before: it.before,
+                            after: it.after,
+                            sev,
+                            x,
+                            y,
+                          })
+                        }
+                        onMouseLeave={() => setHover(null)}
+                      />
+                    );
+                  });
+                })}
+              </g>
+            );
+          })}
+
+          {/* Tooltip */}
+          {hover ? (
+            <g>
+              <rect
+                x={Math.min(width - 290, Math.max(10, hover.x + 10))}
+                y={Math.max(10, hover.y - 64)}
+                width={280}
+                height={58}
+                rx={10}
+                ry={10}
+                fill="rgba(12,14,22,0.95)"
+                stroke="rgba(42,47,63,1)"
+              />
+              <text
+                x={Math.min(width - 280, Math.max(20, hover.x + 20))}
+                y={Math.max(26, hover.y - 40)}
+                fill="#eef1ff"
+                fontSize="12"
+                fontFamily="ui-monospace, Menlo, Consolas, monospace"
+              >
+                {`${hover.lineId}  (${hover.side})  group: ${hover.groupName}`}
+              </text>
+              <text
+                x={Math.min(width - 280, Math.max(20, hover.x + 20))}
+                y={Math.max(44, hover.y - 22)}
+                fill="rgba(170,177,195,0.95)"
+                fontSize="12"
+                fontFamily="ui-monospace, Menlo, Consolas, monospace"
+              >
+                {`Before: ${Number.isFinite(hover.before) ? Math.round(hover.before) : "—"} mm   After: ${
+                  Number.isFinite(hover.after) ? Math.round(hover.after) : "—"
+                } mm   Sev: ${hover.sev}`}
+              </text>
+            </g>
+          ) : null}
+        </svg>
+      </div>
+
+      <div style={{ color: "#aab1c3", fontSize: 12, marginTop: 8, display: "flex", gap: 14, flexWrap: "wrap" }}>
+        <span>Solid = After</span>
+        <span>Dashed = Before</span>
+        <span>Target = 0mm</span>
+        <span>Center line = mid span</span>
+      </div>
+    </div>
+  );
+}
 function WingProfileChart({ title, groupStats, tolerance }) {
   const width = 1100;
   const height = 260;
