@@ -2431,3 +2431,280 @@ function BlockTable({
     </div>
   );
 }
+function RearViewWingChart({ wideRows, activeProfile, tolerance, showCorrected, correction, adjustments, loopTypes, groupLoopSetup }) {
+  const width = 1100;
+  const height = 420;
+  const pad = 24;
+  const tol = Number.isFinite(tolerance) ? tolerance : 0;
+
+  // Helpers reused from your app (must already exist in file):
+  // - getAllLinesFromWide, groupForLine, parseLineId, deltaMm, severity, avg, getAdjustment
+  // If any of those are not present in your stable file, tell me and I’ll adapt.
+
+  const [hover, setHover] = React.useState(null);
+
+  const data = React.useMemo(() => {
+    if (!wideRows?.length) return null;
+
+    // Flatten into points: per lineId, compute before/after (L/R)
+    const points = [];
+    for (const r of wideRows) {
+      for (const letter of ["A", "B", "C", "D"]) {
+        const b = r?.[letter];
+        if (!b?.line) continue;
+
+        const lineId = b.line;
+        const groupName = groupForLine(activeProfile, lineId) || "—";
+
+        // Baseline loop delta per GROUP (Step 3)
+        const kL = `${groupName}|L`;
+        const kR = `${groupName}|R`;
+        const loopNameL = groupLoopSetup?.[kL] || "SL";
+        const loopNameR = groupLoopSetup?.[kR] || "SL";
+        const loopDeltaL = Number.isFinite(loopTypes?.[loopNameL]) ? loopTypes[loopNameL] : 0;
+        const loopDeltaR = Number.isFinite(loopTypes?.[loopNameR]) ? loopTypes[loopNameR] : 0;
+
+        // Correction toggle
+        const corr = showCorrected ? (Number.isFinite(correction) ? correction : 0) : 0;
+
+        // Before deltas (mm)
+        const beforeL = deltaMm({ nominal: b.nominal, measured: b.measL, correction: corr, adjustment: loopDeltaL });
+        const beforeR = deltaMm({ nominal: b.nominal, measured: b.measR, correction: corr, adjustment: loopDeltaR });
+
+        // After includes trim adjustments (Step 4)
+        const adjL = getAdjustment(adjustments || {}, groupName, "L");
+        const adjR = getAdjustment(adjustments || {}, groupName, "R");
+
+        const afterL = deltaMm({ nominal: b.nominal, measured: b.measL, correction: corr, adjustment: loopDeltaL + adjL });
+        const afterR = deltaMm({ nominal: b.nominal, measured: b.measR, correction: corr, adjustment: loopDeltaR + adjR });
+
+        points.push({
+          letter,
+          lineId,
+          groupName,
+          beforeL,
+          beforeR,
+          afterL,
+          afterR,
+        });
+      }
+    }
+
+    // Group by letter, then sort by line number
+    const byLetter = { A: [], B: [], C: [], D: [] };
+    for (const p of points) byLetter[p.letter].push(p);
+
+    for (const L of ["A", "B", "C", "D"]) {
+      byLetter[L].sort((p1, p2) => {
+        const a = parseLineId(p1.lineId);
+        const b = parseLineId(p2.lineId);
+        return (a?.num ?? 0) - (b?.num ?? 0);
+      });
+    }
+
+    return byLetter;
+  }, [wideRows, activeProfile, tolerance, showCorrected, correction, adjustments, loopTypes, groupLoopSetup]);
+
+  if (!data) {
+    return (
+      <div style={{ padding: 12, border: "1px solid #2a2f3f", borderRadius: 14, background: "#0e1018", color: "#aab1c3", fontSize: 12 }}>
+        Rear view chart will appear after importing a file.
+      </div>
+    );
+  }
+
+  const bands = {
+    A: { y0: pad + 10, y1: pad + 10 + 80 },
+    B: { y0: pad + 10 + 90, y1: pad + 10 + 170 },
+    C: { y0: pad + 10 + 180, y1: pad + 10 + 260 },
+    D: { y0: pad + 10 + 270, y1: pad + 10 + 350 },
+  };
+
+  function sevColor(sev) {
+    if (sev === "red") return "rgba(255,90,90,1)";
+    if (sev === "yellow") return "rgba(255,215,90,1)";
+    return "rgba(140,255,190,1)";
+  }
+
+  function bandY(letter, v) {
+    // Map v (delta mm) to band height (0mm centered). Use max range = tol*2 or 30mm minimum.
+    const b = bands[letter];
+    const range = Math.max(30, tol > 0 ? tol * 2.2 : 50);
+    const mid = (b.y0 + b.y1) / 2;
+    const pxPerMm = (b.y1 - b.y0) / (range * 2);
+    return mid - v * pxPerMm;
+  }
+
+  function xFor(side, i, count) {
+    // rear view: left side starts near center and goes outward left; right side starts near center and goes outward right
+    const center = width / 2;
+    const span = (width - pad * 2) / 2 - 30;
+    const t = count <= 1 ? 0 : i / (count - 1);
+    return side === "L" ? center - t * span : center + t * span;
+  }
+
+  function bandShade(letter) {
+    // Optional subtle shading per band
+    const b = bands[letter];
+    return <rect x={pad} y={b.y0} width={width - pad * 2} height={b.y1 - b.y0} fill="rgba(255,255,255,0.02)" />;
+  }
+
+  return (
+    <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
+      <div style={{ fontWeight: 900, marginBottom: 8 }}>Rear view wing shape (A/B/C/D rows)</div>
+      <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5 }}>
+        Center = wing middle. Left points spread left, Right points spread right. Colors show severity for <b>After</b>.
+      </div>
+
+      <div style={{ height: 10 }} />
+
+      <div style={{ overflowX: "auto" }}>
+        <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>
+          {/* centerline */}
+          <line x1={width / 2} y1={pad} x2={width / 2} y2={height - pad} stroke="rgba(42,47,63,0.85)" strokeDasharray="6 6" />
+
+          {/* Bands */}
+          {["A", "B", "C", "D"].map((L) => {
+            const b = bands[L];
+            return (
+              <g key={`band-${L}`}>
+                {bandShade(L)}
+                <line x1={pad} y1={b.y0} x2={width - pad} y2={b.y0} stroke="rgba(42,47,63,0.85)" />
+                <text x={pad + 6} y={b.y0 + 16} fill="rgba(170,177,195,0.85)" fontSize="12" fontFamily="ui-monospace, Menlo, Consolas, monospace">
+                  {L}-row
+                </text>
+              </g>
+            );
+          })}
+          <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="rgba(42,47,63,0.85)" />
+
+          {/* Plot paths + points */}
+          {["A", "B", "C", "D"].map((L) => {
+            const arr = data[L] || [];
+            const count = arr.length || 1;
+
+            const buildPath = (side, which) => {
+              let d = "";
+              for (let i = 0; i < arr.length; i++) {
+                const p = arr[i];
+                const v =
+                  side === "L"
+                    ? which === "before"
+                      ? p.beforeL
+                      : p.afterL
+                    : which === "before"
+                    ? p.beforeR
+                    : p.afterR;
+
+                if (!Number.isFinite(v)) continue;
+                const x = xFor(side, i, count);
+                const y = bandY(L, v);
+                d += d ? ` L ${x} ${y}` : `M ${x} ${y}`;
+              }
+              return d;
+            };
+
+            return (
+              <g key={`plot-${L}`}>
+                {/* Before dashed */}
+                <path d={buildPath("L", "before")} fill="none" stroke="rgba(176,132,255,0.65)" strokeWidth="2" strokeDasharray="6 6" />
+                <path d={buildPath("R", "before")} fill="none" stroke="rgba(102,204,255,0.65)" strokeWidth="2" strokeDasharray="6 6" />
+
+                {/* After solid */}
+                <path d={buildPath("L", "after")} fill="none" stroke="rgba(176,132,255,1)" strokeWidth="3" />
+                <path d={buildPath("R", "after")} fill="none" stroke="rgba(102,204,255,1)" strokeWidth="3" />
+
+                {/* After points with hover */}
+                {arr.map((p, i) => {
+                  const pts = [
+                    { side: "L", before: p.beforeL, after: p.afterL },
+                    { side: "R", before: p.beforeR, after: p.afterR },
+                  ];
+                  return pts.map((it) => {
+                    if (!Number.isFinite(it.after)) return null;
+                    const x = xFor(it.side, i, count);
+                    const y = bandY(L, it.after);
+                    const sev = severity(it.after, tol);
+                    return (
+                      <circle
+                        key={`${p.lineId}-${it.side}`}
+                        cx={x}
+                        cy={y}
+                        r={5}
+                        fill={sevColor(sev)}
+                        stroke="rgba(10,12,16,0.9)"
+                        strokeWidth="2"
+                        onMouseEnter={() =>
+                          setHover({
+                            letter: L,
+                            lineId: p.lineId,
+                            groupName: p.groupName,
+                            side: it.side,
+                            before: it.before,
+                            after: it.after,
+                            sev,
+                            x,
+                            y,
+                          })
+                        }
+                        onMouseLeave={() => setHover(null)}
+                      />
+                    );
+                  });
+                })}
+              </g>
+            );
+          })}
+
+          {/* Tooltip */}
+          {hover ? (
+            <g>
+              <rect
+                x={Math.min(width - 305, Math.max(10, hover.x + 10))}
+                y={Math.max(10, hover.y - 72)}
+                width={295}
+                height={64}
+                rx={10}
+                ry={10}
+                fill="rgba(12,14,22,0.95)"
+                stroke="rgba(42,47,63,1)"
+              />
+              <text
+                x={Math.min(width - 292, Math.max(20, hover.x + 20))}
+                y={Math.max(28, hover.y - 46)}
+                fill="#eef1ff"
+                fontSize="12"
+                fontFamily="ui-monospace, Menlo, Consolas, monospace"
+              >
+                {`${hover.lineId} (${hover.side})  group: ${hover.groupName}`}
+              </text>
+              <text
+                x={Math.min(width - 292, Math.max(20, hover.x + 20))}
+                y={Math.max(46, hover.y - 28)}
+                fill="rgba(170,177,195,0.95)"
+                fontSize="12"
+                fontFamily="ui-monospace, Menlo, Consolas, monospace"
+              >
+                {`Before: ${Number.isFinite(hover.before) ? Math.round(hover.before) : "—"}mm   After: ${
+                  Number.isFinite(hover.after) ? Math.round(hover.after) : "—"
+                }mm   Sev: ${hover.sev}`}
+              </text>
+            </g>
+          ) : null}
+        </svg>
+      </div>
+
+      <div style={{ color: "#aab1c3", fontSize: 12, marginTop: 8, display: "flex", gap: 14, flexWrap: "wrap" }}>
+        <span>Solid = After</span>
+        <span>Dashed = Before</span>
+        <span>Target = 0mm</span>
+        {Number.isFinite(tol) && tol > 0 ? (
+          <>
+            <span>Yellow = within 3mm of tolerance</span>
+            <span>Red = outside tolerance</span>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
