@@ -10,7 +10,7 @@ import BUILTIN_PROFILES from "./wingProfiles.json";
  * - Keeps legacy per-line loops as fallback (won’t break older saved sessions)
  */
 
-const APP_VERSION = "0.2.3a-patchG";
+const APP_VERSION = "0.2.3B-patchG";
 
 /* ------------------------- Built-in profiles ------------------------- */
 
