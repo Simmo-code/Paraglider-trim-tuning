@@ -1550,6 +1550,18 @@ export default function App() {
                 points={chartPoints}
                 tolerance={meta.tolerance || 0}
               />
+<div style={{ height: 12 }} />
+
+<RearViewWingChart
+  title="Rear View Wing Trim (A/B/C/D span) — Before vs After"
+  wideRows={wideRows}
+  meta={meta}
+  showCorrected={showCorrected}
+  groupLoopSetup={groupLoopSetup}
+  loopTypes={loopTypes}
+  adjustments={adjustments}
+  activeProfile={activeProfile}
+/>
 
               <div style={{ height: 12 }} />
 
@@ -2271,6 +2283,400 @@ function WingProfileChart({ title, groupStats, tolerance }) {
         <span>Purple = Left (after)</span>
         <span>Cyan = Right (after)</span>
         <span>Small tick = Before</span>
+      </div>
+    </div>
+  );
+}
+function RearViewWingChart({
+  title,
+  wideRows,
+  meta,
+  showCorrected,
+  groupLoopSetup,
+  loopTypes,
+  adjustments,
+  activeProfile,
+}) {
+  const width = 1100;
+  const height = 440;
+  const pad = 26;
+
+  const tol = meta?.tolerance ?? 0;
+  const warnBand = Math.max(0, (meta?.tolerance ?? 0) - 3);
+  const corr = showCorrected ? (meta?.correction ?? 0) : 0;
+
+  // Build per-letter arrays of line points in outward order (1..N)
+  const dataByLetter = React.useMemo(() => {
+    const map = { A: [], B: [], C: [], D: [] };
+
+    for (const r of wideRows || []) {
+      for (const L of ["A", "B", "C", "D"]) {
+        const b = r?.[L];
+        if (!b?.line) continue;
+
+        const p = parseLineId(b.line);
+        if (!p) continue;
+
+        const groupName = groupForLine(activeProfile, b.line) || `${L}R?`;
+        const kLoopL = `${groupName}|L`;
+        const kLoopR = `${groupName}|R`;
+
+        const loopTypeL = groupLoopSetup?.[kLoopL] || "SL";
+        const loopTypeR = groupLoopSetup?.[kLoopR] || "SL";
+        const loopDeltaL = Number.isFinite(loopTypes?.[loopTypeL]) ? loopTypes[loopTypeL] : 0;
+        const loopDeltaR = Number.isFinite(loopTypes?.[loopTypeR]) ? loopTypes[loopTypeR] : 0;
+
+        const adjL = getAdjustment(adjustments || {}, groupName, "L");
+        const adjR = getAdjustment(adjustments || {}, groupName, "R");
+
+        const nominal = b.nominal;
+
+        // BEFORE baseline = (rawMeasured + correction) + baseline loop delta
+        const beforeL = deltaMm({ nominal, measured: b.measL, correction: corr, adjustment: loopDeltaL });
+        const beforeR = deltaMm({ nominal, measured: b.measR, correction: corr, adjustment: loopDeltaR });
+
+        // AFTER = BEFORE + trim adjustment
+        const afterL = Number.isFinite(beforeL) ? beforeL + (adjL || 0) : null;
+        const afterR = Number.isFinite(beforeR) ? beforeR + (adjR || 0) : null;
+
+        map[L].push({
+          lineId: b.line,
+          num: p.num,
+          groupName,
+          nominal,
+          beforeL,
+          beforeR,
+          afterL,
+          afterR,
+        });
+      }
+    }
+
+    for (const L of ["A", "B", "C", "D"]) {
+      map[L].sort((a, b) => (a.num ?? 0) - (b.num ?? 0));
+    }
+    return map;
+  }, [wideRows, meta, showCorrected, groupLoopSetup, loopTypes, adjustments, activeProfile]);
+
+  const [hover, setHover] = React.useState(null);
+
+  // Symmetry metrics: mean abs(L-R) using AFTER deltas (per row + overall)
+  const symmetry = React.useMemo(() => {
+    const out = { overall: null, A: null, B: null, C: null, D: null };
+    const collect = (arr) => {
+      const diffs = [];
+      for (const p of arr || []) {
+        if (Number.isFinite(p.afterL) && Number.isFinite(p.afterR)) {
+          diffs.push(Math.abs(p.afterL - p.afterR));
+        }
+      }
+      return diffs.length ? diffs.reduce((a, b) => a + b, 0) / diffs.length : null;
+    };
+    out.A = collect(dataByLetter.A);
+    out.B = collect(dataByLetter.B);
+    out.C = collect(dataByLetter.C);
+    out.D = collect(dataByLetter.D);
+
+    const allDiffs = [];
+    for (const L of ["A", "B", "C", "D"]) {
+      const arr = dataByLetter[L] || [];
+      for (const p of arr) {
+        if (Number.isFinite(p.afterL) && Number.isFinite(p.afterR)) {
+          allDiffs.push(Math.abs(p.afterL - p.afterR));
+        }
+      }
+    }
+    out.overall = allDiffs.length ? allDiffs.reduce((a, b) => a + b, 0) / allDiffs.length : null;
+    return out;
+  }, [dataByLetter]);
+
+  // Compute global y-domain (so bands share a consistent sense of scale)
+  const yDomain = React.useMemo(() => {
+    let vals = [];
+    for (const L of ["A", "B", "C", "D"]) {
+      for (const p of dataByLetter[L] || []) {
+        if (Number.isFinite(p.beforeL)) vals.push(p.beforeL);
+        if (Number.isFinite(p.beforeR)) vals.push(p.beforeR);
+        if (Number.isFinite(p.afterL)) vals.push(p.afterL);
+        if (Number.isFinite(p.afterR)) vals.push(p.afterR);
+      }
+    }
+    if (!vals.length) return { min: -10, max: 10 };
+    const min = Math.min(...vals);
+    const max = Math.max(...vals);
+    const extra = Math.max(6, Math.round((max - min) * 0.15));
+    return { min: min - extra, max: max + extra };
+  }, [dataByLetter]);
+
+  const yScale = (v) => {
+    const h = height - pad * 2;
+    const t = (v - yDomain.min) / (yDomain.max - yDomain.min || 1);
+    return pad + (1 - t) * h;
+  };
+
+  // Each letter is one horizontal band
+  const bands = React.useMemo(() => {
+    const bandH = (height - pad * 2) / 4;
+    return {
+      A: { y0: pad + bandH * 0, y1: pad + bandH * 1 },
+      B: { y0: pad + bandH * 1, y1: pad + bandH * 2 },
+      C: { y0: pad + bandH * 2, y1: pad + bandH * 3 },
+      D: { y0: pad + bandH * 3, y1: pad + bandH * 4 },
+    };
+  }, []);
+
+  const xFor = (side, idx, count) => {
+    const cx = width / 2;
+    const maxSpan = width / 2 - pad - 40;
+    const step = count > 1 ? maxSpan / (count - 1) : 0;
+    return side === "L" ? cx - idx * step : cx + idx * step;
+  };
+
+  const bandY = (letter, v) => {
+    const b = bands[letter];
+    const globalY = yScale(v);
+    const t = (globalY - pad) / (height - pad * 2);
+    return b.y0 + t * (b.y1 - b.y0);
+  };
+
+  const sevColor = (sev) => {
+    if (sev === "red") return "rgba(255,90,90,1)";
+    if (sev === "yellow") return "rgba(255,210,90,1)";
+    return "rgba(185,198,255,1)";
+  };
+
+  // Background tolerance shading per band
+  const bandShading = (L) => {
+    if (!Number.isFinite(tol) || tol <= 0) return null;
+
+    const yTolTop = bandY(L, +tol);
+    const yTolBot = bandY(L, -tol);
+    const yWarnTop = bandY(L, +warnBand);
+    const yWarnBot = bandY(L, -warnBand);
+
+    // Ensure top < bottom
+    const topTol = Math.min(yTolTop, yTolBot);
+    const botTol = Math.max(yTolTop, yTolBot);
+    const topWarn = Math.min(yWarnTop, yWarnBot);
+    const botWarn = Math.max(yWarnTop, yWarnBot);
+
+    return (
+      <g key={`shade-${L}`}>
+        {/* Outside tolerance (red tint) */}
+        <rect x={pad} y={bands[L].y0} width={width - pad * 2} height={topTol - bands[L].y0} fill="rgba(255,90,90,0.07)" />
+        <rect x={pad} y={botTol} width={width - pad * 2} height={bands[L].y1 - botTol} fill="rgba(255,90,90,0.07)" />
+
+        {/* Within tolerance, but near limit (yellow tint): between warnBand and tol */}
+        {warnBand < tol ? (
+          <>
+            <rect x={pad} y={topTol} width={width - pad * 2} height={topWarn - topTol} fill="rgba(255,210,90,0.08)" />
+            <rect x={pad} y={botWarn} width={width - pad * 2} height={botTol - botWarn} fill="rgba(255,210,90,0.08)" />
+          </>
+        ) : null}
+
+        {/* Safe zone (subtle) */}
+        <rect x={pad} y={topWarn} width={width - pad * 2} height={botWarn - topWarn} fill="rgba(170,177,195,0.04)" />
+
+        {/* Lines at +/- tolerance and +/- warn band */}
+        <line x1={pad} y1={yTolTop} x2={width - pad} y2={yTolTop} stroke="rgba(255,90,90,0.35)" strokeWidth="1" />
+        <line x1={pad} y1={yTolBot} x2={width - pad} y2={yTolBot} stroke="rgba(255,90,90,0.35)" strokeWidth="1" />
+
+        {warnBand < tol ? (
+          <>
+            <line x1={pad} y1={yWarnTop} x2={width - pad} y2={yWarnTop} stroke="rgba(255,210,90,0.35)" strokeWidth="1" />
+            <line x1={pad} y1={yWarnBot} x2={width - pad} y2={yWarnBot} stroke="rgba(255,210,90,0.35)" strokeWidth="1" />
+          </>
+        ) : null}
+
+        {/* Target line at 0 */}
+        <line x1={pad} y1={bandY(L, 0)} x2={width - pad} y2={bandY(L, 0)} stroke="rgba(170,177,195,0.25)" strokeWidth="1" />
+      </g>
+    );
+  };
+
+  return (
+    <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "baseline" }}>
+        <div style={{ fontWeight: 900 }}>{title}</div>
+        <div style={{ color: "#aab1c3", fontSize: 12 }}>
+          Symmetry (avg |L−R| after):{" "}
+          <b style={{ color: "#eef1ff" }}>{Number.isFinite(symmetry.overall) ? `${symmetry.overall.toFixed(1)}mm` : "—"}</b>
+        </div>
+      </div>
+
+      <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5, marginTop: 4 }}>
+        Rear view (center → tips). Bands: A/B/C/D. Dashed = Before, solid = After. Hover points for details.
+      </div>
+
+      <div style={{ height: 10 }} />
+
+      {/* Row symmetry badges */}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+        {["A", "B", "C", "D"].map((L) => (
+          <div
+            key={`sym-${L}`}
+            style={{
+              border: "1px solid #2a2f3f",
+              borderRadius: 999,
+              padding: "6px 10px",
+              background: "#0b0c10",
+              color: "#aab1c3",
+              fontSize: 12,
+              fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+            }}
+          >
+            {L}: {Number.isFinite(symmetry[L]) ? `${symmetry[L].toFixed(1)}mm` : "—"}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ overflowX: "auto" }}>
+        <svg width={width} height={height} style={{ display: "block", background: "#0b0c10", borderRadius: 12 }}>
+          {/* Center line */}
+          <line x1={width / 2} y1={pad} x2={width / 2} y2={height - pad} stroke="rgba(170,177,195,0.25)" strokeWidth="1" />
+
+          {/* Band shading + separators + labels */}
+          {["A", "B", "C", "D"].map((L) => {
+            const b = bands[L];
+            return (
+              <g key={`band-${L}`}>
+                {bandShading(L)}
+
+                <line x1={pad} y1={b.y0} x2={width - pad} y2={b.y0} stroke="rgba(42,47,63,0.85)" />
+                <text x={pad + 6} y={b.y0 + 16} fill="rgba(170,177,195,0.85)" fontSize="12" fontFamily="ui-monospace, Menlo, Consolas, monospace">
+                  {L}-row
+                </text>
+              </g>
+            );
+          })}
+          <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="rgba(42,47,63,0.85)" />
+
+          {/* Plot each band */}
+          {["A", "B", "C", "D"].map((L) => {
+            const arr = dataByLetter[L] || [];
+            const count = arr.length || 1;
+
+            const buildPath = (side, which) => {
+              let d = "";
+              for (let i = 0; i < arr.length; i++) {
+                const p = arr[i];
+                const v =
+                  side === "L"
+                    ? which === "before"
+                      ? p.beforeL
+                      : p.afterL
+                    : which === "before"
+                    ? p.beforeR
+                    : p.afterR;
+
+                if (!Number.isFinite(v)) continue;
+                const x = xFor(side, i, count);
+                const y = bandY(L, v);
+                d += d ? ` L ${x} ${y}` : `M ${x} ${y}`;
+              }
+              return d;
+            };
+
+            return (
+              <g key={`plot-${L}`}>
+                {/* Before dashed */}
+                <path d={buildPath("L", "before")} fill="none" stroke="rgba(176,132,255,0.65)" strokeWidth="2" strokeDasharray="6 6" />
+                <path d={buildPath("R", "before")} fill="none" stroke="rgba(102,204,255,0.65)" strokeWidth="2" strokeDasharray="6 6" />
+
+                {/* After solid */}
+                <path d={buildPath("L", "after")} fill="none" stroke="rgba(176,132,255,1)" strokeWidth="3" />
+                <path d={buildPath("R", "after")} fill="none" stroke="rgba(102,204,255,1)" strokeWidth="3" />
+
+                {/* Points with hover (AFTER points) */}
+                {arr.map((p, i) => {
+                  const pts = [
+                    { side: "L", before: p.beforeL, after: p.afterL },
+                    { side: "R", before: p.beforeR, after: p.afterR },
+                  ];
+                  return pts.map((it) => {
+                    if (!Number.isFinite(it.after)) return null;
+                    const x = xFor(it.side, i, count);
+                    const y = bandY(L, it.after);
+                    const sev = severity(it.after, tol);
+                    return (
+                      <circle
+                        key={`${p.lineId}-${it.side}`}
+                        cx={x}
+                        cy={y}
+                        r={5}
+                        fill={sevColor(sev)}
+                        stroke="rgba(10,12,16,0.9)"
+                        strokeWidth="2"
+                        onMouseEnter={() =>
+                          setHover({
+                            letter: L,
+                            lineId: p.lineId,
+                            groupName: p.groupName,
+                            side: it.side,
+                            before: it.before,
+                            after: it.after,
+                            sev,
+                            x,
+                            y,
+                          })
+                        }
+                        onMouseLeave={() => setHover(null)}
+                      />
+                    );
+                  });
+                })}
+              </g>
+            );
+          })}
+
+          {/* Tooltip */}
+          {hover ? (
+            <g>
+              <rect
+                x={Math.min(width - 305, Math.max(10, hover.x + 10))}
+                y={Math.max(10, hover.y - 72)}
+                width={295}
+                height={64}
+                rx={10}
+                ry={10}
+                fill="rgba(12,14,22,0.95)"
+                stroke="rgba(42,47,63,1)"
+              />
+              <text
+                x={Math.min(width - 292, Math.max(20, hover.x + 20))}
+                y={Math.max(28, hover.y - 46)}
+                fill="#eef1ff"
+                fontSize="12"
+                fontFamily="ui-monospace, Menlo, Consolas, monospace"
+              >
+                {`${hover.lineId} (${hover.side})  group: ${hover.groupName}`}
+              </text>
+              <text
+                x={Math.min(width - 292, Math.max(20, hover.x + 20))}
+                y={Math.max(46, hover.y - 28)}
+                fill="rgba(170,177,195,0.95)"
+                fontSize="12"
+                fontFamily="ui-monospace, Menlo, Consolas, monospace"
+              >
+                {`Before: ${Number.isFinite(hover.before) ? Math.round(hover.before) : "—"}mm   After: ${
+                  Number.isFinite(hover.after) ? Math.round(hover.after) : "—"
+                }mm   Sev: ${hover.sev}`}
+              </text>
+            </g>
+          ) : null}
+        </svg>
+      </div>
+
+      <div style={{ color: "#aab1c3", fontSize: 12, marginTop: 8, display: "flex", gap: 14, flexWrap: "wrap" }}>
+        <span>Solid = After</span>
+        <span>Dashed = Before</span>
+        <span>Target = 0mm</span>
+        {Number.isFinite(tol) && tol > 0 ? (
+          <>
+            <span>Yellow = within 3mm of tolerance</span>
+            <span>Red = outside tolerance</span>
+          </>
+        ) : null}
       </div>
     </div>
   );
