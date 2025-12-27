@@ -481,6 +481,32 @@ export default function App() {
     localStorage.setItem("wingProfilesJson", json);
     setProfileKey(key);
   }
+function newProfileFromCurrent(name) {
+  const key = String(name || "").trim() || "Imported Wing";
+  const nextProfiles = { ...profiles };
+
+  // If profile exists, just return the key
+  if (nextProfiles[key]) return key;
+
+  // Create a new profile based on the currently selected/active profile as a template
+  const base = JSON.parse(JSON.stringify(activeProfile || {}));
+
+  base.name = key;
+  base.mapping = base.mapping && typeof base.mapping === "object"
+    ? base.mapping
+    : { A: [], B: [], C: [], D: [] };
+
+  nextProfiles[key] = base;
+
+  // Persist + select it
+  const json = JSON.stringify(nextProfiles, null, 2);
+  setProfileJson(json);
+  localStorage.setItem("wingProfilesJson", json);
+  setProfileKey(key);
+
+  return key;
+}
+
 
 function onImportFile(file) {
   const name = (file?.name || "").toLowerCase();
