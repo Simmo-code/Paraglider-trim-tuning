@@ -2141,19 +2141,7 @@ function DeltaLineChart({ title, points, tolerance }) {
   );
 }
 
-//think it goes here
-<div style={{ height: 12 }} />
 
-<RearViewWingChart
-  wideRows={wideRows}
-  activeProfile={activeProfile}
-  tolerance={meta.tolerance}
-  showCorrected={showCorrected}
-  correction={meta.correction}
-  adjustments={adjustments}
-  loopTypes={loopTypes}
-  groupLoopSetup={groupLoopSetup}
-/>
 
 function WingProfileChart({ title, groupStats, tolerance }) {
   const width = 1100;
