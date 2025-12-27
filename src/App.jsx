@@ -292,21 +292,14 @@ export default function App() {
 
   const [meta, setMeta] = useState({ input1: "", input2: "", tolerance: 0, correction: 0 });
   const [wideRows, setWideRows] = useState([]);
-  
-const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false);
-const [draftProfileKey, setDraftProfileKey] = useState(profileKey);
-const [draftProfile, setDraftProfile] = useState(() =>
-  JSON.parse(JSON.stringify(profiles[profileKey] || activeProfile || {}))
-);
-const [showAdvancedJson, setShowAdvancedJson] = useState(false);
 
-useEffect(() => {
-  // when selection changes, refresh draft
-  setDraftProfileKey(profileKey);
-  setDraftProfile(JSON.parse(JSON.stringify(profiles[profileKey] || activeProfile || {})));
-}, [profileKey]); // eslint-disable-line
+  const [showCorrected, setShowCorrected] = useState(() => {
+    const s = localStorage.getItem("showCorrected");
+    return s ? s === "1" : true;
+  });
+  useEffect(() => localStorage.setItem("showCorrected", showCorrected ? "1" : "0"), [showCorrected]);
 
-  // Profiles JSON (persisted)
+  // ---------- Built-in + saved profiles ----------
   const [profileJson, setProfileJson] = useState(() => {
     const saved = localStorage.getItem("wingProfilesJson");
     return saved || JSON.stringify({ ...BUILTIN_PROFILES }, null, 2);
@@ -319,116 +312,61 @@ useEffect(() => {
     } catch {}
     return { ...BUILTIN_PROFILES };
   }, [profileJson]);
-	const [profileKey, setProfileKey] = useState(() => Object.keys(BUILTIN_PROFILES)[0] || "");
 
-   const activeProfile =
+  const [profileKey, setProfileKey] = useState(() => Object.keys(BUILTIN_PROFILES)[0] || "");
+
+  const activeProfile =
     profiles[profileKey] || Object.values(profiles)[0] || Object.values(BUILTIN_PROFILES)[0];
-const profilesImportRef = useRef(null);
 
-function setProfilesObject(nextProfiles) {
-  const json = JSON.stringify(nextProfiles, null, 2);
-  setProfileJson(json);
-  localStorage.setItem("wingProfilesJson", json);
-}
-function deepClone(x) {
-  return JSON.parse(JSON.stringify(x));
-}
+  const profilesImportRef = useRef(null);
 
-function openProfileEditor() {
-  setDraftProfileKey(profileKey);
-  setDraftProfile(deepClone(profiles[profileKey] || activeProfile || {}));
-  setShowAdvancedJson(false);
-  setIsProfileEditorOpen(true);
-}
-
-function saveDraftProfile() {
-  const nextProfiles = { ...profiles };
-  const key = String(draftProfileKey || "").trim();
-  if (!key) return alert("Profile name cannot be empty.");
-
-  const p = deepClone(draftProfile || {});
-  p.name = key;
-  p.mmPerLoop = Number.isFinite(n(p.mmPerLoop)) ? n(p.mmPerLoop) : 10;
-  p.mapping = p.mapping && typeof p.mapping === "object" ? p.mapping : { A: [], B: [], C: [], D: [] };
-
-  nextProfiles[key] = p;
-
-  const json = JSON.stringify(nextProfiles, null, 2);
-  setProfileJson(json);
-  localStorage.setItem("wingProfilesJson", json);
-  setProfileKey(key);
-  setIsProfileEditorOpen(false);
-}
-
-function newProfileFromCurrent() {
-  const base = deepClone(profiles[profileKey] || activeProfile || {});
-  const name = prompt("New profile name?", `${profileKey} (copy)`);
-  if (!name) return;
-  setDraftProfileKey(name);
-  base.name = name;
-  setDraftProfile(base);
-  setShowAdvancedJson(false);
-  setIsProfileEditorOpen(true);
-}
-
-function deleteSelectedProfile() {
-  if (!confirm(`Delete profile "${profileKey}"? This cannot be undone.`)) return;
-  const nextProfiles = { ...profiles };
-  delete nextProfiles[profileKey];
-
-  const json = JSON.stringify(nextProfiles, null, 2);
-  setProfileJson(json);
-  localStorage.setItem("wingProfilesJson", json);
-
-  const first = Object.keys(nextProfiles)[0] || Object.keys(BUILTIN_PROFILES)[0] || "";
-  setProfileKey(first);
-}
-
-function exportAllProfiles() {
-  // Exports the exact library currently in use (built-in + any custom user edits)
-  const filename = `wing-profiles-${new Date().toISOString().slice(0, 10)}.json`;
-  downloadTextFile(filename, JSON.stringify(profiles, null, 2));
-}
-
-function exportCurrentProfileOnly() {
-  const p = profiles[profileKey];
-  if (!p) return alert("No profile selected.");
-  const filename = `${(profileKey || "profile").replace(/[^\w\- ]+/g, "")}.json`;
-  downloadTextFile(filename, JSON.stringify({ [profileKey]: p }, null, 2));
-}
-
-function resetProfilesToBuiltIn() {
-  localStorage.removeItem("wingProfilesJson");
-  setProfileJson(JSON.stringify({ ...BUILTIN_PROFILES }, null, 2));
-  const first = Object.keys(BUILTIN_PROFILES)[0] || "";
-  setProfileKey(first);
-}
-
-async function importProfilesFromFile(file) {
-  try {
-    const text = await file.text();
-    const incoming = safeParseProfilesJson(text);
-
-    // Merge incoming into current profiles (incoming overwrites on name collisions)
-    const merged = { ...profiles, ...incoming };
-
-    // Enforce name field if missing
-    for (const [k, v] of Object.entries(merged)) {
-      if (v && typeof v === "object" && !v.name) v.name = k;
-    }
-
-    setProfilesObject(merged);
-
-    // If exactly one profile was imported, auto-select it
-    const keys = Object.keys(incoming);
-    if (keys.length === 1) setProfileKey(keys[0]);
-
-    alert(`Imported ${Object.keys(incoming).length} profile(s).`);
-  } catch (e) {
-    console.error(e);
-    alert("Could not import profiles JSON. Make sure the file is valid JSON exported from this app.");
+  function setProfilesObject(nextProfiles) {
+    const json = JSON.stringify(nextProfiles, null, 2);
+    setProfileJson(json);
+    localStorage.setItem("wingProfilesJson", json);
   }
-}
+
+  function deepClone(x) {
+    return JSON.parse(JSON.stringify(x));
+  }
+
+  // ---------- Guided Profile Editor state (SAFE: depends on profiles/profileKey above) ----------
+  const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false);
+  const [draftProfileKey, setDraftProfileKey] = useState(profileKey || "");
+  const [draftProfile, setDraftProfile] = useState(() =>
+    deepClone(profiles[profileKey] || activeProfile || {})
+  );
+  const [showAdvancedJson, setShowAdvancedJson] = useState(false);
+
+  useEffect(() => {
+    setDraftProfileKey(profileKey || "");
+    setDraftProfile(deepClone(profiles[profileKey] || activeProfile || {}));
+  }, [profileKey, profileJson]); // refresh draft when profiles change
+
+  function openProfileEditor() {
+    setDraftProfileKey(profileKey || "");
+    setDraftProfile(deepClone(profiles[profileKey] || activeProfile || {}));
+    setShowAdvancedJson(false);
+    setIsProfileEditorOpen(true);
+  }
+
+  function saveDraftProfile() {
+    const nextProfiles = { ...profiles };
+    const key = String(draftProfileKey || "").trim();
+    if (!key) return alert("Profile name cannot be empty.");
+
+    const p = deepClone(draftProfile || {});
+    p.name = key;
+    p.mapping = p.mapping && typeof p.mapping === "object" ? p.mapping : { A: [], B: [], C: [], D: [] };
+
+    nextProfiles[key] = p;
+    setProfilesObject(nextProfiles);
+    setProfileKey(key);
+    setIsProfileEditorOpen(false);
+  }
+
+  // --- keep the rest of your App.jsx below this point unchanged ---
+
 
   // Adjustments (per group)
   const [adjustments, setAdjustments] = useState(() => {
