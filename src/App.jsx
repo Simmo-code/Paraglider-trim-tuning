@@ -2330,7 +2330,8 @@ function BlockTable({
       </div>
 
       <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
+	  // changed from 720 to 420
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 420 }}>
           <thead>
             <tr style={{ color: "#aab1c3", fontSize: 12 }}>
               <th style={{ textAlign: "left", padding: "6px 8px" }}>Line</th>
