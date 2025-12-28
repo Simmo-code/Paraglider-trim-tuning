@@ -143,16 +143,6 @@ function getAllLinesFromWide(wideRows) {
   return out;
 }
 
-function severity(delta, tolerance) {
-  if (!Number.isFinite(delta)) return "none";
-  const a = Math.abs(delta);
-  const tol = tolerance || 0;
-  if (tol <= 0) return "ok";
-  const warnBand = Math.max(0, tol - 3); // yellow band within 3mm of tolerance
-  if (a >= tol) return "red";
-  if (a >= warnBand) return "yellow";
-  return "ok";
-}
 
 function avg(nums) {
   const v = nums.filter((x) => Number.isFinite(x));
