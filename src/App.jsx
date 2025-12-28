@@ -418,26 +418,18 @@ export default function App() {
   const [includedRows, setIncludedRows] = useState({ A: true, B: true, C: true, D: true });
   const [includedGroups, setIncludedGroups] = useState({}); // empty = treat as all selected
 
-  const pitchTrim = useMemo(() => {
-    // If you later add filters, these will pick them up automatically.
-    const rowIncluded = (L) =>
-      typeof includedRows === "object" ? !!includedRows[L] : true;
+    const pitchTrim = useMemo(() => {
+    const rowIncluded = (L) => !!includedRows?.[L];
 
     const groupIncluded = (g) => {
       if (!g) return false;
-      if (typeof includedGroups !== "object") return true;
       const keys = Object.keys(includedGroups || {});
-      if (keys.length === 0) return true; // treat empty map as "all selected"
+      if (keys.length === 0) return true; // empty = all included
       return !!includedGroups[g];
     };
 
-    // If you have a "Show corrected" toggle, use it.
-    const corr =
-      typeof showCorrected === "undefined" || showCorrected
-        ? meta?.correction ?? 0
-        : 0;
+    const corr = showCorrected ? (meta?.correction ?? 0) : 0;
 
-    // Collect AFTER deltas by row (A/B/C/D)
     const perRow = { A: [], B: [], C: [], D: [] };
 
     for (const r of wideRows || []) {
@@ -447,18 +439,16 @@ export default function App() {
         const b = r?.[letter];
         if (!b?.line) continue;
 
-        const lineId = b.line;
         const nominal = b.nominal;
         if (!Number.isFinite(nominal)) continue;
 
-        const groupName = groupForLine(activeProfile, lineId);
+        const groupName = groupForLine(activeProfile, b.line);
         if (!groupIncluded(groupName)) continue;
 
-        // LEFT side
+        // LEFT
         if (Number.isFinite(b.measL)) {
           const loopType = groupLoopSetup?.[`${groupName}|L`] || "SL";
-          const loopDelta =
-            Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopType] : 0;
+          const loopDelta = Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopType] : 0;
           const adj = getAdjustment(adjustments, groupName, "L") || 0;
 
           const corrected = b.measL + corr;
@@ -466,11 +456,10 @@ export default function App() {
           if (Number.isFinite(afterDelta)) perRow[letter].push(afterDelta);
         }
 
-        // RIGHT side
+        // RIGHT
         if (Number.isFinite(b.measR)) {
           const loopType = groupLoopSetup?.[`${groupName}|R`] || "SL";
-          const loopDelta =
-            Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopType] : 0;
+          const loopDelta = Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopType] : 0;
           const adj = getAdjustment(adjustments, groupName, "R") || 0;
 
           const corrected = b.measR + corr;
@@ -499,12 +488,7 @@ export default function App() {
       C,
       D,
       pitch,
-      count: {
-        A: perRow.A.length,
-        B: perRow.B.length,
-        C: perRow.C.length,
-        D: perRow.D.length,
-      },
+      count: { A: perRow.A.length, B: perRow.B.length, C: perRow.C.length, D: perRow.D.length },
     };
   }, [
     wideRows,
@@ -514,7 +498,6 @@ export default function App() {
     adjustments,
     groupLoopSetup,
     loopTypes,
-    // If you don't have these filters yet, it's fine; React will ignore them.
     includedRows,
     includedGroups,
   ]);
