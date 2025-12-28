@@ -390,6 +390,8 @@ export default function App() {
 
   const allLines = useMemo(() => getAllLinesFromWide(wideRows), [wideRows]);
   const allGroupNames = useMemo(() => extractGroupNames(wideRows, activeProfile), [wideRows, activeProfile]);
+//here
+
 
   const groupToLines = useMemo(() => {
     const map = new Map();
@@ -409,16 +411,19 @@ export default function App() {
       });
       map.set(k, arr);
     }
-	
-	  /* ===============================
+    return map;
+  }, [allLines, activeProfile]);
+
+
+  /* ===============================
      Pitch Trim calculation (A − D)
      =============================== */
-	 
+
   // ---------------- Filters (rows + groups) ----------------
   const [includedRows, setIncludedRows] = useState({ A: true, B: true, C: true, D: true });
   const [includedGroups, setIncludedGroups] = useState({}); // empty = treat as all selected
 
-    const pitchTrim = useMemo(() => {
+  const pitchTrim = useMemo(() => {
     const rowIncluded = (L) => !!includedRows?.[L];
 
     const groupIncluded = (g) => {
@@ -502,9 +507,8 @@ export default function App() {
     includedGroups,
   ]);
 
-    return map;
-  }, [allLines, activeProfile]);
 
+//end here
   const csvProfileName = useMemo(() => makeProfileNameFromMeta(meta), [meta]);
 
   function setProfilesObject(nextProfiles) {
