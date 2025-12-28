@@ -845,60 +845,6 @@ export default function App() {
 
 // 28/12/25 20:17
 
-// ---------------- Filters: included rows + included groups (Option 1 = groups only) ----------------
-const [includedRows, setIncludedRows] = useState(() => {
-  try {
-    const s = localStorage.getItem("includedRows");
-    return s ? JSON.parse(s) : { A: true, B: true, C: true, D: true };
-  } catch {
-    return { A: true, B: true, C: true, D: true };
-  }
-});
-useEffect(() => localStorage.setItem("includedRows", JSON.stringify(includedRows)), [includedRows]);
-
-const [includedGroups, setIncludedGroups] = useState(() => {
-  try {
-    const s = localStorage.getItem("includedGroups");
-    return s ? JSON.parse(s) : {}; // map { groupName: true }
-  } catch {
-    return {};
-  }
-});
-useEffect(() => localStorage.setItem("includedGroups", JSON.stringify(includedGroups)), [includedGroups]);
-
-function selectAllRows() {
-  setIncludedRows({ A: true, B: true, C: true, D: true });
-}
-function clearAllRows() {
-  setIncludedRows({ A: false, B: false, C: false, D: false });
-}
-
-function selectAllGroups() {
-  const next = {};
-  for (const g of allGroupNames || []) next[g] = true;
-  setIncludedGroups(next);
-}
-function clearAllGroups() {
-  setIncludedGroups({});
-}
-
-// When a new file is imported and groups change, default to "all selected" if none set yet
-useEffect(() => {
-  if (!allGroupNames?.length) return;
-  if (!includedGroups || Object.keys(includedGroups).length === 0) {
-    const next = {};
-    for (const g of allGroupNames) next[g] = true;
-    setIncludedGroups(next);
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [allGroupNames]);
-
-function isGroupIncluded(groupName) {
-  if (!groupName) return false;
-  const keys = Object.keys(includedGroups || {});
-  if (keys.length === 0) return true; // treat empty as "all"
-  return !!includedGroups[groupName];
-}
 
 
   function StepButton({ current, num, setStep, enabled, label }) {
