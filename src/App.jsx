@@ -2454,22 +2454,31 @@ function BlockTable({
     </div>
   );
 }
-function RearViewWingChart({ wideRows, activeProfile, tolerance, showCorrected, correction, adjustments, loopTypes, groupLoopSetup }) {
+
+function RearViewWingChart({
+  wideRows,
+  activeProfile,
+  tolerance,
+  showCorrected,
+  correction,
+  adjustments,
+  loopTypes,
+  groupLoopSetup,
+}) {
   const width = 1100;
-  const height = 420;
+  const height = 440;
   const pad = 24;
   const tol = Number.isFinite(tolerance) ? tolerance : 0;
 
-  // Helpers reused from your app (must already exist in file):
-  // - getAllLinesFromWide, groupForLine, parseLineId, deltaMm, severity, avg, getAdjustment
-  // If any of those are not present in your stable file, tell me and I’ll adapt.
-
   const [hover, setHover] = React.useState(null);
+  const [spanMode, setSpanMode] = React.useState("real"); // "linear" | "real"
+  const [showGroupCuts, setShowGroupCuts] = React.useState(true);
 
+  // If you don't have these helpers in your file, Step 4 would already be failing:
+  // groupForLine, parseLineId, deltaMm, severity, getAdjustment
   const data = React.useMemo(() => {
     if (!wideRows?.length) return null;
 
-    // Flatten into points: per lineId, compute before/after (L/R)
     const points = [];
     for (const r of wideRows) {
       for (const letter of ["A", "B", "C", "D"]) {
@@ -2479,41 +2488,30 @@ function RearViewWingChart({ wideRows, activeProfile, tolerance, showCorrected, 
         const lineId = b.line;
         const groupName = groupForLine(activeProfile, lineId) || "—";
 
-        // Baseline loop delta per GROUP (Step 3)
         const kL = `${groupName}|L`;
         const kR = `${groupName}|R`;
+
         const loopNameL = groupLoopSetup?.[kL] || "SL";
         const loopNameR = groupLoopSetup?.[kR] || "SL";
+
         const loopDeltaL = Number.isFinite(loopTypes?.[loopNameL]) ? loopTypes[loopNameL] : 0;
         const loopDeltaR = Number.isFinite(loopTypes?.[loopNameR]) ? loopTypes[loopNameR] : 0;
 
-        // Correction toggle
         const corr = showCorrected ? (Number.isFinite(correction) ? correction : 0) : 0;
 
-        // Before deltas (mm)
         const beforeL = deltaMm({ nominal: b.nominal, measured: b.measL, correction: corr, adjustment: loopDeltaL });
         const beforeR = deltaMm({ nominal: b.nominal, measured: b.measR, correction: corr, adjustment: loopDeltaR });
 
-        // After includes trim adjustments (Step 4)
         const adjL = getAdjustment(adjustments || {}, groupName, "L");
         const adjR = getAdjustment(adjustments || {}, groupName, "R");
 
         const afterL = deltaMm({ nominal: b.nominal, measured: b.measL, correction: corr, adjustment: loopDeltaL + adjL });
         const afterR = deltaMm({ nominal: b.nominal, measured: b.measR, correction: corr, adjustment: loopDeltaR + adjR });
 
-        points.push({
-          letter,
-          lineId,
-          groupName,
-          beforeL,
-          beforeR,
-          afterL,
-          afterR,
-        });
+        points.push({ letter, lineId, groupName, beforeL, beforeR, afterL, afterR });
       }
     }
 
-    // Group by letter, then sort by line number
     const byLetter = { A: [], B: [], C: [], D: [] };
     for (const p of points) byLetter[p.letter].push(p);
 
@@ -2526,21 +2524,30 @@ function RearViewWingChart({ wideRows, activeProfile, tolerance, showCorrected, 
     }
 
     return byLetter;
-  }, [wideRows, activeProfile, tolerance, showCorrected, correction, adjustments, loopTypes, groupLoopSetup]);
+  }, [wideRows, activeProfile, showCorrected, correction, adjustments, loopTypes, groupLoopSetup]);
 
   if (!data) {
     return (
-      <div style={{ padding: 12, border: "1px solid #2a2f3f", borderRadius: 14, background: "#0e1018", color: "#aab1c3", fontSize: 12 }}>
+      <div
+        style={{
+          padding: 12,
+          border: "1px solid #2a2f3f",
+          borderRadius: 14,
+          background: "#0e1018",
+          color: "#aab1c3",
+          fontSize: 12,
+        }}
+      >
         Rear view chart will appear after importing a file.
       </div>
     );
   }
 
   const bands = {
-    A: { y0: pad + 10, y1: pad + 10 + 80 },
-    B: { y0: pad + 10 + 90, y1: pad + 10 + 170 },
-    C: { y0: pad + 10 + 180, y1: pad + 10 + 260 },
-    D: { y0: pad + 10 + 270, y1: pad + 10 + 350 },
+    A: { y0: pad + 40, y1: pad + 40 + 85 },
+    B: { y0: pad + 40 + 95, y1: pad + 40 + 180 },
+    C: { y0: pad + 40 + 190, y1: pad + 40 + 275 },
+    D: { y0: pad + 40 + 285, y1: pad + 40 + 370 },
   };
 
   function sevColor(sev) {
@@ -2549,8 +2556,8 @@ function RearViewWingChart({ wideRows, activeProfile, tolerance, showCorrected, 
     return "rgba(140,255,190,1)";
   }
 
+  // Maps delta mm to y within a band (0mm centered)
   function bandY(letter, v) {
-    // Map v (delta mm) to band height (0mm centered). Use max range = tol*2 or 30mm minimum.
     const b = bands[letter];
     const range = Math.max(30, tol > 0 ? tol * 2.2 : 50);
     const mid = (b.y0 + b.y1) / 2;
@@ -2558,50 +2565,139 @@ function RearViewWingChart({ wideRows, activeProfile, tolerance, showCorrected, 
     return mid - v * pxPerMm;
   }
 
-  function xFor(side, i, count) {
-    // rear view: left side starts near center and goes outward left; right side starts near center and goes outward right
-    const center = width / 2;
-    const span = (width - pad * 2) / 2 - 30;
-    const t = count <= 1 ? 0 : i / (count - 1);
-    return side === "L" ? center - t * span : center + t * span;
+  // Wing-span scaling: "real" compresses near tips slightly (more realistic)
+  function spanScale(t) {
+    // t: 0..1 from centre (0) to tip (1)
+    if (spanMode === "linear") return t;
+    // "real": ease-out so outer lines bunch slightly, like a planform
+    // (safe: only affects X spacing; does not change mm values)
+    const gamma = 0.75; // <1 expands inner, compresses tips
+    return Math.pow(t, gamma);
   }
 
-  function bandShade(letter) {
-    // Optional subtle shading per band
-    const b = bands[letter];
-    return <rect x={pad} y={b.y0} width={width - pad * 2} height={b.y1 - b.y0} fill="rgba(255,255,255,0.02)" />;
+  function xFor(side, i, count) {
+    const center = width / 2;
+    const halfSpan = (width - pad * 2) / 2 - 40;
+
+    // distance from centre: 0..1
+    const t = count <= 1 ? 0 : i / (count - 1);
+    const ts = spanScale(t);
+
+    // small gap so L and R don't overlap at centre
+    const centerGap = 18;
+
+    const dx = ts * halfSpan + centerGap;
+    return side === "L" ? center - dx : center + dx;
+  }
+
+  function groupCuts(letter, side) {
+    if (!showGroupCuts) return [];
+    const arr = data[letter] || [];
+    const out = [];
+    let last = null;
+    for (let i = 0; i < arr.length; i++) {
+      const g = arr[i]?.groupName || "";
+      if (i === 0) {
+        last = g;
+        continue;
+      }
+      if (g !== last) {
+        out.push({ idx: i - 0.5, from: last, to: g });
+        last = g;
+      }
+    }
+    return out;
   }
 
   return (
     <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
-      <div style={{ fontWeight: 900, marginBottom: 8 }}>Rear view wing shape (A/B/C/D rows)</div>
-      <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5 }}>
-        Center = wing middle. Left points spread left, Right points spread right. Colors show severity for <b>After</b>.
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontWeight: 900, marginBottom: 6 }}>Rear view wing shape (A/B/C/D rows)</div>
+          <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5 }}>
+            Centreline symmetry + realistic span spacing. Points are <b>After</b> (severity color). Dashed = Before.
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <label style={{ color: "#aab1c3", fontSize: 12, display: "flex", gap: 8, alignItems: "center" }}>
+            Span spacing
+            <select
+              value={spanMode}
+              onChange={(e) => setSpanMode(e.target.value)}
+              style={{
+                borderRadius: 10,
+                border: "1px solid #2a2f3f",
+                background: "#0d0f16",
+                color: "#eef1ff",
+                padding: "6px 10px",
+                outline: "none",
+                fontSize: 12,
+              }}
+            >
+              <option value="real">Realistic</option>
+              <option value="linear">Linear</option>
+            </select>
+          </label>
+
+          <label style={{ color: "#aab1c3", fontSize: 12, display: "flex", gap: 8, alignItems: "center" }}>
+            <input type="checkbox" checked={showGroupCuts} onChange={(e) => setShowGroupCuts(e.target.checked)} />
+            Show group boundaries
+          </label>
+        </div>
       </div>
 
       <div style={{ height: 10 }} />
 
       <div style={{ overflowX: "auto" }}>
         <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>
-          {/* centerline */}
-          <line x1={width / 2} y1={pad} x2={width / 2} y2={height - pad} stroke="rgba(42,47,63,0.85)" strokeDasharray="6 6" />
+          {/* Top labels */}
+          <text x={pad} y={pad + 16} fill="rgba(170,177,195,0.9)" fontSize="12" fontFamily="ui-monospace, Menlo, Consolas, monospace">
+            LEFT
+          </text>
+          <text
+            x={width - pad}
+            y={pad + 16}
+            textAnchor="end"
+            fill="rgba(170,177,195,0.9)"
+            fontSize="12"
+            fontFamily="ui-monospace, Menlo, Consolas, monospace"
+          >
+            RIGHT
+          </text>
+          <text
+            x={width / 2}
+            y={pad + 16}
+            textAnchor="middle"
+            fill="rgba(170,177,195,0.9)"
+            fontSize="12"
+            fontFamily="ui-monospace, Menlo, Consolas, monospace"
+          >
+            CENTRE
+          </text>
 
-          {/* Bands */}
+          {/* Centreline */}
+          <line x1={width / 2} y1={pad + 24} x2={width / 2} y2={height - pad} stroke="rgba(42,47,63,0.85)" strokeDasharray="6 6" />
+
+          {/* Bands + 0mm guides */}
           {["A", "B", "C", "D"].map((L) => {
             const b = bands[L];
+            const yMid = (b.y0 + b.y1) / 2;
             return (
               <g key={`band-${L}`}>
-                {bandShade(L)}
+                <rect x={pad} y={b.y0} width={width - pad * 2} height={b.y1 - b.y0} fill="rgba(255,255,255,0.02)" />
                 <line x1={pad} y1={b.y0} x2={width - pad} y2={b.y0} stroke="rgba(42,47,63,0.85)" />
-                <text x={pad + 6} y={b.y0 + 16} fill="rgba(170,177,195,0.85)" fontSize="12" fontFamily="ui-monospace, Menlo, Consolas, monospace">
+                <line x1={pad} y1={b.y1} x2={width - pad} y2={b.y1} stroke="rgba(42,47,63,0.85)" />
+                {/* 0mm guide (target) */}
+                <line x1={pad} y1={yMid} x2={width - pad} y2={yMid} stroke="rgba(255,255,255,0.10)" strokeDasharray="4 6" />
+                <text x={pad + 8} y={b.y0 + 18} fill="rgba(170,177,195,0.85)" fontSize="12" fontFamily="ui-monospace, Menlo, Consolas, monospace">
                   {L}-row
                 </text>
               </g>
             );
           })}
-          <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="rgba(42,47,63,0.85)" />
 
-          {/* Plot paths + points */}
+          {/* Plots */}
           {["A", "B", "C", "D"].map((L) => {
             const arr = data[L] || [];
             const count = arr.length || 1;
@@ -2627,8 +2723,24 @@ function RearViewWingChart({ wideRows, activeProfile, tolerance, showCorrected, 
               return d;
             };
 
+            // Group boundary lines (per side)
+            const cutsL = groupCuts(L, "L");
+            const cutsR = groupCuts(L, "R");
+
             return (
               <g key={`plot-${L}`}>
+                {/* group boundaries */}
+                {cutsL.map((c, idx) => {
+                  const x = xFor("L", c.idx, count);
+                  const b = bands[L];
+                  return <line key={`cutL-${L}-${idx}`} x1={x} y1={b.y0 + 2} x2={x} y2={b.y1 - 2} stroke="rgba(255,255,255,0.08)" />;
+                })}
+                {cutsR.map((c, idx) => {
+                  const x = xFor("R", c.idx, count);
+                  const b = bands[L];
+                  return <line key={`cutR-${L}-${idx}`} x1={x} y1={b.y0 + 2} x2={x} y2={b.y1 - 2} stroke="rgba(255,255,255,0.08)" />;
+                })}
+
                 {/* Before dashed */}
                 <path d={buildPath("L", "before")} fill="none" stroke="rgba(176,132,255,0.65)" strokeWidth="2" strokeDasharray="6 6" />
                 <path d={buildPath("R", "before")} fill="none" stroke="rgba(102,204,255,0.65)" strokeWidth="2" strokeDasharray="6 6" />
@@ -2637,7 +2749,7 @@ function RearViewWingChart({ wideRows, activeProfile, tolerance, showCorrected, 
                 <path d={buildPath("L", "after")} fill="none" stroke="rgba(176,132,255,1)" strokeWidth="3" />
                 <path d={buildPath("R", "after")} fill="none" stroke="rgba(102,204,255,1)" strokeWidth="3" />
 
-                {/* After points with hover */}
+                {/* After points w/ hover */}
                 {arr.map((p, i) => {
                   const pts = [
                     { side: "L", before: p.beforeL, after: p.afterL },
@@ -2683,18 +2795,18 @@ function RearViewWingChart({ wideRows, activeProfile, tolerance, showCorrected, 
           {hover ? (
             <g>
               <rect
-                x={Math.min(width - 305, Math.max(10, hover.x + 10))}
-                y={Math.max(10, hover.y - 72)}
-                width={295}
-                height={64}
+                x={Math.min(width - 320, Math.max(10, hover.x + 12))}
+                y={Math.max(10, hover.y - 76)}
+                width={310}
+                height={68}
                 rx={10}
                 ry={10}
                 fill="rgba(12,14,22,0.95)"
                 stroke="rgba(42,47,63,1)"
               />
               <text
-                x={Math.min(width - 292, Math.max(20, hover.x + 20))}
-                y={Math.max(28, hover.y - 46)}
+                x={Math.min(width - 304, Math.max(20, hover.x + 22))}
+                y={Math.max(28, hover.y - 50)}
                 fill="#eef1ff"
                 fontSize="12"
                 fontFamily="ui-monospace, Menlo, Consolas, monospace"
@@ -2702,8 +2814,8 @@ function RearViewWingChart({ wideRows, activeProfile, tolerance, showCorrected, 
                 {`${hover.lineId} (${hover.side})  group: ${hover.groupName}`}
               </text>
               <text
-                x={Math.min(width - 292, Math.max(20, hover.x + 20))}
-                y={Math.max(46, hover.y - 28)}
+                x={Math.min(width - 304, Math.max(20, hover.x + 22))}
+                y={Math.max(48, hover.y - 30)}
                 fill="rgba(170,177,195,0.95)"
                 fontSize="12"
                 fontFamily="ui-monospace, Menlo, Consolas, monospace"
@@ -2720,8 +2832,8 @@ function RearViewWingChart({ wideRows, activeProfile, tolerance, showCorrected, 
       <div style={{ color: "#aab1c3", fontSize: 12, marginTop: 8, display: "flex", gap: 14, flexWrap: "wrap" }}>
         <span>Solid = After</span>
         <span>Dashed = Before</span>
-        <span>Target = 0mm</span>
-        {Number.isFinite(tol) && tol > 0 ? (
+        <span>Target (0mm) = dotted line</span>
+        {tol > 0 ? (
           <>
             <span>Yellow = within 3mm of tolerance</span>
             <span>Red = outside tolerance</span>
@@ -2731,3 +2843,4 @@ function RearViewWingChart({ wideRows, activeProfile, tolerance, showCorrected, 
     </div>
   );
 }
+
