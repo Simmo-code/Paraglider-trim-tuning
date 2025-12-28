@@ -1520,7 +1520,6 @@ export default function App() {
   )}
 </div>
 
-
             <div style={{ height: 12 }} />
 
             {/* Graph controls */}
@@ -1558,22 +1557,25 @@ export default function App() {
                 groupStats={groupStats}
                 tolerance={meta.tolerance || 0}
               />
-            </div>
-<div style={{ height: 12 }} />
 
-<RearViewWingChart
-  wideRows={wideRows}
-  activeProfile={activeProfile}
-  tolerance={meta.tolerance}
-  showCorrected={showCorrected}
-  correction={meta.correction}
-  adjustments={adjustments}
-  loopTypes={loopTypes}
-  groupLoopSetup={groupLoopSetup}
-/>
+              <div style={{ height: 12 }} />
+
+              <RearViewWingChart
+                wideRows={wideRows}
+                activeProfile={activeProfile}
+                tolerance={meta.tolerance || 0}
+                showCorrected={showCorrected}
+                correction={meta.correction || 0}
+                adjustments={adjustments}
+                loopTypes={loopTypes}
+                groupLoopSetup={groupLoopSetup}
+              />
+            </div>
+
             <div style={{ height: 12 }} />
 
             {/* Tables */}
+
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
               <BlockTable
                 title="A"
