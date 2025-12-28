@@ -413,6 +413,11 @@ export default function App() {
 	  /* ===============================
      Pitch Trim calculation (A − D)
      =============================== */
+	 
+  // ---------------- Filters (rows + groups) ----------------
+  const [includedRows, setIncludedRows] = useState({ A: true, B: true, C: true, D: true });
+  const [includedGroups, setIncludedGroups] = useState({}); // empty = treat as all selected
+
   const pitchTrim = useMemo(() => {
     // If you later add filters, these will pick them up automatically.
     const rowIncluded = (L) =>
