@@ -843,113 +843,6 @@ export default function App() {
     setProfileKey(first);
   }
 
-// 28/12/25 21:50
-
-  /* ===============================
-     Pitch Trim calculation (A − D)
-     =============================== */
-  const pitchTrim = useMemo(() => {
-    // If you later add filters, these will pick them up automatically.
-    const rowIncluded = (L) =>
-      typeof includedRows === "object" ? !!includedRows[L] : true;
-
-    const groupIncluded = (g) => {
-      if (!g) return false;
-      if (typeof includedGroups !== "object") return true;
-      const keys = Object.keys(includedGroups || {});
-      if (keys.length === 0) return true; // treat empty map as "all selected"
-      return !!includedGroups[g];
-    };
-
-    // If you have a "Show corrected" toggle, use it.
-    const corr =
-      typeof showCorrected === "undefined" || showCorrected
-        ? meta?.correction ?? 0
-        : 0;
-
-    // Collect AFTER deltas by row (A/B/C/D)
-    const perRow = { A: [], B: [], C: [], D: [] };
-
-    for (const r of wideRows || []) {
-      for (const letter of ["A", "B", "C", "D"]) {
-        if (!rowIncluded(letter)) continue;
-
-        const b = r?.[letter];
-        if (!b?.line) continue;
-
-        const lineId = b.line;
-        const nominal = b.nominal;
-        if (!Number.isFinite(nominal)) continue;
-
-        const groupName = groupForLine(activeProfile, lineId);
-        if (!groupIncluded(groupName)) continue;
-
-        // LEFT side
-        if (Number.isFinite(b.measL)) {
-          const loopType = groupLoopSetup?.[`${groupName}|L`] || "SL";
-          const loopDelta =
-            Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopType] : 0;
-          const adj = getAdjustment(adjustments, groupName, "L") || 0;
-
-          const corrected = b.measL + corr;
-          const afterDelta = corrected + loopDelta + adj - nominal;
-          if (Number.isFinite(afterDelta)) perRow[letter].push(afterDelta);
-        }
-
-        // RIGHT side
-        if (Number.isFinite(b.measR)) {
-          const loopType = groupLoopSetup?.[`${groupName}|R`] || "SL";
-          const loopDelta =
-            Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopType] : 0;
-          const adj = getAdjustment(adjustments, groupName, "R") || 0;
-
-          const corrected = b.measR + corr;
-          const afterDelta = corrected + loopDelta + adj - nominal;
-          if (Number.isFinite(afterDelta)) perRow[letter].push(afterDelta);
-        }
-      }
-    }
-
-    const avg = (arr) => {
-      const v = (arr || []).filter((x) => Number.isFinite(x));
-      if (!v.length) return null;
-      return v.reduce((a, b) => a + b, 0) / v.length;
-    };
-
-    const A = avg(perRow.A);
-    const B = avg(perRow.B);
-    const C = avg(perRow.C);
-    const D = avg(perRow.D);
-
-    const pitch = Number.isFinite(A) && Number.isFinite(D) ? A - D : null;
-
-    return {
-      A,
-      B,
-      C,
-      D,
-      pitch,
-      count: {
-        A: perRow.A.length,
-        B: perRow.B.length,
-        C: perRow.C.length,
-        D: perRow.D.length,
-      },
-    };
-  }, [
-    wideRows,
-    meta?.correction,
-    showCorrected,
-    activeProfile,
-    adjustments,
-    groupLoopSetup,
-    loopTypes,
-    // If you don't have these filters yet, it's fine; React will ignore them.
-    includedRows,
-    includedGroups,
-  ]);
-
-
   function StepButton({ current, num, setStep, enabled, label }) {
     const active = current === num;
     return (
@@ -972,8 +865,6 @@ export default function App() {
       </button>
     );
   }
-
-
 
   return (
     <div style={page}>
