@@ -58,6 +58,23 @@ function makeProfileNameFromMeta(meta) {
   const combined = `${a} ${b}`.trim().replace(/\s+/g, " ");
   return combined || "Imported Wing";
 }
+function deltaMm({ nominal, measured, correction, adjustment }) {
+  if (nominal == null || measured == null) return null;
+  const corr = Number.isFinite(correction) ? correction : 0;
+  const adj = Number.isFinite(adjustment) ? adjustment : 0;
+  return measured + corr + adj - nominal;
+}
+
+function severity(delta, tolerance) {
+  if (!Number.isFinite(delta)) return "none";
+  const a = Math.abs(delta);
+  const tol = Number.isFinite(tolerance) ? tolerance : 0;
+  if (tol <= 0) return "ok";
+  const warnBand = Math.max(0, tol - 3); // yellow within 3mm of tolerance
+  if (a >= tol) return "red";
+  if (a >= warnBand) return "yellow";
+  return "ok";
+}
 
 function parseLineId(lineId) {
   const m = String(lineId || "")
