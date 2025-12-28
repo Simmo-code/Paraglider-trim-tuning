@@ -1559,7 +1559,18 @@ export default function App() {
                 tolerance={meta.tolerance || 0}
               />
             </div>
+<div style={{ height: 12 }} />
 
+<RearViewWingChart
+  wideRows={wideRows}
+  activeProfile={activeProfile}
+  tolerance={meta.tolerance}
+  showCorrected={showCorrected}
+  correction={meta.correction}
+  adjustments={adjustments}
+  loopTypes={loopTypes}
+  groupLoopSetup={groupLoopSetup}
+/>
             <div style={{ height: 12 }} />
 
             {/* Tables */}
@@ -1956,18 +1967,7 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
 }
 
 /* ------------------------- Charts ------------------------- */
-<div style={{ height: 12 }} />
 
-<RearViewWingChart
-  wideRows={wideRows}
-  activeProfile={activeProfile}
-  tolerance={meta.tolerance}
-  showCorrected={showCorrected}
-  correction={meta.correction}
-  adjustments={adjustments}
-  loopTypes={loopTypes}
-  groupLoopSetup={groupLoopSetup}
-/>
 
 function DeltaLineChart({ title, points, tolerance }) {
   const width = 1100;
