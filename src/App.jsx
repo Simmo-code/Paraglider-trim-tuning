@@ -1634,6 +1634,139 @@ export default function App() {
 
             <div style={{ height: 12 }} />
 
+            {/* Pitch Trim (A − D) */}
+            <div style={{ ...card, background: "#0e1018" }}>
+              <div style={{ fontWeight: 900, marginBottom: 8 }}>Pitch trim (A − D)</div>
+              <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
+                We compute the average <b>AFTER Δ</b> per row (A/B/C/D), then <b>Pitch = A − D</b>.
+                <br />
+                <i>AFTER Δ = (Ist {typeof showCorrected === "undefined" || showCorrected ? "+ Korrektur " : ""}+ loop + adjustment − Soll)</i>
+              </div>
+
+              <div style={{ height: 10 }} />
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+                  gap: 10,
+                  alignItems: "stretch",
+                }}
+              >
+                {/* A */}
+                <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0b0c10" }}>
+                  <div style={{ ...muted, fontSize: 12, marginBottom: 6 }}>Row A avg Δ</div>
+                  <div
+                    style={{
+                      fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                      fontSize: 18,
+                      fontWeight: 900,
+                      ...(severity(pitchTrim.A, meta.tolerance) === "red"
+                        ? { color: "#ff6b6b" }
+                        : severity(pitchTrim.A, meta.tolerance) === "yellow"
+                        ? { color: "#ffd166" }
+                        : { color: "#cde6a1" }),
+                    }}
+                  >
+                    {Number.isFinite(pitchTrim.A) ? Math.round(pitchTrim.A) + " mm" : "—"}
+                  </div>
+                  <div style={{ ...muted, fontSize: 11 }}>{pitchTrim.count.A} lines</div>
+                </div>
+
+                {/* B */}
+                <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0b0c10" }}>
+                  <div style={{ ...muted, fontSize: 12, marginBottom: 6 }}>Row B avg Δ</div>
+                  <div
+                    style={{
+                      fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                      fontSize: 18,
+                      fontWeight: 900,
+                      ...(severity(pitchTrim.B, meta.tolerance) === "red"
+                        ? { color: "#ff6b6b" }
+                        : severity(pitchTrim.B, meta.tolerance) === "yellow"
+                        ? { color: "#ffd166" }
+                        : { color: "#cde6a1" }),
+                    }}
+                  >
+                    {Number.isFinite(pitchTrim.B) ? Math.round(pitchTrim.B) + " mm" : "—"}
+                  </div>
+                  <div style={{ ...muted, fontSize: 11 }}>{pitchTrim.count.B} lines</div>
+                </div>
+
+                {/* C */}
+                <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0b0c10" }}>
+                  <div style={{ ...muted, fontSize: 12, marginBottom: 6 }}>Row C avg Δ</div>
+                  <div
+                    style={{
+                      fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                      fontSize: 18,
+                      fontWeight: 900,
+                      ...(severity(pitchTrim.C, meta.tolerance) === "red"
+                        ? { color: "#ff6b6b" }
+                        : severity(pitchTrim.C, meta.tolerance) === "yellow"
+                        ? { color: "#ffd166" }
+                        : { color: "#cde6a1" }),
+                    }}
+                  >
+                    {Number.isFinite(pitchTrim.C) ? Math.round(pitchTrim.C) + " mm" : "—"}
+                  </div>
+                  <div style={{ ...muted, fontSize: 11 }}>{pitchTrim.count.C} lines</div>
+                </div>
+
+                {/* D */}
+                <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0b0c10" }}>
+                  <div style={{ ...muted, fontSize: 12, marginBottom: 6 }}>Row D avg Δ</div>
+                  <div
+                    style={{
+                      fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                      fontSize: 18,
+                      fontWeight: 900,
+                      ...(severity(pitchTrim.D, meta.tolerance) === "red"
+                        ? { color: "#ff6b6b" }
+                        : severity(pitchTrim.D, meta.tolerance) === "yellow"
+                        ? { color: "#ffd166" }
+                        : { color: "#cde6a1" }),
+                    }}
+                  >
+                    {Number.isFinite(pitchTrim.D) ? Math.round(pitchTrim.D) + " mm" : "—"}
+                  </div>
+                  <div style={{ ...muted, fontSize: 11 }}>{pitchTrim.count.D} lines</div>
+                </div>
+
+                {/* Pitch = A − D */}
+                <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0b0c10" }}>
+                  <div style={{ ...muted, fontSize: 12, marginBottom: 6 }}>Pitch (A − D)</div>
+                  <div
+                    style={{
+                      fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                      fontSize: 18,
+                      fontWeight: 900,
+                      textAlign: "left",
+                      ...(severity(pitchTrim.pitch, meta.tolerance) === "red"
+                        ? { color: "#ff6b6b" }
+                        : severity(pitchTrim.pitch, meta.tolerance) === "yellow"
+                        ? { color: "#ffd166" }
+                        : { color: "#cde6a1" }),
+                    }}
+                  >
+                    {Number.isFinite(pitchTrim.pitch) ? Math.round(pitchTrim.pitch) + " mm" : "—"}
+                  </div>
+                  <div style={{ ...muted, fontSize: 11 }}>
+                    {Number.isFinite(pitchTrim.pitch)
+                      ? pitchTrim.pitch > 0
+                        ? "Nose up (A longer than D)"
+                        : pitchTrim.pitch < 0
+                        ? "Nose down (A shorter than D)"
+                        : "Neutral"
+                      : "—"}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: 12 }} />
+
+
             {/* Graph controls */}
             <div style={{ ...card, background: "#0e1018" }}>
               <div style={{ fontWeight: 850, marginBottom: 8 }}>Graphs</div>
