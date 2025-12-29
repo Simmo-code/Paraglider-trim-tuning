@@ -970,6 +970,15 @@ export default function App() {
     );
   }
 
+  // Styles
+  const page = {
+    minHeight: "100vh",
+    background: "#0b0c10",
+    color: "#eef1ff",
+    fontFamily: "system-ui, sans-serif",
+  };
+
+
   return (
     <div style={page}>
       <div style={wrap}>
