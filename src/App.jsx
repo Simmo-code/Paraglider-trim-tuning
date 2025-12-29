@@ -891,8 +891,6 @@ export default function App() {
 
   
   //Might need to delet this
-  const redCell = { border: "1px solid rgba(255,107,107,0.85)", background: "rgba(255,107,107,0.14)" };
-  const yellowCell = { border: "1px solid rgba(255,214,102,0.95)", background: "rgba(255,214,102,0.14)" };
 
   // Step guard
   useEffect(() => {
