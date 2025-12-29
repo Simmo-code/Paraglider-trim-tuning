@@ -1456,6 +1456,136 @@ export default function App() {
 
             <div style={{ height: 12 }} />
 
+            {/* Filters (Rows + Groups) */}
+            <div style={{ ...card, background: "#0e1018" }}>
+              <div style={{ fontWeight: 900, marginBottom: 8 }}>Filters (used by Pitch trim + Δ chart)</div>
+              <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
+                Choose which <b>rows</b> (A/B/C/D) and <b>groups</b> (AR1, BR1, …) are included in calculations.
+              </div>
+
+              <div style={{ height: 10 }} />
+
+              {/* Row filters */}
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ fontWeight: 850, marginRight: 8 }}>Rows:</div>
+
+                {["A", "B", "C", "D"].map((L) => (
+                  <label key={L} style={{ display: "flex", gap: 8, alignItems: "center", ...muted, fontSize: 12 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!includedRows?.[L]}
+                      onChange={(e) => setIncludedRows({ ...(includedRows || {}), [L]: e.target.checked })}
+                    />
+                    {L}
+                  </label>
+                ))}
+
+                <button
+                  style={btn}
+                  onClick={() => setIncludedRows({ A: true, B: true, C: true, D: true })}
+                  title="Include A, B, C, D"
+                >
+                  Select all rows
+                </button>
+                <button
+                  style={btn}
+                  onClick={() => setIncludedRows({ A: false, B: false, C: false, D: false })}
+                  title="Exclude A, B, C, D"
+                >
+                  Clear rows
+                </button>
+              </div>
+
+              <div style={{ height: 10 }} />
+
+              {/* Group filters */}
+              <div style={{ fontWeight: 850, marginBottom: 6 }}>Groups:</div>
+
+              <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
+                Tip: If no groups are explicitly selected, the app treats it as <b>all groups included</b>.
+              </div>
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                <button
+                  style={btn}
+                  onClick={() => {
+                    const next = {};
+                    for (const g of allGroupNames || []) next[g] = true;
+                    setIncludedGroups(next);
+                  }}
+                >
+                  Select all groups
+                </button>
+
+                <button
+                  style={btn}
+                  onClick={() => setIncludedGroups({})}
+                  title="Empty = treat as all included (simple reset)"
+                >
+                  Reset groups (all)
+                </button>
+
+                <button
+                  style={btn}
+                  onClick={() => {
+                    const next = {};
+                    for (const g of allGroupNames || []) next[g] = false;
+                    setIncludedGroups(next);
+                  }}
+                >
+                  Clear groups
+                </button>
+              </div>
+
+              {!allGroupNames?.length ? (
+                <div style={{ ...muted, fontSize: 12 }}>No groups found yet. Import a file + mapping first.</div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
+                  {allGroupNames.map((g) => {
+                    const keys = Object.keys(includedGroups || {});
+                    const checked = keys.length === 0 ? true : !!includedGroups[g]; // empty map => all included
+                    return (
+                      <label
+                        key={g}
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          alignItems: "center",
+                          padding: "8px 10px",
+                          borderRadius: 12,
+                          border: "1px solid #2a2f3f",
+                          background: "#0b0c10",
+                          cursor: "pointer",
+                          userSelect: "none",
+                          fontSize: 12,
+                          color: "#aab1c3",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            const next = { ...(includedGroups || {}) };
+                            // If map is empty, create explicit "all true" first so toggling one doesn't feel weird
+                            if (Object.keys(next).length === 0) {
+                              for (const gg of allGroupNames) next[gg] = true;
+                            }
+                            next[g] = e.target.checked;
+                            setIncludedGroups(next);
+                          }}
+                        />
+                        <span style={{ fontWeight: 900, color: "#eef1ff" }}>{g}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div style={{ height: 12 }} />
+
+
+
 {/* Adjustment UI */}
 <div style={{ ...card, background: "#0e1018" }}>
   <div style={{ fontWeight: 850, marginBottom: 8 }}>Trim adjustments per line group (mm)</div>
