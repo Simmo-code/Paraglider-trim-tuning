@@ -1841,62 +1841,113 @@ export default function App() {
                             </td>
 
                             {/* Adjust L */}
-                            <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                              <input
-                                value={aL}
-                                onChange={(e) => persistAdjustments({ ...adjustments, [kL]: n(e.target.value) ?? 0 })}
-                                style={{
-                                  ...input,
-                                  width: 110,
-                                  padding: "6px 8px",
-                                  textAlign: "right",
-                                  fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                                }}
-                                inputMode="numeric"
-                                title="Additional trim adjustment (Left)"
-                              />
-                            </td>
+<td style={{ padding: "6px 8px", textAlign: "right" }}>
+  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+    <select
+      value={loopTypeFromAdjustment(aL)}
+      onChange={(e) => {
+        const t = e.target.value; // chosen loop type
+        if (!t) return; // "Custom" = leave number as-is
+
+        const installedType = groupLoopSetup?.[`${g}|L`] || "SL";
+
+        const chosen = Number(loopTypes?.[t] ?? 0);
+        const installed = Number(loopTypes?.[installedType] ?? 0);
+
+        // adjustment should be relative to the installed baseline
+        const adj = Number.isFinite(chosen - installed) ? chosen - installed : 0;
+
+        persistAdjustments({ ...adjustments, [`${g}|L`]: adj });
+      }}
+      style={{
+        borderRadius: 10,
+        border: "1px solid #2a2f3f",
+        background: "#0d0f16",
+        color: "#eef1ff",
+        padding: "6px 8px",
+        outline: "none",
+        fontSize: 12,
+      }}
+      title="Pick a loop type to auto-fill Adjust L (relative to installed loop)"
+    >
+      <option value="">Custom</option>
+      {Object.keys(loopTypes).map((name) => (
+        <option key={name} value={name}>
+          {name} ({Number(loopTypes[name]) > 0 ? `+${Number(loopTypes[name])}` : `${Number(loopTypes[name])}`}mm)
+        </option>
+      ))}
+    </select>
+
+    <input
+      value={aL}
+      onChange={(e) => persistAdjustments({ ...adjustments, [`${g}|L`]: n(e.target.value) ?? 0 })}
+      style={{
+        ...input,
+        width: 110,
+        padding: "6px 8px",
+        textAlign: "right",
+        fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+      }}
+      inputMode="numeric"
+      title="Manual override (mm)"
+    />
+  </div>
+</td>
+
 
                             {/* Adjust R */}
                             <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                              <input
-                                value={aR}
-                                onChange={(e) => persistAdjustments({ ...adjustments, [kR]: n(e.target.value) ?? 0 })}
-                                style={{
-                                  ...input,
-                                  width: 110,
-                                  padding: "6px 8px",
-                                  textAlign: "right",
-                                  fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                                }}
-                                inputMode="numeric"
-                                title="Additional trim adjustment (Right)"
-                              />
-                            </td>
+  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+    <select
+      value={loopTypeFromAdjustment(aR)}
+      onChange={(e) => {
+        const t = e.target.value;
+        if (!t) return;
 
-                            {/* Before/After avg */}
-                            <td style={{ padding: "6px 8px", textAlign: "right", color: "#aab1c3", fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                              {Number.isFinite(beforeAvg) ? Math.round(beforeAvg) : "—"}
-                            </td>
+        const installedType = groupLoopSetup?.[`${g}|R`] || "SL";
 
-                            <td
-                              style={{
-                                padding: "6px 8px",
-                                textAlign: "right",
-                                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                                ...(sevAfter === "red" ? redCell : sevAfter === "yellow" ? yellowCell : null),
-                              }}
-                            >
-                              {Number.isFinite(afterAvg) ? Math.round(afterAvg) : "—"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+        const chosen = Number(loopTypes?.[t] ?? 0);
+        const installed = Number(loopTypes?.[installedType] ?? 0);
+
+        const adj = Number.isFinite(chosen - installed) ? chosen - installed : 0;
+
+        persistAdjustments({ ...adjustments, [`${g}|R`]: adj });
+      }}
+      style={{
+        borderRadius: 10,
+        border: "1px solid #2a2f3f",
+        background: "#0d0f16",
+        color: "#eef1ff",
+        padding: "6px 8px",
+        outline: "none",
+        fontSize: 12,
+      }}
+      title="Pick a loop type to auto-fill Adjust R (relative to installed loop)"
+    >
+      <option value="">Custom</option>
+      {Object.keys(loopTypes).map((name) => (
+        <option key={name} value={name}>
+          {name} ({Number(loopTypes[name]) > 0 ? `+${Number(loopTypes[name])}` : `${Number(loopTypes[name])}`}mm)
+        </option>
+      ))}
+    </select>
+
+    <input
+      value={aR}
+      onChange={(e) => persistAdjustments({ ...adjustments, [`${g}|R`]: n(e.target.value) ?? 0 })}
+      style={{
+        ...input,
+        width: 110,
+        padding: "6px 8px",
+        textAlign: "right",
+        fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+      }}
+      inputMode="numeric"
+      title="Manual override (mm)"
+    />
+  </div>
+</td>
+
 
 
             {/* Pitch Trim (A − D) */}
