@@ -987,6 +987,44 @@ export default function App() {
     gap: 12,
   };
 
+  const card = {
+    border: "1px solid #2a2f3f",
+    borderRadius: 16,
+    padding: 14,
+    background: "#0e1018",
+    boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+    overflow: "hidden",
+  };
+
+  const muted = { color: "#aab1c3" };
+
+  const input = {
+    width: "100%",
+    borderRadius: 12,
+    border: "1px solid #2a2f3f",
+    background: "#0b0c10",
+    color: "#eef1ff",
+    padding: "10px 12px",
+    outline: "none",
+  };
+
+  const btn = {
+    borderRadius: 12,
+    border: "1px solid #2a2f3f",
+    background: "#0d0f16",
+    color: "#eef1ff",
+    padding: "10px 12px",
+    fontWeight: 800,
+    cursor: "pointer",
+  };
+
+  const btnWarn = { ...btn, border: "1px solid rgba(255,214,102,0.55)", background: "rgba(255,214,102,0.12)" };
+  const btnDanger = { ...btn, border: "1px solid rgba(255,107,107,0.6)", background: "rgba(255,107,107,0.12)" };
+
+  const redCell = { border: "1px solid rgba(255,107,107,0.85)", background: "rgba(255,107,107,0.14)" };
+  const yellowCell = { border: "1px solid rgba(255,214,102,0.95)", background: "rgba(255,214,102,0.14)" };
+
+
   return (
     <div style={page}>
       <div style={wrap}>
