@@ -841,8 +841,10 @@ export default function App() {
         // RIGHT point
         if (Number.isFinite(b.measR)) {
           const loopType = groupLoopSetup?.[`${groupName}|R`] || "SL";
-          const loopDelta = Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopTypes?.[loopType] !== undefined ? loopType : "SL"] : (Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopType] : 0);
-          const adj = getAdjustment(adjustments, groupName, "R") || 0;
+          
+		  const loopDelta = Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopType] : 0;
+
+		  const adj = getAdjustment(adjustments, groupName, "R") || 0;
 
           const corrected = b.measR + corr;
 
