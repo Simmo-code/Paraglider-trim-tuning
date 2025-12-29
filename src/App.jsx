@@ -978,6 +978,14 @@ export default function App() {
     fontFamily: "system-ui, sans-serif",
   };
 
+  const wrap = {
+    maxWidth: 1200,
+    margin: "0 auto",
+    padding: 16,
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  };
 
   return (
     <div style={page}>
