@@ -381,6 +381,58 @@ export default function App() {
     setGroupLoopSetup(next);
     localStorage.setItem("groupLoopSetup", JSON.stringify(next));
   }
+  /* ===============================
+     Step 4 loop changes (override)
+     - Step 3 (groupLoopSetup) is BASELINE "installed loops"
+     - Step 4 (groupLoopChange) is OPTIONAL override while trimming
+     =============================== */
+
+  const [groupLoopChange, setGroupLoopChange] = useState(() => {
+    try {
+      const s = localStorage.getItem("groupLoopChange");
+      return s ? JSON.parse(s) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  function persistGroupLoopChange(next) {
+    setGroupLoopChange(next);
+    localStorage.setItem("groupLoopChange", JSON.stringify(next));
+  }
+
+  function clearAllLoopChanges() {
+    persistGroupLoopChange({});
+  }
+
+  // Returns the baseline loop type from Step 3 (installed on wing)
+  function getBaselineLoopType(groupName, side) {
+    const key = `${groupName}|${side}`;
+    return (groupLoopSetup && groupLoopSetup[key]) || "SL";
+  }
+
+  // Returns the effective loop type for AFTER (Step 4 may override)
+  // If Step 4 hasn't set a change, it falls back to baseline.
+  function getEffectiveLoopType(groupName, side) {
+    const key = `${groupName}|${side}`;
+    const override = groupLoopChange && groupLoopChange[key];
+    return override ? override : getBaselineLoopType(groupName, side);
+  }
+
+  // Convert loop type => mm delta (negative shortens)
+  function loopDeltaFromType(loopType) {
+    const v = loopTypes && loopTypes[loopType];
+    return Number.isFinite(v) ? v : 0;
+  }
+
+  // BEFORE uses baseline, AFTER uses effective
+  function loopDeltaBefore(groupName, side) {
+    return loopDeltaFromType(getBaselineLoopType(groupName, side));
+  }
+  function loopDeltaAfter(groupName, side) {
+    return loopDeltaFromType(getEffectiveLoopType(groupName, side));
+  }
+
 
   const fileInputRef = useRef(null);
   const profilesImportRef = useRef(null);
