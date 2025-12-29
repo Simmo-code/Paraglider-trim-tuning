@@ -780,112 +780,117 @@ export default function App() {
   });
   useEffect(() => localStorage.setItem("chartLetters", JSON.stringify(chartLetters)), [chartLetters]);
 
+
+
   const chartPoints = useMemo(() => {
-    const corr = meta.correction || 0;
-    const tol = meta.tolerance || 0;
+    const rowIncluded = (L) => !!includedRows?.[L];
 
-    const points = []; // {id, xIndex, letter, side, before, after, severityAfter}
-    let x = 0;
+    const groupIncluded = (g) => {
+      if (!g) return false;
+      const keys = Object.keys(includedGroups || {});
+      if (keys.length === 0) return true; // empty = all included
+      return !!includedGroups[g];
+    };
 
-    // Stable order by A/B/C/D then numeric
-    const all = [];
-    for (const r of wideRows) {
-      for (const letter of ["A", "B", "C", "D"]) {
-        const b = r[letter];
-        if (!b?.line || b.nominal == null) continue;
-        all.push({ letter, ...b });
+    const corr = showCorrected ? (meta?.correction ?? 0) : 0;
+    const tol = meta?.tolerance ?? 0;
+
+    const pts = [];
+
+    for (const r of wideRows || []) {
+      for (const L of ["A", "B", "C", "D"]) {
+        // respect Step 4 chart A/B/C/D checkboxes if you already have them
+        if (typeof chartLetters === "object" && chartLetters !== null) {
+          if (!chartLetters[L]) continue;
+        }
+
+        if (!rowIncluded(L)) continue;
+
+        const b = r?.[L];
+        if (!b?.line) continue;
+
+        const nominal = b.nominal;
+        if (!Number.isFinite(nominal)) continue;
+
+        const groupName = groupForLine(activeProfile, b.line);
+        if (!groupIncluded(groupName)) continue;
+
+        // LEFT point
+        if (Number.isFinite(b.measL)) {
+          const loopType = groupLoopSetup?.[`${groupName}|L`] || "SL";
+          const loopDelta = Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopType] : 0;
+          const adj = getAdjustment(adjustments, groupName, "L") || 0;
+
+          const corrected = b.measL + corr;
+
+          const before = corrected + loopDelta - nominal; // baseline with installed loop
+          const after = corrected + loopDelta + adj - nominal;
+
+          pts.push({
+            letter: L,
+            lineId: b.line,
+            groupName,
+            side: "L",
+            nominal,
+            before,
+            after,
+            sev: severity(after, tol),
+          });
+        }
+
+        // RIGHT point
+        if (Number.isFinite(b.measR)) {
+          const loopType = groupLoopSetup?.[`${groupName}|R`] || "SL";
+          const loopDelta = Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopTypes?.[loopType] !== undefined ? loopType : "SL"] : (Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopType] : 0);
+          const adj = getAdjustment(adjustments, groupName, "R") || 0;
+
+          const corrected = b.measR + corr;
+
+          const before = corrected + loopDelta - nominal;
+          const after = corrected + loopDelta + adj - nominal;
+
+          pts.push({
+            letter: L,
+            lineId: b.line,
+            groupName,
+            side: "R",
+            nominal,
+            before,
+            after,
+            sev: severity(after, tol),
+          });
+        }
       }
     }
-    all.sort((u, v) => {
-      const pu = parseLineId(u.line);
-      const pv = parseLineId(v.line);
-      const lu = pu?.prefix || u.letter;
-      const lv = pv?.prefix || v.letter;
-      if (lu !== lv) return lu.localeCompare(lv);
-      return (pu?.num ?? 0) - (pv?.num ?? 0);
+
+    // Sort points so A1,A2... then B..., etc for nicer chart order
+    pts.sort((a, b) => {
+      const pa = parseLineId(a.lineId);
+      const pb = parseLineId(b.lineId);
+      const la = pa?.prefix || a.letter;
+      const lb = pb?.prefix || b.letter;
+      if (la !== lb) return la.localeCompare(lb);
+      return (pa?.num ?? 0) - (pb?.num ?? 0);
     });
 
-    for (const b of all) {
-      if (!chartLetters[b.letter]) continue;
+    return pts;
+  }, [
+    wideRows,
+    meta?.correction,
+    meta?.tolerance,
+    showCorrected,
+    activeProfile,
+    adjustments,
+    groupLoopSetup,
+    loopTypes,
+    includedRows,
+    includedGroups,
+    // keep if you have chartLetters checkboxes
+    chartLetters,
+  ]);
 
-      const g = groupForLine(activeProfile, b.line) || `${b.letter}?`;
-
-      const loopL = loopDeltaFor(b.line, "L");
-      const loopR = loopDeltaFor(b.line, "R");
-
-      const adjL = getAdjustment(adjustments, g, "L");
-      const adjR = getAdjustment(adjustments, g, "R");
-
-      const baseL = b.measL == null ? null : b.measL + corr + loopL;
-      const baseR = b.measR == null ? null : b.measR + corr + loopR;
-
-      const afterL = baseL == null ? null : baseL + adjL;
-      const afterR = baseR == null ? null : baseR + adjR;
-
-      const dL_before = baseL == null ? null : baseL - b.nominal;
-      const dR_before = baseR == null ? null : baseR - b.nominal;
-
-      const dL_after = afterL == null ? null : afterL - b.nominal;
-      const dR_after = afterR == null ? null : afterR - b.nominal;
-
-      points.push({
-        id: `${b.line}-L`,
-        xIndex: x,
-        line: b.line,
-        letter: b.letter,
-        side: "L",
-        before: dL_before,
-        after: dL_after,
-        sevAfter: severity(dL_after, tol),
-      });
-      points.push({
-        id: `${b.line}-R`,
-        xIndex: x,
-        line: b.line,
-        letter: b.letter,
-        side: "R",
-        before: dR_before,
-        after: dR_after,
-        sevAfter: severity(dR_after, tol),
-      });
-
-      x += 1;
-    }
-
-    return points;
-  }, [wideRows, meta.correction, meta.tolerance, activeProfile, adjustments, chartLetters, groupLoopSetup, loopTypes]);
-
-  // Styles
-  const page = {
-    minHeight: "100vh",
-    background: "#0b0c10",
-    color: "#eef1ff",
-    fontFamily: "system-ui, sans-serif",
-  };
-  const wrap = { maxWidth: 1250, margin: "0 auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 };
-  const card = { border: "1px solid #2a2f3f", borderRadius: 14, background: "#11131a", padding: 12 };
-  const muted = { color: "#aab1c3" };
-  const btn = {
-    padding: "10px 12px",
-    borderRadius: 10,
-    border: "1px solid #2a2f3f",
-    background: "#0d0f16",
-    color: "#eef1ff",
-    cursor: "pointer",
-    fontWeight: 650,
-    fontSize: 13,
-  };
-  const btnWarn = { ...btn, border: "1px solid rgba(255,214,102,0.65)", background: "rgba(255,214,102,0.12)" };
-  const btnDanger = { ...btn, border: "1px solid rgba(255,107,107,0.55)", background: "rgba(255,107,107,0.12)" };
-  const input = {
-    width: "100%",
-    borderRadius: 10,
-    border: "1px solid #2a2f3f",
-    background: "#0d0f16",
-    color: "#eef1ff",
-    padding: "10px 10px",
-    outline: "none",
-  };
+  
+  //Might need to delet this
   const redCell = { border: "1px solid rgba(255,107,107,0.85)", background: "rgba(255,107,107,0.14)" };
   const yellowCell = { border: "1px solid rgba(255,214,102,0.95)", background: "rgba(255,214,102,0.14)" };
 
