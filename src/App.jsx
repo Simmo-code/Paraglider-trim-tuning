@@ -1,3 +1,19 @@
+/* ============================================================================
+   Paraglider Trim Tuning – App.jsx
+   ----------------------------------------------------------------------------
+   This file contains the full application:
+   - CSV / XLSX import & parsing
+   - Wing profile mapping
+   - Baseline loop setup (Step 3)
+   - Trim adjustments + analysis (Step 4)
+   - Charts, pitch trim, and tables
+   ----------------------------------------------------------------------------
+   NOTE:
+   - Step 3 = baseline wing configuration (existing loops on the wing)
+   - Step 4 = trimming actions to return wing to factory trim
+   ============================================================================ */
+
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import BUILTIN_PROFILES from "./wingProfiles.json";
@@ -174,6 +190,15 @@ function safeParseProfilesJson(text) {
   }
   return obj;
 }
+/* ============================================================================
+   GLOBAL CONSTANTS, HELPERS & UTILITIES
+   ----------------------------------------------------------------------------
+   Includes:
+   - CSV/XLSX parsing
+   - Line ID parsing (A1, B12, etc.)
+   - Group mapping helpers
+   - Severity / tolerance helpers
+   ============================================================================ */
 
 /**
  * Flexible parser for BOTH CSV + XLSX:
@@ -367,6 +392,14 @@ export default function App() {
     setLoopTypes(next);
     localStorage.setItem("loopTypes", JSON.stringify(next));
   }
+/* ============================================================================
+   STEP 3 – BASELINE LOOP CONFIGURATION (PRE-TRIM)
+   ----------------------------------------------------------------------------
+   This represents the CURRENT physical state of the wing BEFORE trimming.
+   - These loops are what is installed on the wing today
+   - Used as the baseline for ALL "Before" calculations
+   - Step 4 adjustments are always RELATIVE to this state
+   ============================================================================ */
 
   // Group loop setup (AR1|L -> "SL")
   const [groupLoopSetup, setGroupLoopSetup] = useState(() => {
@@ -628,6 +661,15 @@ export default function App() {
     setProfilesObject(nextProfiles);
     setProfileKey(key);
   }
+
+/* ============================================================================
+   STEP 1 – FILE IMPORT (CSV / XLSX)
+   ----------------------------------------------------------------------------
+   - Reads raw measurement data
+   - Extracts meta (tolerance, correction)
+   - Produces wideRows[] as the core dataset
+   ============================================================================ */
+
 
   function onImportFile(file) {
     const name = (file?.name || "").toLowerCase();
@@ -1267,6 +1309,11 @@ export default function App() {
           </div>
         ) : null}
 
+/* ============================================================================
+   STEP 3 – 
+   ============================================================================ */
+
+
         {/* STEP 3 */}
         {step === 3 ? (
           <div style={card}>
@@ -1490,6 +1537,17 @@ export default function App() {
             </div>
           </div>
         ) : null}
+
+/* ============================================================================
+   STEP 4 – TRIM ADJUSTMENTS (ACTIVE TUNING)
+   ----------------------------------------------------------------------------
+   This is where trimming happens to return the wing to factory trim.
+   - Adjust L / R (mm) = relative change from Step 3 baseline
+   - Loop dropdowns auto-fill adjustment deltas
+   - "Before" = Step 3 state
+   - "After"  = Step 3 + Step 4 adjustments
+   ============================================================================ */
+
 
         {/* STEP 4 */}
         {step === 4 ? (
@@ -2007,6 +2065,14 @@ export default function App() {
 
             <div style={{ height: 12 }} />
 
+/* ============================================================================
+   PITCH TRIM ANALYSIS
+   ----------------------------------------------------------------------------
+   - Computes average AFTER Δ per row (A/B/C/D)
+   - Pitch = A − D
+   - Uses filters (rows + groups)
+   - Indicates whether the wing is in pitch trim
+   ============================================================================ */
 
             {/* Pitch Trim (A − D) */}
             <div style={{ ...card, background: "#0e1018" }}>
@@ -2140,6 +2206,15 @@ export default function App() {
 
             <div style={{ height: 12 }} />
 
+/* ============================================================================
+   ANALYSIS & VISUALISATION
+   ----------------------------------------------------------------------------
+   Includes:
+   - Δ Line chart (Before vs After)
+   - Wing profile charts
+   - Rear-view wing chart
+   - Visual confirmation of trim state
+   ============================================================================ */
 
             {/* Graph controls */}
             <div style={{ ...card, background: "#0e1018" }}>
@@ -2192,6 +2267,15 @@ export default function App() {
             </div>
 
             <div style={{ height: 12 }} />
+
+/* ============================================================================
+   FINAL OUTPUT TABLES
+   ----------------------------------------------------------------------------
+   - Per-line results
+   - Before / After values
+   - Severity highlighting
+   - Final trimming reference
+   ============================================================================ */
 
             {/* Tables */}
 
@@ -2391,6 +2475,15 @@ export default function App() {
 }
 
 
+/* ============================================================================
+   STEP 2 – PROFILE MAPPING
+   ----------------------------------------------------------------------------
+   Defines how physical lines (A1, A2, …) map to logical groups (AR1, BR2, …)
+   Includes:
+   - Guided mapping editor
+   - Profile save / load
+   - Group extraction logic
+   ============================================================================ */
 
 /* ------------------------- Guided Mapping Editor ------------------------- */
 
