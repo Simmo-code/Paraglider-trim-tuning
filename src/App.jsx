@@ -19,8 +19,14 @@ import BUILTIN_PROFILES from "./wingProfiles.json";
  *   delta     = after - nominal
  */
 
-const APP_VERSION = "0.5";
+const APP_VERSION = "0.5AB";
 
+
+
+/* ===============================
+   SECTION: Global constants / version
+   (anchor for locating top-of-file settings)
+   =============================== */
 /* ------------------------- Helpers ------------------------- */
 
 function n(x) {
@@ -181,6 +187,11 @@ function safeParseProfilesJson(text) {
  * - Reads measurement rows by scanning for line IDs like A1, B12, C03, D7 and reading next 3 cells:
  *      [LineId] [Soll] [Ist L] [Ist R]
  */
+
+/* ===============================
+   SECTION: File parsing (CSV/XLSX -> wideRows)
+   =============================== */
+
 function parseWideFlexible(grid) {
   // 1) Meta header detection (optional)
   let headerRow = -1;
@@ -274,6 +285,12 @@ function suggestCorrectionFromWideRows(wideRows) {
 }
 
 /* ------------------------- App ------------------------- */
+
+
+
+/* ===============================
+   SECTION: App component (all workflow steps)
+   =============================== */
 
 export default function App() {
   const [step, setStep] = useState(() => {
@@ -1116,6 +1133,7 @@ export default function App() {
         </div>
 
         {/* STEP 1 */}
+        {/* --- ANCHOR: STEP 1 UI block start --- */}
         {step === 1 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 1 — Import measurement CSV / Excel</div>
@@ -1162,6 +1180,7 @@ export default function App() {
         ) : null}
 
         {/* STEP 2 */}
+        {/* --- ANCHOR: STEP 2 UI block start --- */}
         {step === 2 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 2 — Wing layout (profile mapping)</div>
@@ -1268,6 +1287,7 @@ export default function App() {
         ) : null}
 
         {/* STEP 3 */}
+        {/* --- ANCHOR: STEP 3 UI block start --- */}
         {step === 3 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 3 — Maillon loop setup (baseline)</div>
@@ -1492,6 +1512,7 @@ export default function App() {
         ) : null}
 
         {/* STEP 4 */}
+        {/* --- ANCHOR: STEP 4 UI block start --- */}
         {step === 4 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 4 — Tables + Graphs</div>
@@ -1698,6 +1719,7 @@ export default function App() {
 
 
 {/* Adjustment UI */}
+            {/* --- ANCHOR: Step 4 adjustments table --- */}
             {/* Adjustment UI */}
             <div style={{ ...card, background: "#0e1018" }}>
               <div
@@ -1736,13 +1758,10 @@ export default function App() {
                 <div style={{ ...muted, fontSize: 12 }}>No groups found. Check Step 2 mapping.</div>
               ) : (
                 <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1100 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
                     <thead>
                       <tr style={{ color: "#aab1c3", fontSize: 12 }}>
                         <th style={{ textAlign: "left", padding: "6px 8px" }}>Group</th>
-
-                        <th style={{ textAlign: "left", padding: "6px 8px" }}>Loop change L</th>
-                        <th style={{ textAlign: "left", padding: "6px 8px" }}>Loop change R</th>
 
                         <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust L (mm)</th>
                         <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust R (mm)</th>
@@ -1780,80 +1799,6 @@ export default function App() {
                         return (
                           <tr key={g} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
                             <td style={{ padding: "6px 8px", fontWeight: 900 }}>{g}</td>
-
-                            {/* Loop change L */}
-                            <td style={{ padding: "6px 8px" }}>
-                              <select
-                                value={chL}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  const next = { ...(groupLoopChange || {}) };
-                                  if (!v) delete next[kL];
-                                  else next[kL] = v;
-                                  persistGroupLoopChange(next);
-                                }}
-                                style={{
-                                  width: 190,
-                                  borderRadius: 10,
-                                  border: "1px solid #2a2f3f",
-                                  background: "#0d0f16",
-                                  color: "#eef1ff",
-                                  padding: "6px 10px",
-                                  outline: "none",
-                                  fontSize: 12,
-                                }}
-                                title="Step 4 loop change (Left). Leave blank to keep Step 3 baseline."
-                              >
-                                <option value="">
-                                  — no change — (uses {getBaselineLoopType(g, "L")})
-                                </option>
-                                {Object.keys(loopTypes).map((name) => (
-                                  <option key={name} value={name}>
-                                    {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
-                                  </option>
-                                ))}
-                              </select>
-                              <div style={{ ...muted, fontSize: 11, marginTop: 4 }}>
-                                After uses: <b>{effectiveL}</b>
-                              </div>
-                            </td>
-
-                            {/* Loop change R */}
-                            <td style={{ padding: "6px 8px" }}>
-                              <select
-                                value={chR}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  const next = { ...(groupLoopChange || {}) };
-                                  if (!v) delete next[kR];
-                                  else next[kR] = v;
-                                  persistGroupLoopChange(next);
-                                }}
-                                style={{
-                                  width: 190,
-                                  borderRadius: 10,
-                                  border: "1px solid #2a2f3f",
-                                  background: "#0d0f16",
-                                  color: "#eef1ff",
-                                  padding: "6px 10px",
-                                  outline: "none",
-                                  fontSize: 12,
-                                }}
-                                title="Step 4 loop change (Right). Leave blank to keep Step 3 baseline."
-                              >
-                                <option value="">
-                                  — no change — (uses {getBaselineLoopType(g, "R")})
-                                </option>
-                                {Object.keys(loopTypes).map((name) => (
-                                  <option key={name} value={name}>
-                                    {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
-                                  </option>
-                                ))}
-                              </select>
-                              <div style={{ ...muted, fontSize: 11, marginTop: 4 }}>
-                                After uses: <b>{effectiveR}</b>
-                              </div>
-                            </td>
 
                             {/* Adjust L (dropdown + input) */}
                             <td style={{ padding: "6px 8px", textAlign: "right" }}>
@@ -2009,6 +1954,7 @@ export default function App() {
 
 
             {/* Pitch Trim (A − D) */}
+            {/* --- ANCHOR: Pitch trim card --- */}
             <div style={{ ...card, background: "#0e1018" }}>
               <div style={{ fontWeight: 900, marginBottom: 8 }}>Pitch trim (A − D)</div>
               <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
@@ -2143,6 +2089,7 @@ export default function App() {
 
             {/* Graph controls */}
             <div style={{ ...card, background: "#0e1018" }}>
+              {/* --- ANCHOR: Step 4 graphs card --- */}
               <div style={{ fontWeight: 850, marginBottom: 8 }}>Graphs</div>
               <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
                 Before vs After overlay uses Δ = (after - nominal). Target is 0mm (factory trim).
@@ -2262,6 +2209,7 @@ export default function App() {
         ) : null}
 
         {/* Guided Profile Editor Modal */}
+        {/* --- ANCHOR: Guided Profile Editor Modal --- */}
         {isProfileEditorOpen ? (
           <div
             style={{
@@ -2393,6 +2341,11 @@ export default function App() {
 
 
 /* ------------------------- Guided Mapping Editor ------------------------- */
+
+
+/* ===============================
+   SECTION: Guided profile mapping editor component
+   =============================== */
 
 function MappingEditor({ draftProfile, setDraftProfile, btn }) {
   const mapping = draftProfile.mapping || { A: [], B: [], C: [], D: [] };
@@ -2543,6 +2496,11 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
 
 /* ------------------------- Charts ------------------------- */
 
+
+
+/* ===============================
+   SECTION: Chart components
+   =============================== */
 
 function DeltaLineChart({ title, points, tolerance }) {
   const width = 1100;
@@ -2729,6 +2687,11 @@ function DeltaLineChart({ title, points, tolerance }) {
 }
 
 
+
+
+/* ===============================
+   SECTION: Chart components
+   =============================== */
 
 function WingProfileChart({ title, groupStats, tolerance }) {
   const width = 1100;
@@ -3021,6 +2984,11 @@ function BlockTable({
     </div>
   );
 }
+
+
+/* ===============================
+   SECTION: Chart components
+   =============================== */
 
 function RearViewWingChart({
   wideRows,
