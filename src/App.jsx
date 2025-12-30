@@ -19,14 +19,8 @@ import BUILTIN_PROFILES from "./wingProfiles.json";
  *   delta     = after - nominal
  */
 
-const APP_VERSION = "0.5AB";
+const APP_VERSION = "0.3.2Stable without front chartz";
 
-
-
-/* ===============================
-   SECTION: Global constants / version
-   (anchor for locating top-of-file settings)
-   =============================== */
 /* ------------------------- Helpers ------------------------- */
 
 function n(x) {
@@ -187,11 +181,6 @@ function safeParseProfilesJson(text) {
  * - Reads measurement rows by scanning for line IDs like A1, B12, C03, D7 and reading next 3 cells:
  *      [LineId] [Soll] [Ist L] [Ist R]
  */
-
-/* ===============================
-   SECTION: File parsing (CSV/XLSX -> wideRows)
-   =============================== */
-
 function parseWideFlexible(grid) {
   // 1) Meta header detection (optional)
   let headerRow = -1;
@@ -285,12 +274,6 @@ function suggestCorrectionFromWideRows(wideRows) {
 }
 
 /* ------------------------- App ------------------------- */
-
-
-
-/* ===============================
-   SECTION: App component (all workflow steps)
-   =============================== */
 
 export default function App() {
   const [step, setStep] = useState(() => {
@@ -398,58 +381,6 @@ export default function App() {
     setGroupLoopSetup(next);
     localStorage.setItem("groupLoopSetup", JSON.stringify(next));
   }
-  /* ===============================
-     Step 4 loop changes (override)
-     - Step 3 (groupLoopSetup) is BASELINE "installed loops"
-     - Step 4 (groupLoopChange) is OPTIONAL override while trimming
-     =============================== */
-
-  const [groupLoopChange, setGroupLoopChange] = useState(() => {
-    try {
-      const s = localStorage.getItem("groupLoopChange");
-      return s ? JSON.parse(s) : {};
-    } catch {
-      return {};
-    }
-  });
-
-  function persistGroupLoopChange(next) {
-    setGroupLoopChange(next);
-    localStorage.setItem("groupLoopChange", JSON.stringify(next));
-  }
-
-  function clearAllLoopChanges() {
-    persistGroupLoopChange({});
-  }
-
-  // Returns the baseline loop type from Step 3 (installed on wing)
-  function getBaselineLoopType(groupName, side) {
-    const key = `${groupName}|${side}`;
-    return (groupLoopSetup && groupLoopSetup[key]) || "SL";
-  }
-
-  // Returns the effective loop type for AFTER (Step 4 may override)
-  // If Step 4 hasn't set a change, it falls back to baseline.
-  function getEffectiveLoopType(groupName, side) {
-    const key = `${groupName}|${side}`;
-    const override = groupLoopChange && groupLoopChange[key];
-    return override ? override : getBaselineLoopType(groupName, side);
-  }
-
-  // Convert loop type => mm delta (negative shortens)
-  function loopDeltaFromType(loopType) {
-    const v = loopTypes && loopTypes[loopType];
-    return Number.isFinite(v) ? v : 0;
-  }
-
-  // BEFORE uses baseline, AFTER uses effective
-  function loopDeltaBefore(groupName, side) {
-    return loopDeltaFromType(getBaselineLoopType(groupName, side));
-  }
-  function loopDeltaAfter(groupName, side) {
-    return loopDeltaFromType(getEffectiveLoopType(groupName, side));
-  }
-
 
   const fileInputRef = useRef(null);
   const profilesImportRef = useRef(null);
@@ -961,7 +892,10 @@ export default function App() {
   ]);
 
   
-  
+  //Might need to delet this
+  const redCell = { border: "1px solid rgba(255,107,107,0.85)", background: "rgba(255,107,107,0.14)" };
+  const yellowCell = { border: "1px solid rgba(255,214,102,0.95)", background: "rgba(255,214,102,0.14)" };
+
   // Step guard
   useEffect(() => {
     if (step > 1 && !hasCSV) setStep(1);
@@ -1036,61 +970,6 @@ export default function App() {
     );
   }
 
-  // Styles
-  const page = {
-    minHeight: "100vh",
-    background: "#0b0c10",
-    color: "#eef1ff",
-    fontFamily: "system-ui, sans-serif",
-  };
-
-  const wrap = {
-    maxWidth: 1200,
-    margin: "0 auto",
-    padding: 16,
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-  };
-
-  const card = {
-    border: "1px solid #2a2f3f",
-    borderRadius: 16,
-    padding: 14,
-    background: "#0e1018",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
-    overflow: "hidden",
-  };
-
-  const muted = { color: "#aab1c3" };
-
-  const input = {
-    width: "100%",
-    borderRadius: 12,
-    border: "1px solid #2a2f3f",
-    background: "#0b0c10",
-    color: "#eef1ff",
-    padding: "10px 12px",
-    outline: "none",
-  };
-
-  const btn = {
-    borderRadius: 12,
-    border: "1px solid #2a2f3f",
-    background: "#0d0f16",
-    color: "#eef1ff",
-    padding: "10px 12px",
-    fontWeight: 800,
-    cursor: "pointer",
-  };
-
-  const btnWarn = { ...btn, border: "1px solid rgba(255,214,102,0.55)", background: "rgba(255,214,102,0.12)" };
-  const btnDanger = { ...btn, border: "1px solid rgba(255,107,107,0.6)", background: "rgba(255,107,107,0.12)" };
-
-  const redCell = { border: "1px solid rgba(255,107,107,0.85)", background: "rgba(255,107,107,0.14)" };
-  const yellowCell = { border: "1px solid rgba(255,214,102,0.95)", background: "rgba(255,214,102,0.14)" };
-
-
   return (
     <div style={page}>
       <div style={wrap}>
@@ -1133,7 +1012,6 @@ export default function App() {
         </div>
 
         {/* STEP 1 */}
-        {/* --- ANCHOR: STEP 1 UI block start --- */}
         {step === 1 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 1 — Import measurement CSV / Excel</div>
@@ -1180,7 +1058,6 @@ export default function App() {
         ) : null}
 
         {/* STEP 2 */}
-        {/* --- ANCHOR: STEP 2 UI block start --- */}
         {step === 2 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 2 — Wing layout (profile mapping)</div>
@@ -1287,7 +1164,6 @@ export default function App() {
         ) : null}
 
         {/* STEP 3 */}
-        {/* --- ANCHOR: STEP 3 UI block start --- */}
         {step === 3 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 3 — Maillon loop setup (baseline)</div>
@@ -1512,7 +1388,6 @@ export default function App() {
         ) : null}
 
         {/* STEP 4 */}
-        {/* --- ANCHOR: STEP 4 UI block start --- */}
         {step === 4 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 4 — Tables + Graphs</div>
@@ -1719,242 +1594,176 @@ export default function App() {
 
 
 {/* Adjustment UI */}
-            {/* --- ANCHOR: Step 4 adjustments table --- */}
-            {/* Adjustment UI */}
-            <div style={{ ...card, background: "#0e1018" }}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 850, marginBottom: 6 }}>
-                    Trim adjustments per line group (mm)
+<div style={{ ...card, background: "#0e1018" }}>
+  <div style={{ fontWeight: 850, marginBottom: 8 }}>Trim adjustments per line group (mm)</div>
+  <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
+    These simulate adding/removing length at the risers/maillons for each group.
+    Positive = longer; negative = shorter.
+    <div style={{ height: 6 }} />
+    Use the dropdowns to auto-fill the adjustment with a known loop type (SL/DL/AS/etc). You can still type any custom value.
+  </div>
+
+  <div style={{ height: 10 }} />
+
+  {!allGroupNames.length ? (
+    <div style={{ ...muted, fontSize: 12 }}>No groups found. Check Step 2 mapping.</div>
+  ) : (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
+        <thead>
+          <tr style={{ color: "#aab1c3", fontSize: 12 }}>
+            <th style={{ textAlign: "left", padding: "6px 8px" }}>Group</th>
+            <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust L (mm)</th>
+            <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust R (mm)</th>
+            <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ before</th>
+            <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ after</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {allGroupNames.map((g) => {
+            const kL = `${g}|L`;
+            const kR = `${g}|R`;
+            const aL = getAdjustment(adjustments, g, "L");
+            const aR = getAdjustment(adjustments, g, "R");
+
+            const statL = groupStats.find((s) => s.groupName === g && s.side === "L");
+            const statR = groupStats.find((s) => s.groupName === g && s.side === "R");
+            const beforeAvg = avg([statL?.before, statR?.before].filter((x) => Number.isFinite(x)));
+            const afterAvg = avg([statL?.after, statR?.after].filter((x) => Number.isFinite(x)));
+
+            const tol = meta.tolerance || 0;
+            const sevAfter = severity(afterAvg, tol);
+
+            return (
+              <tr key={g} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
+                <td style={{ padding: "6px 8px", fontWeight: 900 }}>{g}</td>
+
+                {/* Adjust L (dropdown + input) */}
+                <td style={{ padding: "6px 8px", textAlign: "right" }}>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+                    <select
+                      value={loopTypeFromAdjustment(aL)}
+                      onChange={(e) => {
+                        const t = e.target.value;
+                        if (!t) return; // Custom selected: do nothing (user can type)
+                        const v = loopTypes[t];
+                        persistAdjustments({ ...adjustments, [kL]: Number.isFinite(v) ? v : 0 });
+                      }}
+                      style={{
+                        borderRadius: 10,
+                        border: "1px solid #2a2f3f",
+                        background: "#0d0f16",
+                        color: "#eef1ff",
+                        padding: "6px 8px",
+                        outline: "none",
+                        fontSize: 12,
+                      }}
+                      title="Select a loop type to auto-fill Adjust L"
+                    >
+                      <option value="">Custom</option>
+                      {Object.keys(loopTypes).map((name) => (
+                        <option key={name} value={name}>
+                          {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
+                        </option>
+                      ))}
+                    </select>
+
+                    <input
+                      value={aL}
+                      onChange={(e) => persistAdjustments({ ...adjustments, [kL]: n(e.target.value) ?? 0 })}
+                      style={{
+                        ...input,
+                        width: 110,
+                        padding: "6px 8px",
+                        textAlign: "right",
+                        fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                      }}
+                      inputMode="numeric"
+                      title="Manual override (mm)"
+                    />
                   </div>
-                  <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
-                    These simulate changes you apply during trimming.
-                    <br />
-                    <b>Before</b> uses Step 3 baseline loops. <b>After</b> uses Step 4 loop changes + Adjust
-                    mm.
-                    <br />
-                    Positive = longer; negative = shorter.
+                </td>
+
+                {/* Adjust R (dropdown + input) */}
+                <td style={{ padding: "6px 8px", textAlign: "right" }}>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+                    <select
+                      value={loopTypeFromAdjustment(aR)}
+                      onChange={(e) => {
+                        const t = e.target.value;
+                        if (!t) return; // Custom selected: do nothing
+                        const v = loopTypes[t];
+                        persistAdjustments({ ...adjustments, [kR]: Number.isFinite(v) ? v : 0 });
+                      }}
+                      style={{
+                        borderRadius: 10,
+                        border: "1px solid #2a2f3f",
+                        background: "#0d0f16",
+                        color: "#eef1ff",
+                        padding: "6px 8px",
+                        outline: "none",
+                        fontSize: 12,
+                      }}
+                      title="Select a loop type to auto-fill Adjust R"
+                    >
+                      <option value="">Custom</option>
+                      {Object.keys(loopTypes).map((name) => (
+                        <option key={name} value={name}>
+                          {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
+                        </option>
+                      ))}
+                    </select>
+
+                    <input
+                      value={aR}
+                      onChange={(e) => persistAdjustments({ ...adjustments, [kR]: n(e.target.value) ?? 0 })}
+                      style={{
+                        ...input,
+                        width: 110,
+                        padding: "6px 8px",
+                        textAlign: "right",
+                        fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                      }}
+                      inputMode="numeric"
+                      title="Manual override (mm)"
+                    />
                   </div>
-                </div>
+                </td>
 
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button onClick={clearAllLoopChanges} style={btn}>
-                    Clear all loop changes (Step 4)
-                  </button>
-                </div>
-              </div>
+                <td
+                  style={{
+                    padding: "6px 8px",
+                    textAlign: "right",
+                    color: "#aab1c3",
+                    fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                  }}
+                >
+                  {Number.isFinite(beforeAvg) ? Math.round(beforeAvg) : "—"}
+                </td>
 
-              <div style={{ height: 10 }} />
-
-              {!allGroupNames.length ? (
-                <div style={{ ...muted, fontSize: 12 }}>No groups found. Check Step 2 mapping.</div>
-              ) : (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
-                    <thead>
-                      <tr style={{ color: "#aab1c3", fontSize: 12 }}>
-                        <th style={{ textAlign: "left", padding: "6px 8px" }}>Group</th>
-
-                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust L (mm)</th>
-                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust R (mm)</th>
-
-                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ before</th>
-                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ after</th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {allGroupNames.map((g) => {
-                        const kL = `${g}|L`;
-                        const kR = `${g}|R`;
-
-                        const aL = getAdjustment(adjustments, g, "L");
-                        const aR = getAdjustment(adjustments, g, "R");
-
-                        // Step 4 overrides (blank means "no change")
-                        const chL = (groupLoopChange && groupLoopChange[kL]) || "";
-                        const chR = (groupLoopChange && groupLoopChange[kR]) || "";
-
-                        // For label
-                        const effectiveL = getEffectiveLoopType(g, "L");
-                        const effectiveR = getEffectiveLoopType(g, "R");
-
-                        // Stats (already computed elsewhere)
-                        const statL = groupStats.find((s) => s.groupName === g && s.side === "L");
-                        const statR = groupStats.find((s) => s.groupName === g && s.side === "R");
-                        const beforeAvg = avg([statL?.before, statR?.before].filter((x) => Number.isFinite(x)));
-                        const afterAvg = avg([statL?.after, statR?.after].filter((x) => Number.isFinite(x)));
-
-                        const tol = meta.tolerance || 0;
-                        const sevAfter = severity(afterAvg, tol);
-
-                        return (
-                          <tr key={g} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
-                            <td style={{ padding: "6px 8px", fontWeight: 900 }}>{g}</td>
-
-                            {/* Adjust L (dropdown + input) */}
-                            <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: 8,
-                                  justifyContent: "flex-end",
-                                  alignItems: "center",
-                                  flexWrap: "wrap",
-                                }}
-                              >
-                                <select
-                                  value={loopTypeFromAdjustment(aL)}
-                                  onChange={(e) => {
-                                    const t = e.target.value;
-                                    if (!t) return; // Custom
-
-                                    // baseline loop is Step 3 installed loop for this group side
-                                    const installedType = getBaselineLoopType(g, "L") || "SL";
-                                    const chosen = Number(loopTypes?.[t] ?? 0);
-                                    const installed = Number(loopTypes?.[installedType] ?? 0);
-
-                                    // adjustment = chosen - installed (relative to baseline loop)
-                                    const adj = Number.isFinite(chosen - installed) ? chosen - installed : 0;
-                                    persistAdjustments({ ...adjustments, [kL]: adj });
-                                  }}
-                                  style={{
-                                    borderRadius: 10,
-                                    border: "1px solid #2a2f3f",
-                                    background: "#0d0f16",
-                                    color: "#eef1ff",
-                                    padding: "6px 8px",
-                                    outline: "none",
-                                    fontSize: 12,
-                                  }}
-                                  title="Pick a loop type to auto-fill Adjust L (relative to Step 3 baseline)"
-                                >
-                                  <option value="">Custom</option>
-                                  {Object.keys(loopTypes).map((name) => (
-                                    <option key={name} value={name}>
-                                      {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
-                                    </option>
-                                  ))}
-                                </select>
-
-                                <input
-                                  value={aL}
-                                  onChange={(e) => persistAdjustments({ ...adjustments, [kL]: n(e.target.value) ?? 0 })}
-                                  style={{
-                                    ...input,
-                                    width: 110,
-                                    padding: "6px 8px",
-                                    textAlign: "right",
-                                    fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                                  }}
-                                  inputMode="numeric"
-                                  title="Manual override (mm)"
-                                />
-                              </div>
-                            </td>
-
-                            {/* Adjust R (dropdown + input) */}
-                            <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: 8,
-                                  justifyContent: "flex-end",
-                                  alignItems: "center",
-                                  flexWrap: "wrap",
-                                }}
-                              >
-                                <select
-                                  value={loopTypeFromAdjustment(aR)}
-                                  onChange={(e) => {
-                                    const t = e.target.value;
-                                    if (!t) return; // Custom
-
-                                    const installedType = getBaselineLoopType(g, "R") || "SL";
-                                    const chosen = Number(loopTypes?.[t] ?? 0);
-                                    const installed = Number(loopTypes?.[installedType] ?? 0);
-
-                                    const adj = Number.isFinite(chosen - installed) ? chosen - installed : 0;
-                                    persistAdjustments({ ...adjustments, [kR]: adj });
-                                  }}
-                                  style={{
-                                    borderRadius: 10,
-                                    border: "1px solid #2a2f3f",
-                                    background: "#0d0f16",
-                                    color: "#eef1ff",
-                                    padding: "6px 8px",
-                                    outline: "none",
-                                    fontSize: 12,
-                                  }}
-                                  title="Pick a loop type to auto-fill Adjust R (relative to Step 3 baseline)"
-                                >
-                                  <option value="">Custom</option>
-                                  {Object.keys(loopTypes).map((name) => (
-                                    <option key={name} value={name}>
-                                      {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
-                                    </option>
-                                  ))}
-                                </select>
-
-                                <input
-                                  value={aR}
-                                  onChange={(e) => persistAdjustments({ ...adjustments, [kR]: n(e.target.value) ?? 0 })}
-                                  style={{
-                                    ...input,
-                                    width: 110,
-                                    padding: "6px 8px",
-                                    textAlign: "right",
-                                    fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                                  }}
-                                  inputMode="numeric"
-                                  title="Manual override (mm)"
-                                />
-                              </div>
-                            </td>
-
-                            <td
-                              style={{
-                                padding: "6px 8px",
-                                textAlign: "right",
-                                color: "#aab1c3",
-                                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                              }}
-                            >
-                              {Number.isFinite(beforeAvg) ? Math.round(beforeAvg) : "—"}
-                            </td>
-
-                            <td
-                              style={{
-                                padding: "6px 8px",
-                                textAlign: "right",
-                                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                                ...(sevAfter === "red" ? redCell : sevAfter === "yellow" ? yellowCell : null),
-                              }}
-                            >
-                              {Number.isFinite(afterAvg) ? Math.round(afterAvg) : "—"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+                <td
+                  style={{
+                    padding: "6px 8px",
+                    textAlign: "right",
+                    fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                    ...(sevAfter === "red" ? redCell : sevAfter === "yellow" ? yellowCell : null),
+                  }}
+                >
+                  {Number.isFinite(afterAvg) ? Math.round(afterAvg) : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  )}
+</div>
 
             <div style={{ height: 12 }} />
 
-
             {/* Pitch Trim (A − D) */}
-            {/* --- ANCHOR: Pitch trim card --- */}
             <div style={{ ...card, background: "#0e1018" }}>
               <div style={{ fontWeight: 900, marginBottom: 8 }}>Pitch trim (A − D)</div>
               <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
@@ -2089,7 +1898,6 @@ export default function App() {
 
             {/* Graph controls */}
             <div style={{ ...card, background: "#0e1018" }}>
-              {/* --- ANCHOR: Step 4 graphs card --- */}
               <div style={{ fontWeight: 850, marginBottom: 8 }}>Graphs</div>
               <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
                 Before vs After overlay uses Δ = (after - nominal). Target is 0mm (factory trim).
@@ -2209,7 +2017,6 @@ export default function App() {
         ) : null}
 
         {/* Guided Profile Editor Modal */}
-        {/* --- ANCHOR: Guided Profile Editor Modal --- */}
         {isProfileEditorOpen ? (
           <div
             style={{
@@ -2338,14 +2145,7 @@ export default function App() {
   );
 }
 
-
-
 /* ------------------------- Guided Mapping Editor ------------------------- */
-
-
-/* ===============================
-   SECTION: Guided profile mapping editor component
-   =============================== */
 
 function MappingEditor({ draftProfile, setDraftProfile, btn }) {
   const mapping = draftProfile.mapping || { A: [], B: [], C: [], D: [] };
@@ -2365,14 +2165,12 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
   function updateCell(letter, idx, col, value) {
     const rows = (mapping[letter] || []).slice();
     const r = rows[idx] ? rows[idx].slice() : [1, 1, `${letter}R1`];
-
     if (col === 0 || col === 1) {
       const v = parseInt(String(value || "0"), 10);
       r[col] = Number.isFinite(v) ? v : r[col];
     } else {
       r[col] = String(value || "");
     }
-
     rows[idx] = r;
     setRows(letter, rows);
   }
@@ -2391,10 +2189,7 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
       {letters.map((L) => (
-        <div
-          key={L}
-          style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}
-        >
+        <div key={L} style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
             <div style={{ fontWeight: 900 }}>{L} mapping</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -2412,46 +2207,101 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
                   <th style={{ textAlign: "right", padding: "6px 8px" }}>From</th>
                   <th style={{ textAlign: "right", padding: "6px 8px" }}>To</th>
                   <th style={{ textAlign: "left", padding: "6px 8px" }}>Group</th>
-                  <th style={{ padding: "6px 8px" }} />
+                  <th style={{ padding: "6px 8px" }}></th>
                 </tr>
               </thead>
-
               <tbody>
                 {(mapping[L] || []).map((row, idx) => (
                   <tr key={idx} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
-                    <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                      <input
-                        value={row?.[0] ?? ""}
-                        onChange={(e) => updateCell(L, idx, 0, e.target.value)}
-                        style={{
-                          width: 70,
-                          padding: "6px 8px",
-                          borderRadius: 10,
-                          border: "1px solid #2a2f3f",
-                          background: "#0d0f16",
-                          color: "#eef1ff",
-                          textAlign: "right",
-                        }}
-                        inputMode="numeric"
-                      />
-                    </td>
+<td style={{ padding: "6px 8px", textAlign: "right" }}>
+  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+    <select
+      value={loopTypeFromAdjustment(aL)}
+      onChange={(e) => {
+        const t = e.target.value;
+        if (!t) return; // Custom: leave number as-is
+        const v = loopTypes[t];
+        persistAdjustments({ ...adjustments, [kL]: Number.isFinite(v) ? v : 0 });
+      }}
+      style={{
+        borderRadius: 10,
+        border: "1px solid #2a2f3f",
+        background: "#0d0f16",
+        color: "#eef1ff",
+        padding: "6px 8px",
+        outline: "none",
+        fontSize: 12,
+      }}
+      title="Pick a loop type to auto-fill Adjust L"
+    >
+      <option value="">Custom</option>
+      {Object.keys(loopTypes).map((name) => (
+        <option key={name} value={name}>
+          {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
+        </option>
+      ))}
+    </select>
 
-                    <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                      <input
-                        value={row?.[1] ?? ""}
-                        onChange={(e) => updateCell(L, idx, 1, e.target.value)}
-                        style={{
-                          width: 70,
-                          padding: "6px 8px",
-                          borderRadius: 10,
-                          border: "1px solid #2a2f3f",
-                          background: "#0d0f16",
-                          color: "#eef1ff",
-                          textAlign: "right",
-                        }}
-                        inputMode="numeric"
-                      />
-                    </td>
+    <input
+      value={aL}
+      onChange={(e) => persistAdjustments({ ...adjustments, [kL]: n(e.target.value) ?? 0 })}
+      style={{
+        ...input,
+        width: 110,
+        padding: "6px 8px",
+        textAlign: "right",
+        fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+      }}
+      inputMode="numeric"
+      title="Manual override (mm)"
+    />
+  </div>
+</td>
+
+<td style={{ padding: "6px 8px", textAlign: "right" }}>
+  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+    <select
+      value={loopTypeFromAdjustment(aR)}
+      onChange={(e) => {
+        const t = e.target.value;
+        if (!t) return; // Custom: leave number as-is
+        const v = loopTypes[t];
+        persistAdjustments({ ...adjustments, [kR]: Number.isFinite(v) ? v : 0 });
+      }}
+      style={{
+        borderRadius: 10,
+        border: "1px solid #2a2f3f",
+        background: "#0d0f16",
+        color: "#eef1ff",
+        padding: "6px 8px",
+        outline: "none",
+        fontSize: 12,
+      }}
+      title="Pick a loop type to auto-fill Adjust R"
+    >
+      <option value="">Custom</option>
+      {Object.keys(loopTypes).map((name) => (
+        <option key={name} value={name}>
+          {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
+        </option>
+      ))}
+    </select>
+
+    <input
+      value={aR}
+      onChange={(e) => persistAdjustments({ ...adjustments, [kR]: n(e.target.value) ?? 0 })}
+      style={{
+        ...input,
+        width: 110,
+        padding: "6px 8px",
+        textAlign: "right",
+        fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+      }}
+      inputMode="numeric"
+      title="Manual override (mm)"
+    />
+  </div>
+</td>
 
                     <td style={{ padding: "6px 8px" }}>
                       <input
@@ -2467,13 +2317,11 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
                         }}
                       />
                     </td>
-
                     <td style={{ padding: "6px 8px", textAlign: "right" }}>
                       <button style={btn} onClick={() => removeRow(L, idx)}>Delete</button>
                     </td>
                   </tr>
                 ))}
-
                 {!mapping[L] || mapping[L].length === 0 ? (
                   <tr>
                     <td colSpan={4} style={{ padding: "8px 8px", color: "#aab1c3", fontSize: 12 }}>
@@ -2496,11 +2344,6 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
 
 /* ------------------------- Charts ------------------------- */
 
-
-
-/* ===============================
-   SECTION: Chart components
-   =============================== */
 
 function DeltaLineChart({ title, points, tolerance }) {
   const width = 1100;
@@ -2687,11 +2530,6 @@ function DeltaLineChart({ title, points, tolerance }) {
 }
 
 
-
-
-/* ===============================
-   SECTION: Chart components
-   =============================== */
 
 function WingProfileChart({ title, groupStats, tolerance }) {
   const width = 1100;
@@ -2984,11 +2822,6 @@ function BlockTable({
     </div>
   );
 }
-
-
-/* ===============================
-   SECTION: Chart components
-   =============================== */
 
 function RearViewWingChart({
   wideRows,
