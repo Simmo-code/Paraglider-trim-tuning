@@ -21,6 +21,12 @@ import BUILTIN_PROFILES from "./wingProfiles.json";
 
 const APP_VERSION = "0.5";
 
+
+
+/* ===============================
+   SECTION: Global constants / version
+   (anchor for locating top-of-file settings)
+   =============================== */
 /* ------------------------- Helpers ------------------------- */
 
 function n(x) {
@@ -181,6 +187,11 @@ function safeParseProfilesJson(text) {
  * - Reads measurement rows by scanning for line IDs like A1, B12, C03, D7 and reading next 3 cells:
  *      [LineId] [Soll] [Ist L] [Ist R]
  */
+
+/* ===============================
+   SECTION: File parsing (CSV/XLSX -> wideRows)
+   =============================== */
+
 function parseWideFlexible(grid) {
   // 1) Meta header detection (optional)
   let headerRow = -1;
@@ -274,6 +285,12 @@ function suggestCorrectionFromWideRows(wideRows) {
 }
 
 /* ------------------------- App ------------------------- */
+
+
+
+/* ===============================
+   SECTION: App component (all workflow steps)
+   =============================== */
 
 export default function App() {
   const [step, setStep] = useState(() => {
@@ -381,6 +398,59 @@ export default function App() {
     setGroupLoopSetup(next);
     localStorage.setItem("groupLoopSetup", JSON.stringify(next));
   }
+  /* ===============================
+     Step 4 loop changes (override)
+     - Step 3 (groupLoopSetup) is BASELINE "installed loops"
+     - Step 4 (groupLoopChange) is OPTIONAL override while trimming
+     =============================== */
+
+  const [groupLoopChange, setGroupLoopChange] = useState(() => {
+    try {
+      const s = localStorage.getItem("groupLoopChange");
+      return s ? JSON.parse(s) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  function persistGroupLoopChange(next) {
+    setGroupLoopChange(next);
+    localStorage.setItem("groupLoopChange", JSON.stringify(next));
+  }
+
+  function clearAllLoopChanges() {
+    persistGroupLoopChange({});
+  }
+
+  // Returns the baseline loop type from Step 3 (installed on wing)
+  function getBaselineLoopType(groupName, side) {
+    const key = `${groupName}|${side}`;
+    return (groupLoopSetup && groupLoopSetup[key]) || "SL";
+  }
+
+  // Returns the effective loop type for AFTER (Step 4 may override)
+  // If Step 4 hasn't set a change, it falls back to baseline.
+  function getEffectiveLoopType(groupName, side) {
+    const key = `${groupName}|${side}`;
+    const override = groupLoopChange && groupLoopChange[key];
+    return override ? override : getBaselineLoopType(groupName, side);
+  }
+
+  // Convert loop type => mm delta (negative shortens)
+  function loopDeltaFromType(loopType) {
+    const v = loopTypes && loopTypes[loopType];
+    return Number.isFinite(v) ? v : 0;
+  }
+
+  // BEFORE uses baseline, AFTER uses effective
+  function loopDeltaBefore(groupName, side) {
+    return loopDeltaFromType(getBaselineLoopType(groupName, side));
+  }
+  function loopDeltaAfter(groupName, side) {
+    return loopDeltaFromType(getEffectiveLoopType(groupName, side));
+  }
+
+
   const fileInputRef = useRef(null);
   const profilesImportRef = useRef(null);
   const [selectedFileName, setSelectedFileName] = useState("");
@@ -1063,6 +1133,7 @@ export default function App() {
         </div>
 
         {/* STEP 1 */}
+        {/* --- ANCHOR: STEP 1 UI block start --- */}
         {step === 1 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 1 — Import measurement CSV / Excel</div>
@@ -1109,6 +1180,7 @@ export default function App() {
         ) : null}
 
         {/* STEP 2 */}
+        {/* --- ANCHOR: STEP 2 UI block start --- */}
         {step === 2 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 2 — Wing layout (profile mapping)</div>
@@ -1215,6 +1287,7 @@ export default function App() {
         ) : null}
 
         {/* STEP 3 */}
+        {/* --- ANCHOR: STEP 3 UI block start --- */}
         {step === 3 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 3 — Maillon loop setup (baseline)</div>
@@ -1439,6 +1512,7 @@ export default function App() {
         ) : null}
 
         {/* STEP 4 */}
+        {/* --- ANCHOR: STEP 4 UI block start --- */}
         {step === 4 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 4 — Tables + Graphs</div>
@@ -1644,19 +1718,37 @@ export default function App() {
 
 
 
+{/* Adjustment UI */}
+            {/* --- ANCHOR: Step 4 adjustments table --- */}
             {/* Adjustment UI */}
             <div style={{ ...card, background: "#0e1018" }}>
-              <div>
-                <div style={{ fontWeight: 850, marginBottom: 6 }}>Trim adjustments per line group (mm)</div>
-                <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
-                  These simulate changes you apply during trimming.
-                  <br />
-                  Baseline uses the <b>Step 3 “loops installed”</b>. In Step 4 you can:
-                  <ul style={{ margin: "6px 0 0 18px" }}>
-                    <li>Pick a <b>loop type</b> to auto-fill an equivalent adjustment (relative to the installed loop)</li>
-                    <li>Or type a <b>manual mm</b> adjustment</li>
-                  </ul>
-                  Positive = longer; negative = shorter.
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 850, marginBottom: 6 }}>
+                    Trim adjustments per line group (mm)
+                  </div>
+                  <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
+                    These simulate changes you apply during trimming.
+                    <br />
+                    <b>Before</b> uses Step 3 baseline loops. <b>After</b> uses Step 4 loop changes + Adjust
+                    mm.
+                    <br />
+                    Positive = longer; negative = shorter.
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button onClick={clearAllLoopChanges} style={btn}>
+                    Clear all loop changes (Step 4)
+                  </button>
                 </div>
               </div>
 
@@ -1670,19 +1762,32 @@ export default function App() {
                     <thead>
                       <tr style={{ color: "#aab1c3", fontSize: 12 }}>
                         <th style={{ textAlign: "left", padding: "6px 8px" }}>Group</th>
+
                         <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust L (mm)</th>
                         <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust R (mm)</th>
+
                         <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ before</th>
                         <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ after</th>
                       </tr>
                     </thead>
+
                     <tbody>
                       {allGroupNames.map((g) => {
                         const kL = `${g}|L`;
                         const kR = `${g}|R`;
+
                         const aL = getAdjustment(adjustments, g, "L");
                         const aR = getAdjustment(adjustments, g, "R");
 
+                        // Step 4 overrides (blank means "no change")
+                        const chL = (groupLoopChange && groupLoopChange[kL]) || "";
+                        const chR = (groupLoopChange && groupLoopChange[kR]) || "";
+
+                        // For label
+                        const effectiveL = getEffectiveLoopType(g, "L");
+                        const effectiveR = getEffectiveLoopType(g, "R");
+
+                        // Stats (already computed elsewhere)
                         const statL = groupStats.find((s) => s.groupName === g && s.side === "L");
                         const statR = groupStats.find((s) => s.groupName === g && s.side === "R");
                         const beforeAvg = avg([statL?.before, statR?.before].filter((x) => Number.isFinite(x)));
@@ -1710,13 +1815,14 @@ export default function App() {
                                   value={loopTypeFromAdjustment(aL)}
                                   onChange={(e) => {
                                     const t = e.target.value;
-                                    if (!t) return; // Custom: leave number as-is
+                                    if (!t) return; // Custom
 
-                                    const installedType = groupLoopSetup?.[`${g}|L`] || "SL";
+                                    // baseline loop is Step 3 installed loop for this group side
+                                    const installedType = getBaselineLoopType(g, "L") || "SL";
                                     const chosen = Number(loopTypes?.[t] ?? 0);
                                     const installed = Number(loopTypes?.[installedType] ?? 0);
 
-                                    // Adjustment is relative to the installed baseline loop
+                                    // adjustment = chosen - installed (relative to baseline loop)
                                     const adj = Number.isFinite(chosen - installed) ? chosen - installed : 0;
                                     persistAdjustments({ ...adjustments, [kL]: adj });
                                   }}
@@ -1729,12 +1835,12 @@ export default function App() {
                                     outline: "none",
                                     fontSize: 12,
                                   }}
-                                  title="Pick a loop type to auto-fill Adjust L (relative to installed loop)"
+                                  title="Pick a loop type to auto-fill Adjust L (relative to Step 3 baseline)"
                                 >
                                   <option value="">Custom</option>
                                   {Object.keys(loopTypes).map((name) => (
                                     <option key={name} value={name}>
-                                      {name} ({Number(loopTypes[name]) > 0 ? `+${Number(loopTypes[name])}` : `${Number(loopTypes[name])}`}mm)
+                                      {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
                                     </option>
                                   ))}
                                 </select>
@@ -1770,9 +1876,9 @@ export default function App() {
                                   value={loopTypeFromAdjustment(aR)}
                                   onChange={(e) => {
                                     const t = e.target.value;
-                                    if (!t) return;
+                                    if (!t) return; // Custom
 
-                                    const installedType = groupLoopSetup?.[`${g}|R`] || "SL";
+                                    const installedType = getBaselineLoopType(g, "R") || "SL";
                                     const chosen = Number(loopTypes?.[t] ?? 0);
                                     const installed = Number(loopTypes?.[installedType] ?? 0);
 
@@ -1788,12 +1894,12 @@ export default function App() {
                                     outline: "none",
                                     fontSize: 12,
                                   }}
-                                  title="Pick a loop type to auto-fill Adjust R (relative to installed loop)"
+                                  title="Pick a loop type to auto-fill Adjust R (relative to Step 3 baseline)"
                                 >
                                   <option value="">Custom</option>
                                   {Object.keys(loopTypes).map((name) => (
                                     <option key={name} value={name}>
-                                      {name} ({Number(loopTypes[name]) > 0 ? `+${Number(loopTypes[name])}` : `${Number(loopTypes[name])}`}mm)
+                                      {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
                                     </option>
                                   ))}
                                 </select>
@@ -1846,7 +1952,9 @@ export default function App() {
 
             <div style={{ height: 12 }} />
 
+
             {/* Pitch Trim (A − D) */}
+            {/* --- ANCHOR: Pitch trim card --- */}
             <div style={{ ...card, background: "#0e1018" }}>
               <div style={{ fontWeight: 900, marginBottom: 8 }}>Pitch trim (A − D)</div>
               <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
@@ -1981,6 +2089,7 @@ export default function App() {
 
             {/* Graph controls */}
             <div style={{ ...card, background: "#0e1018" }}>
+              {/* --- ANCHOR: Step 4 graphs card --- */}
               <div style={{ fontWeight: 850, marginBottom: 8 }}>Graphs</div>
               <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
                 Before vs After overlay uses Δ = (after - nominal). Target is 0mm (factory trim).
@@ -2100,6 +2209,7 @@ export default function App() {
         ) : null}
 
         {/* Guided Profile Editor Modal */}
+        {/* --- ANCHOR: Guided Profile Editor Modal --- */}
         {isProfileEditorOpen ? (
           <div
             style={{
@@ -2231,6 +2341,11 @@ export default function App() {
 
 
 /* ------------------------- Guided Mapping Editor ------------------------- */
+
+
+/* ===============================
+   SECTION: Guided profile mapping editor component
+   =============================== */
 
 function MappingEditor({ draftProfile, setDraftProfile, btn }) {
   const mapping = draftProfile.mapping || { A: [], B: [], C: [], D: [] };
@@ -2381,6 +2496,11 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
 
 /* ------------------------- Charts ------------------------- */
 
+
+
+/* ===============================
+   SECTION: Chart components
+   =============================== */
 
 function DeltaLineChart({ title, points, tolerance }) {
   const width = 1100;
@@ -2567,6 +2687,11 @@ function DeltaLineChart({ title, points, tolerance }) {
 }
 
 
+
+
+/* ===============================
+   SECTION: Chart components
+   =============================== */
 
 function WingProfileChart({ title, groupStats, tolerance }) {
   const width = 1100;
@@ -2859,6 +2984,11 @@ function BlockTable({
     </div>
   );
 }
+
+
+/* ===============================
+   SECTION: Chart components
+   =============================== */
 
 function RearViewWingChart({
   wideRows,
@@ -3360,3 +3490,4 @@ function RearViewWingChart({
     </div>
   );
 }
+
