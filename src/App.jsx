@@ -2368,7 +2368,6 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
               <button style={btn} onClick={() => addRow(L)}>Add row</button>
               <button style={btn} onClick={() => sortRows(L)}>Sort</button>
             </div>
-          </div>
 
           <div style={{ height: 10 }} />
 
