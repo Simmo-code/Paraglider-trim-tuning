@@ -2351,25 +2351,36 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
   }
 
   function sortRows(letter) {
-    const rows = (mapping[letter] || []).slice().sort((a, b) => (a?.[0] ?? 0) - (b?.[0] ?? 0));
+    const rows = (mapping[letter] || [])
+      .slice()
+      .sort((a, b) => (a?.[0] ?? 0) - (b?.[0] ?? 0));
     setRows(letter, rows);
   }
 
   return (
-<div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-  <div style={{ fontWeight: 900 }}>{L} mapping</div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
+      {letters.map((L) => (
+        <div
+          key={L}
+          style={{
+            border: "1px solid #2a2f3f",
+            borderRadius: 14,
+            padding: 12,
+            background: "#0e1018",
+          }}
+        >
+          {/* Header row */}
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+            <div style={{ fontWeight: 900 }}>{L} mapping</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button style={btn} onClick={() => addRow(L)}>Add row</button>
+              <button style={btn} onClick={() => sortRows(L)}>Sort</button>
+            </div>
+          </div>
 
-  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-    <button style={btn} onClick={() => addRow(L)}>Add row</button>
-    <button style={btn} onClick={() => sortRows(L)}>Sort</button>
-  </div>
-</div>
+          <div style={{ height: 10 }} />
 
-<div style={{ height: 10 }} />
-
-<div style={{ overflowX: "auto" }}>
-
-
+          <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 420 }}>
               <thead>
                 <tr style={{ color: "#aab1c3", fontSize: 12 }}>
