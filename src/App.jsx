@@ -2314,6 +2314,7 @@ export default function App() {
    SECTION: Guided profile mapping editor component
    =============================== */
 /* ------------------------- Guided Mapping Editor ------------------------- */
+
 function MappingEditor({ draftProfile, setDraftProfile, btn }) {
   const mapping = draftProfile.mapping || { A: [], B: [], C: [], D: [] };
   const letters = ["A", "B", "C", "D"];
@@ -2360,8 +2361,14 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
       {letters.map((L) => (
         <div
           key={L}
-          style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}
+          style={{
+            border: "1px solid #2a2f3f",
+            borderRadius: 14,
+            padding: 12,
+            background: "#0e1018",
+          }}
         >
+          {/* Header row (THIS was missing a closing </div> in your broken version) */}
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
             <div style={{ fontWeight: 900 }}>{L} mapping</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -2441,7 +2448,7 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
                   </tr>
                 ))}
 
-                {!mapping[L] || mapping[L].length === 0 ? (
+                {(!mapping[L] || mapping[L].length === 0) ? (
                   <tr>
                     <td colSpan={4} style={{ padding: "8px 8px", color: "#aab1c3", fontSize: 12 }}>
                       No ranges yet. Click “Add row”.
@@ -2460,6 +2467,9 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
     </div>
   );
 }
+
+
+
 
 /* ------------------------- Charts ------------------------- */
 
