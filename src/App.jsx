@@ -19,8 +19,14 @@ import BUILTIN_PROFILES from "./wingProfiles.json";
  *   delta     = after - nominal
  */
 
-const APP_VERSION = "0.5a";
+const APP_VERSION = "0.5cleaned";
 
+
+
+/* ===============================
+   SECTION: Global constants / version
+   (anchor for locating top-of-file settings)
+   =============================== */
 /* ------------------------- Helpers ------------------------- */
 
 function n(x) {
@@ -181,6 +187,11 @@ function safeParseProfilesJson(text) {
  * - Reads measurement rows by scanning for line IDs like A1, B12, C03, D7 and reading next 3 cells:
  *      [LineId] [Soll] [Ist L] [Ist R]
  */
+
+/* ===============================
+   SECTION: File parsing (CSV/XLSX -> wideRows)
+   =============================== */
+
 function parseWideFlexible(grid) {
   // 1) Meta header detection (optional)
   let headerRow = -1;
@@ -251,6 +262,11 @@ function parseWideFlexible(grid) {
 
 /* -------- Zeroing wizard: median correction suggestion -------- */
 
+
+/* =====================================================================
+   SECTION MARKER 1 — around line 265 (helper navigation)
+   ===================================================================== */
+
 function median(values) {
   const v = values.filter((x) => Number.isFinite(x)).slice().sort((a, b) => a - b);
   if (!v.length) return null;
@@ -274,6 +290,12 @@ function suggestCorrectionFromWideRows(wideRows) {
 }
 
 /* ------------------------- App ------------------------- */
+
+
+
+/* ===============================
+   SECTION: App component (all workflow steps)
+   =============================== */
 
 export default function App() {
   const [step, setStep] = useState(() => {
@@ -384,55 +406,14 @@ export default function App() {
   /* ===============================
      Step 4 loop changes (override)
      - Step 3 (groupLoopSetup) is BASELINE "installed loops"
-     - Step 4 (groupLoopChange) is OPTIONAL override while trimming
      =============================== */
 
-  const [groupLoopChange, setGroupLoopChange] = useState(() => {
-    try {
-      const s = localStorage.getItem("groupLoopChange");
-      return s ? JSON.parse(s) : {};
-    } catch {
-      return {};
-    }
-  });
-
-  function persistGroupLoopChange(next) {
-    setGroupLoopChange(next);
-    localStorage.setItem("groupLoopChange", JSON.stringify(next));
-  }
-
-  function clearAllLoopChanges() {
-    persistGroupLoopChange({});
-  }
 
   // Returns the baseline loop type from Step 3 (installed on wing)
-  function getBaselineLoopType(groupName, side) {
-    const key = `${groupName}|${side}`;
-    return (groupLoopSetup && groupLoopSetup[key]) || "SL";
-  }
-
   // Returns the effective loop type for AFTER (Step 4 may override)
   // If Step 4 hasn't set a change, it falls back to baseline.
-  function getEffectiveLoopType(groupName, side) {
-    const key = `${groupName}|${side}`;
-    const override = groupLoopChange && groupLoopChange[key];
-    return override ? override : getBaselineLoopType(groupName, side);
-  }
-
   // Convert loop type => mm delta (negative shortens)
-  function loopDeltaFromType(loopType) {
-    const v = loopTypes && loopTypes[loopType];
-    return Number.isFinite(v) ? v : 0;
-  }
-
   // BEFORE uses baseline, AFTER uses effective
-  function loopDeltaBefore(groupName, side) {
-    return loopDeltaFromType(getBaselineLoopType(groupName, side));
-  }
-  function loopDeltaAfter(groupName, side) {
-    return loopDeltaFromType(getEffectiveLoopType(groupName, side));
-  }
-
 
   const fileInputRef = useRef(null);
   const profilesImportRef = useRef(null);
@@ -1075,6 +1056,7 @@ export default function App() {
 
 
   return (
+    <ErrorBoundary>
     <div style={page}>
       <div style={wrap}>
         {/* Header */}
@@ -1116,6 +1098,7 @@ export default function App() {
         </div>
 
         {/* STEP 1 */}
+        {/* --- ANCHOR: STEP 1 UI block start --- */}
         {step === 1 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 1 — Import measurement CSV / Excel</div>
@@ -1162,6 +1145,7 @@ export default function App() {
         ) : null}
 
         {/* STEP 2 */}
+        {/* --- ANCHOR: STEP 2 UI block start --- */}
         {step === 2 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 2 — Wing layout (profile mapping)</div>
@@ -1268,6 +1252,7 @@ export default function App() {
         ) : null}
 
         {/* STEP 3 */}
+        {/* --- ANCHOR: STEP 3 UI block start --- */}
         {step === 3 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 3 — Maillon loop setup (baseline)</div>
@@ -1492,6 +1477,7 @@ export default function App() {
         ) : null}
 
         {/* STEP 4 */}
+        {/* --- ANCHOR: STEP 4 UI block start --- */}
         {step === 4 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 4 — Tables + Graphs</div>
@@ -1698,6 +1684,7 @@ export default function App() {
 
 
 {/* Adjustment UI */}
+            {/* --- ANCHOR: Step 4 adjustments table --- */}
             {/* Adjustment UI */}
             <div style={{ ...card, background: "#0e1018" }}>
               <div
@@ -1724,8 +1711,6 @@ export default function App() {
                 </div>
 
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button onClick={clearAllLoopChanges} style={btn}>
-                    Clear all loop changes (Step 4)
                   </button>
                 </div>
               </div>
@@ -1736,13 +1721,10 @@ export default function App() {
                 <div style={{ ...muted, fontSize: 12 }}>No groups found. Check Step 2 mapping.</div>
               ) : (
                 <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1100 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
                     <thead>
                       <tr style={{ color: "#aab1c3", fontSize: 12 }}>
                         <th style={{ textAlign: "left", padding: "6px 8px" }}>Group</th>
-
-                        <th style={{ textAlign: "left", padding: "6px 8px" }}>Loop change L</th>
-                        <th style={{ textAlign: "left", padding: "6px 8px" }}>Loop change R</th>
 
                         <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust L (mm)</th>
                         <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust R (mm)</th>
@@ -1761,12 +1743,8 @@ export default function App() {
                         const aR = getAdjustment(adjustments, g, "R");
 
                         // Step 4 overrides (blank means "no change")
-                        const chL = (groupLoopChange && groupLoopChange[kL]) || "";
-                        const chR = (groupLoopChange && groupLoopChange[kR]) || "";
 
                         // For label
-                        const effectiveL = getEffectiveLoopType(g, "L");
-                        const effectiveR = getEffectiveLoopType(g, "R");
 
                         // Stats (already computed elsewhere)
                         const statL = groupStats.find((s) => s.groupName === g && s.side === "L");
@@ -1780,80 +1758,6 @@ export default function App() {
                         return (
                           <tr key={g} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
                             <td style={{ padding: "6px 8px", fontWeight: 900 }}>{g}</td>
-
-                            {/* Loop change L */}
-                            <td style={{ padding: "6px 8px" }}>
-                              <select
-                                value={chL}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  const next = { ...(groupLoopChange || {}) };
-                                  if (!v) delete next[kL];
-                                  else next[kL] = v;
-                                  persistGroupLoopChange(next);
-                                }}
-                                style={{
-                                  width: 190,
-                                  borderRadius: 10,
-                                  border: "1px solid #2a2f3f",
-                                  background: "#0d0f16",
-                                  color: "#eef1ff",
-                                  padding: "6px 10px",
-                                  outline: "none",
-                                  fontSize: 12,
-                                }}
-                                title="Step 4 loop change (Left). Leave blank to keep Step 3 baseline."
-                              >
-                                <option value="">
-                                  — no change — (uses {getBaselineLoopType(g, "L")})
-                                </option>
-                                {Object.keys(loopTypes).map((name) => (
-                                  <option key={name} value={name}>
-                                    {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
-                                  </option>
-                                ))}
-                              </select>
-                              <div style={{ ...muted, fontSize: 11, marginTop: 4 }}>
-                                After uses: <b>{effectiveL}</b>
-                              </div>
-                            </td>
-
-                            {/* Loop change R */}
-                            <td style={{ padding: "6px 8px" }}>
-                              <select
-                                value={chR}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  const next = { ...(groupLoopChange || {}) };
-                                  if (!v) delete next[kR];
-                                  else next[kR] = v;
-                                  persistGroupLoopChange(next);
-                                }}
-                                style={{
-                                  width: 190,
-                                  borderRadius: 10,
-                                  border: "1px solid #2a2f3f",
-                                  background: "#0d0f16",
-                                  color: "#eef1ff",
-                                  padding: "6px 10px",
-                                  outline: "none",
-                                  fontSize: 12,
-                                }}
-                                title="Step 4 loop change (Right). Leave blank to keep Step 3 baseline."
-                              >
-                                <option value="">
-                                  — no change — (uses {getBaselineLoopType(g, "R")})
-                                </option>
-                                {Object.keys(loopTypes).map((name) => (
-                                  <option key={name} value={name}>
-                                    {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
-                                  </option>
-                                ))}
-                              </select>
-                              <div style={{ ...muted, fontSize: 11, marginTop: 4 }}>
-                                After uses: <b>{effectiveR}</b>
-                              </div>
-                            </td>
 
                             {/* Adjust L (dropdown + input) */}
                             <td style={{ padding: "6px 8px", textAlign: "right" }}>
@@ -1873,7 +1777,7 @@ export default function App() {
                                     if (!t) return; // Custom
 
                                     // baseline loop is Step 3 installed loop for this group side
-                                    const installedType = getBaselineLoopType(g, "L") || "SL";
+                                const installedType = groupLoopSetup?.[`${g}|L`] || "SL";
                                     const chosen = Number(loopTypes?.[t] ?? 0);
                                     const installed = Number(loopTypes?.[installedType] ?? 0);
 
@@ -1933,7 +1837,7 @@ export default function App() {
                                     const t = e.target.value;
                                     if (!t) return; // Custom
 
-                                    const installedType = getBaselineLoopType(g, "R") || "SL";
+                                const installedType = groupLoopSetup?.[`${g}|R`] || "SL";
                                     const chosen = Number(loopTypes?.[t] ?? 0);
                                     const installed = Number(loopTypes?.[installedType] ?? 0);
 
@@ -2009,6 +1913,7 @@ export default function App() {
 
 
             {/* Pitch Trim (A − D) */}
+            {/* --- ANCHOR: Pitch trim card --- */}
             <div style={{ ...card, background: "#0e1018" }}>
               <div style={{ fontWeight: 900, marginBottom: 8 }}>Pitch trim (A − D)</div>
               <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
@@ -2143,6 +2048,7 @@ export default function App() {
 
             {/* Graph controls */}
             <div style={{ ...card, background: "#0e1018" }}>
+              {/* --- ANCHOR: Step 4 graphs card --- */}
               <div style={{ fontWeight: 850, marginBottom: 8 }}>Graphs</div>
               <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
                 Before vs After overlay uses Δ = (after - nominal). Target is 0mm (factory trim).
@@ -2262,6 +2168,7 @@ export default function App() {
         ) : null}
 
         {/* Guided Profile Editor Modal */}
+        {/* --- ANCHOR: Guided Profile Editor Modal --- */}
         {isProfileEditorOpen ? (
           <div
             style={{
@@ -2387,12 +2294,23 @@ export default function App() {
         ) : null}
       </div>
     </div>
+    </ErrorBoundary>
   );
 }
 
 
 
+
+/* =====================================================================
+   SECTION MARKER 2 — around line 2298 (helper navigation)
+   ===================================================================== */
+
 /* ------------------------- Guided Mapping Editor ------------------------- */
+
+
+/* ===============================
+   SECTION: Guided profile mapping editor component
+   =============================== */
 
 function MappingEditor({ draftProfile, setDraftProfile, btn }) {
   const mapping = draftProfile.mapping || { A: [], B: [], C: [], D: [] };
@@ -2543,6 +2461,11 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
 
 /* ------------------------- Charts ------------------------- */
 
+
+
+/* ===============================
+   SECTION: Chart components
+   =============================== */
 
 function DeltaLineChart({ title, points, tolerance }) {
   const width = 1100;
@@ -2729,6 +2652,16 @@ function DeltaLineChart({ title, points, tolerance }) {
 }
 
 
+
+
+/* ===============================
+   SECTION: Chart components
+   =============================== */
+
+
+/* =====================================================================
+   SECTION MARKER 3 — around line 2651 (helper navigation)
+   ===================================================================== */
 
 function WingProfileChart({ title, groupStats, tolerance }) {
   const width = 1100;
@@ -3021,6 +2954,16 @@ function BlockTable({
     </div>
   );
 }
+
+
+/* ===============================
+   SECTION: Chart components
+   =============================== */
+
+
+/* =====================================================================
+   SECTION MARKER 4 — around line 2948 (helper navigation)
+   ===================================================================== */
 
 function RearViewWingChart({
   wideRows,
@@ -3523,3 +3466,53 @@ function RearViewWingChart({
   );
 }
 
+
+
+/* =====================================================================
+   SECTION MARKER 5 — around line 3450 (helper navigation)
+   ===================================================================== */
+
+/* ------------------------- Error boundary ------------------------- */
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('App crashed:', error, info);
+  }
+
+  render() {
+    if (!this.state.hasError) return this.props.children;
+    return (
+      <div style={{ padding: 16, maxWidth: 900, margin: '0 auto', color: '#eef1ff', fontFamily: 'system-ui, sans-serif' }}>
+        <h2 style={{ margin: '8px 0' }}>Something went wrong</h2>
+        <div style={{ color: '#aab1c3', fontSize: 13, lineHeight: 1.5 }}>The app hit a runtime error. This usually means a bad paste or an unexpected CSV layout.</div>
+        <div style={{ height: 10 }} />
+        <pre style={{ whiteSpace: 'pre-wrap', background: '#0b0c10', border: '1px solid #2a2f3f', borderRadius: 12, padding: 12, color: '#eef1ff' }}>
+          {String(this.state.error?.message || this.state.error || 'Unknown error')}
+        </pre>
+        <div style={{ height: 12 }} />
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => window.location.reload()} 
+            style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid #2a2f3f', background: '#0e1018', color: '#eef1ff', cursor: 'pointer' }}
+          >
+            Reload
+          </button>
+          <button
+            onClick={() => { localStorage.clear(); window.location.reload(); }}
+            style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid rgba(255,107,107,0.6)', background: 'rgba(255,107,107,0.12)', color: '#eef1ff', cursor: 'pointer' }}
+          >
+            Reset saved settings
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
