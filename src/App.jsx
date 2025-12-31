@@ -2360,18 +2360,15 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
   <div style={{ fontWeight: 900 }}>{L} mapping</div>
 
   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-    <button type="button" style={btn} onClick={() => addRow(L)}>
-      Add row
-    </button>
-    <button type="button" style={btn} onClick={() => sortRows(L)}>
-      Sort
-    </button>
+    <button style={btn} onClick={() => addRow(L)}>Add row</button>
+    <button style={btn} onClick={() => sortRows(L)}>Sort</button>
   </div>
 </div>
 
 <div style={{ height: 10 }} />
 
 <div style={{ overflowX: "auto" }}>
+
 
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 420 }}>
               <thead>
