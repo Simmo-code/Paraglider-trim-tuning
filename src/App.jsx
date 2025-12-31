@@ -2360,23 +2360,13 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
       {letters.map((L) => (
         <div
           key={L}
-          style={{
-            border: "1px solid #2a2f3f",
-            borderRadius: 14,
-            padding: 12,
-            background: "#0e1018",
-          }}
+          style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}
         >
-          {/* Header row (THIS is where your buttons belong) */}
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
             <div style={{ fontWeight: 900 }}>{L} mapping</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button style={btn} onClick={() => addRow(L)}>
-                Add row
-              </button>
-              <button style={btn} onClick={() => sortRows(L)}>
-                Sort
-              </button>
+              <button style={btn} onClick={() => addRow(L)}>Add row</button>
+              <button style={btn} onClick={() => sortRows(L)}>Sort</button>
             </div>
           </div>
 
@@ -2446,9 +2436,7 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
                     </td>
 
                     <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                      <button style={btn} onClick={() => removeRow(L, idx)}>
-                        Delete
-                      </button>
+                      <button style={btn} onClick={() => removeRow(L, idx)}>Delete</button>
                     </td>
                   </tr>
                 ))}
