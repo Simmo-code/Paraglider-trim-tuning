@@ -1710,10 +1710,12 @@ export default function App() {
                   </div>
                 </div>
 
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  </button>
-                </div>
-              </div>
+<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+  <button onClick={clearAllLoopChanges} style={btn}>
+    Clear all loop changes (Step 4)
+  </button>
+</div>
+
 
               <div style={{ height: 10 }} />
 
