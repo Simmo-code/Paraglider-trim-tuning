@@ -2313,7 +2313,7 @@ export default function App() {
 /* ===============================
    SECTION: Guided profile mapping editor component
    =============================== */
-
+/* ------------------------- Guided Mapping Editor ------------------------- */
 function MappingEditor({ draftProfile, setDraftProfile, btn }) {
   const mapping = draftProfile.mapping || { A: [], B: [], C: [], D: [] };
   const letters = ["A", "B", "C", "D"];
@@ -2351,9 +2351,7 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
   }
 
   function sortRows(letter) {
-    const rows = (mapping[letter] || [])
-      .slice()
-      .sort((a, b) => (a?.[0] ?? 0) - (b?.[0] ?? 0));
+    const rows = (mapping[letter] || []).slice().sort((a, b) => (a?.[0] ?? 0) - (b?.[0] ?? 0));
     setRows(letter, rows);
   }
 
@@ -2369,12 +2367,16 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
             background: "#0e1018",
           }}
         >
-          {/* Header row */}
+          {/* Header row (THIS is where your buttons belong) */}
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
             <div style={{ fontWeight: 900 }}>{L} mapping</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button style={btn} onClick={() => addRow(L)}>Add row</button>
-              <button style={btn} onClick={() => sortRows(L)}>Sort</button>
+              <button style={btn} onClick={() => addRow(L)}>
+                Add row
+              </button>
+              <button style={btn} onClick={() => sortRows(L)}>
+                Sort
+              </button>
             </div>
           </div>
 
@@ -2444,7 +2446,9 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
                     </td>
 
                     <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                      <button style={btn} onClick={() => removeRow(L, idx)}>Delete</button>
+                      <button style={btn} onClick={() => removeRow(L, idx)}>
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}
