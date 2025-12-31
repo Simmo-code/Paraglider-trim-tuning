@@ -2370,7 +2370,7 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
         >
           {/* Header row (THIS was missing a closing </div> in your broken version) */}
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-            <div style={{ fontWeight: 900 }}>{L} mapping</div>
+            <div style={{ fontWeight: 900 }}>{L} mapping</div>// no
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button style={btn} onClick={() => addRow(L)}>Add row</button>
               <button style={btn} onClick={() => sortRows(L)}>Sort</button>
