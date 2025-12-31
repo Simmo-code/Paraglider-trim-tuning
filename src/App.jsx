@@ -2308,12 +2308,55 @@ export default function App() {
 /* ------------------------- Guided Mapping Editor ------------------------- */
 
 
+
 /* ===============================
    SECTION: Guided profile mapping editor component
    =============================== */
 
-return (
-  <>
+function MappingEditor({ draftProfile, setDraftProfile, btn }) {
+  const mapping = draftProfile.mapping || { A: [], B: [], C: [], D: [] };
+  const letters = ["A", "B", "C", "D"];
+
+  function setRows(letter, rows) {
+    const next = { ...draftProfile, mapping: { ...mapping, [letter]: rows } };
+    setDraftProfile(next);
+  }
+
+  function addRow(letter) {
+    const rows = (mapping[letter] || []).slice();
+    rows.push([1, 1, `${letter}R1`]);
+    setRows(letter, rows);
+  }
+
+  function updateCell(letter, idx, col, value) {
+    const rows = (mapping[letter] || []).slice();
+    const r = rows[idx] ? rows[idx].slice() : [1, 1, `${letter}R1`];
+
+    if (col === 0 || col === 1) {
+      const v = parseInt(String(value || "0"), 10);
+      r[col] = Number.isFinite(v) ? v : r[col];
+    } else {
+      r[col] = String(value || "");
+    }
+
+    rows[idx] = r;
+    setRows(letter, rows);
+  }
+
+  function removeRow(letter, idx) {
+    const rows = (mapping[letter] || []).slice();
+    rows.splice(idx, 1);
+    setRows(letter, rows);
+  }
+
+  function sortRows(letter) {
+    const rows = (mapping[letter] || [])
+      .slice()
+      .sort((a, b) => (a?.[0] ?? 0) - (b?.[0] ?? 0));
+    setRows(letter, rows);
+  }
+
+  return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
       {letters.map((L) => (
         <div
@@ -2325,25 +2368,21 @@ return (
             background: "#0e1018",
           }}
         >
-          {/* Header row */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 10,
-              alignItems: "center",
-            }}
-          >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
             <div style={{ fontWeight: 900 }}>{L} mapping</div>
+
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button style={btn} onClick={() => addRow(L)}>Add row</button>
-              <button style={btn} onClick={() => sortRows(L)}>Sort</button>
+              <button style={btn} onClick={() => addRow(L)}>
+                Add row
+              </button>
+              <button style={btn} onClick={() => sortRows(L)}>
+                Sort
+              </button>
             </div>
           </div>
 
           <div style={{ height: 10 }} />
 
-          {/* Table */}
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 420 }}>
               <thead>
@@ -2362,7 +2401,15 @@ return (
                       <input
                         value={row?.[0] ?? ""}
                         onChange={(e) => updateCell(L, idx, 0, e.target.value)}
-                        style={input}
+                        style={{
+                          width: 70,
+                          padding: "6px 8px",
+                          borderRadius: 10,
+                          border: "1px solid #2a2f3f",
+                          background: "#0d0f16",
+                          color: "#eef1ff",
+                          textAlign: "right",
+                        }}
                         inputMode="numeric"
                       />
                     </td>
@@ -2371,7 +2418,15 @@ return (
                       <input
                         value={row?.[1] ?? ""}
                         onChange={(e) => updateCell(L, idx, 1, e.target.value)}
-                        style={input}
+                        style={{
+                          width: 70,
+                          padding: "6px 8px",
+                          borderRadius: 10,
+                          border: "1px solid #2a2f3f",
+                          background: "#0d0f16",
+                          color: "#eef1ff",
+                          textAlign: "right",
+                        }}
                         inputMode="numeric"
                       />
                     </td>
@@ -2380,23 +2435,32 @@ return (
                       <input
                         value={row?.[2] ?? ""}
                         onChange={(e) => updateCell(L, idx, 2, e.target.value)}
-                        style={input}
+                        style={{
+                          width: "100%",
+                          padding: "6px 8px",
+                          borderRadius: 10,
+                          border: "1px solid #2a2f3f",
+                          background: "#0d0f16",
+                          color: "#eef1ff",
+                        }}
                       />
                     </td>
 
                     <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                      <button style={btn} onClick={() => removeRow(L, idx)}>Delete</button>
+                      <button style={btn} onClick={() => removeRow(L, idx)}>
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}
 
-                {(!mapping[L] || mapping[L].length === 0) && (
+                {!mapping[L] || mapping[L].length === 0 ? (
                   <tr>
-                    <td colSpan={4} style={{ padding: "8px", color: "#aab1c3", fontSize: 12 }}>
+                    <td colSpan={4} style={{ padding: "8px 8px", color: "#aab1c3", fontSize: 12 }}>
                       No ranges yet. Click “Add row”.
                     </td>
                   </tr>
-                )}
+                ) : null}
               </tbody>
             </table>
           </div>
@@ -2407,9 +2471,8 @@ return (
         </div>
       ))}
     </div>
-  </>
-);
-
+  );
+}
 
 /* ------------------------- Charts ------------------------- */
 
