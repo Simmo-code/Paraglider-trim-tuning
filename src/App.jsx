@@ -417,21 +417,22 @@ export default function App() {
     localStorage.setItem("groupAdjustments", JSON.stringify(next));
   }
 
-  // Loop types
-  const [loopTypes, setLoopTypes] = useState(() => {
+  // Loop setup (per-line baseline, if used)
+  // (kept for compatibility because resetForNewImport() clears it)
+  const [loopSetup, setLoopSetup] = useState(() => {
     try {
-      const s = localStorage.getItem("loopTypes");
-      return s
-        ? JSON.parse(s)
-        : { SL: 0, DL: -7, AS: -10, "AS+": -16, PH: -18, "LF++": -23 };
+      const s = localStorage.getItem("loopSetup");
+      return s ? JSON.parse(s) : {};
     } catch {
-      return { SL: 0, DL: -7, AS: -10, "AS+": -16, PH: -18, "LF++": -23 };
+      return {};
     }
   });
-  function persistLoopTypes(next) {
-    setLoopTypes(next);
-    localStorage.setItem("loopTypes", JSON.stringify(next));
+
+  function persistLoopSetup(next) {
+    setLoopSetup(next);
+    localStorage.setItem("loopSetup", JSON.stringify(next));
   }
+
 
   // Group loop setup (AR1|L -> "SL")
   const [groupLoopSetup, setGroupLoopSetup] = useState(() => {
