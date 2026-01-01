@@ -371,17 +371,7 @@ export default function App() {
 
 
 
-  /* ===============================
-     Loop → adjustment helper
-     (MUST be below loopTypes)
-     =============================== */
-  function loopTypeFromAdjustment(mm) {
-    if (!Number.isFinite(mm)) return "";
-    for (const [name, val] of Object.entries(loopTypes || {})) {
-      if (Number.isFinite(val) && val === mm) return name;
-    }
-    return ""; // Custom / manual value
-  }
+
 
 
   /* ===============================
@@ -1418,6 +1408,20 @@ export default function App() {
         </div>
       );
     };
+
+//Simm ref1
+
+  /* ===============================
+     Loop → adjustment helper
+     (MUST be below loopTypes)
+     =============================== */
+  function loopTypeFromAdjustment(mm) {
+    if (!Number.isFinite(mm)) return "";
+    for (const [name, val] of Object.entries(loopTypes || {})) {
+      if (Number.isFinite(val) && val === mm) return name;
+    }
+    return ""; // Custom / manual value
+  }
 
     return rows.map((pair, idx) => (
       <div
