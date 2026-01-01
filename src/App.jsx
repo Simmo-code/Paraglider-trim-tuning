@@ -314,6 +314,53 @@ export default function App() {
   });
   useEffect(() => localStorage.setItem("showCorrected", showCorrected ? "1" : "0"), [showCorrected]);
 
+  /* ===============================
+     Import reset (Step 1 → Step 4)
+     When a NEW file is imported, clear per-session/per-wing state so nothing
+     carries over from the previous wing.
+     =============================== */
+  function resetForNewImport() {
+    // UI / navigation
+    setStep(2);
+    localStorage.setItem("workflowStep", "2");
+
+    // Core data
+    setWideRows([]);
+    setMeta({ input1: "", input2: "", tolerance: 0, correction: 0 });
+    setSelectedFileName("");
+
+    // Step 4 visibility defaults
+    setShowCorrected(true);
+    localStorage.setItem("showCorrected", "1");
+
+    // Trimming inputs (per-wing)
+    persistAdjustments({});
+    persistLoopSetup({});
+    persistGroupLoopSetup({});
+
+    // Step 4 filters (if present)
+    try {
+      setIncludedRows({ A: true, B: true, C: true, D: true });
+      setIncludedGroups({});
+    } catch {}
+
+    // Chart toggles (per-wing)
+    try {
+      setChartLetters({ A: true, B: true, C: false, D: false });
+      localStorage.setItem(
+        "chartLetters",
+        JSON.stringify({ A: true, B: true, C: false, D: false })
+      );
+    } catch {}
+
+    // Close editor if open (avoids draft state cross-contamination)
+    try {
+      setIsProfileEditorOpen(false);
+      setShowAdvancedJson(false);
+    } catch {}
+  }
+
+
  
   // Profiles JSON (persisted)
   const [profileJson, setProfileJson] = useState(() => {
@@ -627,54 +674,14 @@ const draftDirty = useMemo(() => {
     setProfileKey(key);
   }
 
-  function onImportFile(file) {
-    const name = (file?.name || "").toLowerCase();
 
-  /* ===============================
-     Import reset (Step 1 → Step 4)
-     When a NEW file is imported, clear per-session/per-wing state so nothing
-     carries over from the previous wing.
-     =============================== */
-  function resetForNewImport() {
-    // UI / navigation
-    setStep(2);
-    localStorage.setItem("workflowStep", "2");
 
-    // Core data
-    setWideRows([]);
-    setMeta({ input1: "", input2: "", tolerance: 0, correction: 0 });
-    setSelectedFileName("");
+function onImportFile(file) {
+  resetForNewImport();
+  const name = (file?.name || "").toLowerCase();
+  // ...
+}
 
-    // Step 4 visibility defaults
-    setShowCorrected(true);
-    localStorage.setItem("showCorrected", "1");
-
-    // Trimming inputs (per-wing)
-    persistAdjustments({});
-    persistLoopSetup({});
-    persistGroupLoopSetup({});
-
-    // Step 4 filters (if present)
-    try {
-      setIncludedRows({ A: true, B: true, C: true, D: true });
-      setIncludedGroups({});
-    } catch {}
-
-    // Chart toggles (per-wing)
-    try {
-      setChartLetters({ A: true, B: true, C: false, D: false });
-      localStorage.setItem(
-        "chartLetters",
-        JSON.stringify({ A: true, B: true, C: false, D: false })
-      );
-    } catch {}
-
-    // Close editor if open (avoids draft state cross-contamination)
-    try {
-      setIsProfileEditorOpen(false);
-      setShowAdvancedJson(false);
-    } catch {}
-  }
 
 
     // XLSX
