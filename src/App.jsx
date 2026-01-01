@@ -956,7 +956,6 @@ const draftDirty = useMemo(() => {
     setDraftProfileKey(profileKey);
     setDraftProfile(deepClone(profiles[profileKey] || activeProfile || {}));
     setShowAdvancedJson(false);
-
 	setIsProfileEditorOpen(true);
 	
   }
