@@ -350,30 +350,31 @@ export default function App() {
     profiles[profileKey] || Object.values(profiles)[0] || Object.values(BUILTIN_PROFILES)[0];
 
   // Guided Profile Editor state
-  const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false);
-  const [draftProfileKey, setDraftProfileKey] = useState("");
-  const [draftProfile, setDraftProfile] = useState({});
-  const [showAdvancedJson, setShowAdvancedJson] = useState(false);
-  
-  
 
+const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false);
+const [draftProfileKey, setDraftProfileKey] = useState("");
+const [draftProfile, setDraftProfile] = useState({});
+const [showAdvancedJson, setShowAdvancedJson] = useState(false);
 
-  useEffect(() => {
-    setDraftProfileKey(profileKey || "");
-    setDraftProfile(JSON.parse(JSON.stringify(profiles[profileKey] || activeProfile || {})));
-  }, [profileKey, profileJson]); // refresh after edits/import
+// Sync draft profile with selected profile (after import or save)
+useEffect(() => {
+  setDraftProfileKey(profileKey || "");
+  setDraftProfile(
+    JSON.parse(JSON.stringify(profiles[profileKey] || activeProfile || {}))
+  );
+}, [profileKey, profileJson]); // refresh after edits/import
 
-  // Detect unsaved changes in the Profile Editor (mapping/name/etc)
-  const draftDirty = useMemo(() => {
-    try {
-      const key = String(draftProfileKey || "").trim();
-      const saved = profiles[key] || null;
-      if (!saved) return true; // new profile name or missing saved profile
-      return JSON.stringify(saved) !== JSON.stringify(draftProfile || {});
-    } catch {
-      return true;
-    }
-  }, [profiles, draftProfileKey, draftProfile]);
+// Detect unsaved changes in the Profile Editor (mapping/name/etc)
+const draftDirty = useMemo(() => {
+  try {
+    const key = String(draftProfileKey || "").trim();
+    const saved = profiles[key] || null;
+    if (!saved) return true; // new profile or missing saved profile
+    return JSON.stringify(saved) !== JSON.stringify(draftProfile || {});
+  } catch {
+    return true;
+  }
+}, [profiles, draftProfileKey, draftProfile]);
 
 
   // Adjustments (per group)
