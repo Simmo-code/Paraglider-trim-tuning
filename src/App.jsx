@@ -674,11 +674,6 @@ const draftDirty = useMemo(() => {
 
 
 
-function onImportFile(file) {
-  resetForNewImport();
-  const name = (file?.name || "").toLowerCase();
-  // ...
-}
 
 
 
