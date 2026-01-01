@@ -368,17 +368,21 @@ export default function App() {
     return saved || JSON.stringify({ ...BUILTIN_PROFILES }, null, 2);
   });
 
+
+
+
   /* ===============================
      Loop → adjustment helper
+     (MUST be below loopTypes)
      =============================== */
-
   function loopTypeFromAdjustment(mm) {
     if (!Number.isFinite(mm)) return "";
-    for (const [name, val] of Object.entries(loopTypes)) {
+    for (const [name, val] of Object.entries(loopTypes || {})) {
       if (Number.isFinite(val) && val === mm) return name;
     }
     return ""; // Custom / manual value
   }
+
 
   /* ===============================
      rest of App logic
