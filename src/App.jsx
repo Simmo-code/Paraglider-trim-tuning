@@ -1374,7 +1374,7 @@ export default function App() {
       Tip: keep these numbers matching your real loop set. Only one loop type per group side.
     </div>
 
-    {/* Right: compact 2-column editor */}
+  {/* Right: compact 2-column editor */}
 <div
   style={{
     display: "grid",
@@ -1383,7 +1383,7 @@ export default function App() {
   }}
 >
   {(() => {
-    const entries = Object.entries(loopTypes);
+    const entries = Object.entries(loopTypes || {});
     const rows = [];
     for (let i = 0; i < entries.length; i += 2) {
       rows.push([entries[i], entries[i + 1] || null]);
@@ -1431,6 +1431,22 @@ export default function App() {
       );
     };
 
+    return rows.map((pair, idx) => (
+      <div
+        key={`pairrow-${idx}`}
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 12,
+          alignItems: "center",
+        }}
+      >
+        {Cell(pair[0])}
+        {Cell(pair[1])}
+      </div>
+    ));
+  })()}
+</div>
 
 
   </div>
@@ -1446,9 +1462,6 @@ export default function App() {
     </div>
   </div>
 </div>
-
-
-
 
             <div style={{ height: 12 }} />
 
