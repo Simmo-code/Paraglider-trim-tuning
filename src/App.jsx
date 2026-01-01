@@ -2313,7 +2313,7 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
 function setRows(letter, rows) {
   const next = { ...draftProfile, mapping: { ...mapping, [letter]: rows } };
   setDraftProfile(next);
-  setDraftDirty(true);
+
 }
 
 
