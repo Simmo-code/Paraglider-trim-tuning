@@ -314,6 +314,34 @@ export default function App() {
   });
   useEffect(() => localStorage.setItem("showCorrected", showCorrected ? "1" : "0"), [showCorrected]);
 
+//sim ref1
+  // Loop types (global / persistent)
+  const [loopTypes, setLoopTypes] = useState(() => {
+    try {
+      const s = localStorage.getItem("loopTypes");
+      return s
+        ? JSON.parse(s)
+        : { SL: 0, DL: -7, AS: -10, "AS+": -16, PH: -18, "LF++": -23 };
+    } catch {
+      return { SL: 0, DL: -7, AS: -10, "AS+": -16, PH: -18, "LF++": -23 };
+    }
+  });
+
+  function persistLoopTypes(next) {
+    setLoopTypes(next);
+    localStorage.setItem("loopTypes", JSON.stringify(next));
+  }
+
+  function loopTypeFromAdjustment(mm) {
+    if (!Number.isFinite(mm)) return "";
+    for (const [name, val] of Object.entries(loopTypes || {})) {
+      if (Number.isFinite(val) && val === mm) return name;
+    }
+    return "";
+  }
+
+
+
   /* ===============================
      Import reset (Step 1 → Step 4)
      =============================== */
