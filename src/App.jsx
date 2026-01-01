@@ -1776,9 +1776,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  </button>
-                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }} />
               </div>
 
               <div style={{ height: 10 }} />
