@@ -19,7 +19,7 @@ import BUILTIN_PROFILES from "./wingProfiles.json";
  *   delta     = after - nominal
  */
 
-const APP_VERSION = "0.5cleaned1";
+const APP_VERSION = "0.5cleaned1.";
 
 
 
@@ -354,6 +354,16 @@ export default function App() {
   const [draftProfileKey, setDraftProfileKey] = useState("");
   const [draftProfile, setDraftProfile] = useState({});
   const [showAdvancedJson, setShowAdvancedJson] = useState(false);
+// Track whether the draft profile differs from the saved profile
+const draftDirty = useMemo(() => {
+  try {
+    const saved = profiles?.[draftProfileKey] || null;
+    return JSON.stringify(saved) !== JSON.stringify(draftProfile);
+  } catch {
+    return true;
+  }
+}, [profiles, draftProfileKey, draftProfile]);
+//end
 
   useEffect(() => {
     setDraftProfileKey(profileKey || "");
@@ -2152,8 +2162,28 @@ export default function App() {
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
                 <div style={{ fontWeight: 950, fontSize: 16 }}>Wing Profile Editor</div>
-                <button style={btn} onClick={() => setIsProfileEditorOpen(false)}>Close</button>
-              </div>
+                
+				
+				<button
+  style={btn}
+  onClick={() => {
+    if (draftDirty) {
+      const ok = confirm("You have unsaved mapping changes. Save them now?");
+      if (ok) {
+        saveDraftProfile(); // this already closes the modal
+        return;
+      }
+    }
+    setIsProfileEditorOpen(false);
+  }}
+>
+  Close
+</button>
+
+			  
+			  
+			  
+			  </div>
 
               <div style={{ height: 10 }} />
 
