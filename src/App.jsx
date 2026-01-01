@@ -1403,52 +1403,7 @@ export default function App() {
       );
     };
 
-//Simm ref1
-  // Loop types
-  const [loopTypes, setLoopTypes] = useState(() => {
-    try {
-      const s = localStorage.getItem("loopTypes");
-      return s
-        ? JSON.parse(s)
-        : { SL: 0, DL: -7, AS: -10, "AS+": -16, PH: -18, "LF++": -23 };
-    } catch {
-      return { SL: 0, DL: -7, AS: -10, "AS+": -16, PH: -18, "LF++": -23 };
-    }
-  });
 
-  function persistLoopTypes(next) {
-    setLoopTypes(next);
-    localStorage.setItem("loopTypes", JSON.stringify(next));
-  }
-
-  /* ===============================
-     Loop → adjustment helper
-     (MUST be below loopTypes)
-     =============================== */
-  function loopTypeFromAdjustment(mm) {
-    if (!Number.isFinite(mm)) return "";
-    for (const [name, val] of Object.entries(loopTypes || {})) {
-      if (Number.isFinite(val) && val === mm) return name;
-    }
-    return ""; // Custom / manual value
-  }
-
-    return rows.map((pair, idx) => (
-      <div
-        key={`pairrow-${idx}`}
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr", // ✅ two loop-types per row
-          gap: 12,
-          alignItems: "center",
-        }}
-      >
-        {Cell(pair[0])}
-        {Cell(pair[1])}
-      </div>
-    ));
-  })()}
-</div>
 
   </div>
 
