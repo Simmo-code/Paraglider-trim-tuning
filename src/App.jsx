@@ -354,23 +354,27 @@ export default function App() {
   const [draftProfileKey, setDraftProfileKey] = useState("");
   const [draftProfile, setDraftProfile] = useState({});
   const [showAdvancedJson, setShowAdvancedJson] = useState(false);
-  const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false)
   
-// Track whether the draft profile differs from the saved profile
-const draftDirty = useMemo(() => {
-  try {
-    const saved = profiles?.[draftProfileKey] || null;
-    return JSON.stringify(saved) !== JSON.stringify(draftProfile);
-  } catch {
-    return true;
-  }
-}, [profiles, draftProfileKey, draftProfile]);
-//end
+  
+
 
   useEffect(() => {
     setDraftProfileKey(profileKey || "");
     setDraftProfile(JSON.parse(JSON.stringify(profiles[profileKey] || activeProfile || {})));
   }, [profileKey, profileJson]); // refresh after edits/import
+
+  // Detect unsaved changes in the Profile Editor (mapping/name/etc)
+  const draftDirty = useMemo(() => {
+    try {
+      const key = String(draftProfileKey || "").trim();
+      const saved = profiles[key] || null;
+      if (!saved) return true; // new profile name or missing saved profile
+      return JSON.stringify(saved) !== JSON.stringify(draftProfile || {});
+    } catch {
+      return true;
+    }
+  }, [profiles, draftProfileKey, draftProfile]);
+
 
   // Adjustments (per group)
   const [adjustments, setAdjustments] = useState(() => {
@@ -2169,7 +2173,7 @@ const draftDirty = useMemo(() => {
                 <div style={{ fontWeight: 950, fontSize: 16 }}>Wing Profile Editor</div>
                 
 				
-				<button
+<button
   style={btn}
   onClick={() => {
     if (draftDirty) {
@@ -2184,6 +2188,7 @@ const draftDirty = useMemo(() => {
 >
   Close
 </button>
+
 
 			  
 			  
