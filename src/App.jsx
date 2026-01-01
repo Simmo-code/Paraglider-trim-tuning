@@ -316,40 +316,44 @@ export default function App() {
 
   /* ===============================
      Import reset (Step 1 → Step 4)
-     When a NEW file is imported, clear per-session/per-wing state so nothing
-     carries over from the previous wing.
      =============================== */
   function resetForNewImport() {
-    // Navigation (after successful import we jump to Step 2 anyway)
+    // UI / navigation
     setStep(2);
     localStorage.setItem("workflowStep", "2");
 
-    // Core import data (cleared now; onImportFile will repopulate)
+    // Core data
     setWideRows([]);
     setMeta({ input1: "", input2: "", tolerance: 0, correction: 0 });
     setSelectedFileName("");
 
-    // View defaults
+    // Step 4 visibility defaults
     setShowCorrected(true);
     localStorage.setItem("showCorrected", "1");
 
-    // Step 4 per-wing state
+    // Per-wing trimming state
     persistAdjustments({});
-    persistGroupLoopSetup({}); // Step 3 baseline loops (installed)
-    persistLoopSetup({});      // legacy per-line loop setup (if present)
+    persistGroupLoopSetup({});
 
-    // Step 4 filters + chart toggles (per-wing)
+    // If you have any Step 4 loop-change override object, clear it too:
+    // (Only keep this line IF you already have persistGroupLoopChange defined)
+    try {
+      if (typeof persistGroupLoopChange === "function") persistGroupLoopChange({});
+    } catch {}
+
+    // Step 4 filters (if present)
     try {
       setIncludedRows({ A: true, B: true, C: true, D: true });
       setIncludedGroups({});
     } catch {}
 
+    // Chart toggles (per-wing)
     try {
       setChartLetters({ A: true, B: true, C: false, D: false });
       localStorage.setItem("chartLetters", JSON.stringify({ A: true, B: true, C: false, D: false }));
     } catch {}
 
-    // Close profile editor if open
+    // Close editor if open
     try {
       setIsProfileEditorOpen(false);
       setShowAdvancedJson(false);
