@@ -952,13 +952,13 @@ const draftDirty = useMemo(() => {
   function deepClone(x) {
     return JSON.parse(JSON.stringify(x));
   }
-  function openProfileEditor() {
-    setDraftProfileKey(profileKey);
-    setDraftProfile(deepClone(profiles[profileKey] || activeProfile || {}));
-    setShowAdvancedJson(false);
-	setDraftDirty(false);
-	setDraftDirty(false);
-	setIsProfileEditorOpen(true);
+function openProfileEditor() {
+  setDraftProfileKey(profileKey || "");
+  setDraftProfile(deepClone(profiles[profileKey] || activeProfile || {}));
+  setShowAdvancedJson(false);
+  setIsProfileEditorOpen(true);
+}
+
 	
   }
   function saveDraftProfile() {
