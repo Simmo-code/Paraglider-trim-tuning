@@ -318,42 +318,36 @@ export default function App() {
      Import reset (Step 1 → Step 4)
      =============================== */
   function resetForNewImport() {
-    // UI / navigation
+    // Navigation
     setStep(2);
     localStorage.setItem("workflowStep", "2");
 
-    // Core data
+    // Imported data baseline
     setWideRows([]);
     setMeta({ input1: "", input2: "", tolerance: 0, correction: 0 });
     setSelectedFileName("");
 
-    // Step 4 visibility defaults
+    // Step 4 defaults
     setShowCorrected(true);
     localStorage.setItem("showCorrected", "1");
 
-    // Per-wing trimming state
+    // Per-wing trimming/session state
     persistAdjustments({});
     persistGroupLoopSetup({});
 
-    // If you have any Step 4 loop-change override object, clear it too:
-    // (Only keep this line IF you already have persistGroupLoopChange defined)
-    try {
-      if (typeof persistGroupLoopChange === "function") persistGroupLoopChange({});
-    } catch {}
-
-    // Step 4 filters (if present)
+    // Step 4 filters
     try {
       setIncludedRows({ A: true, B: true, C: true, D: true });
       setIncludedGroups({});
     } catch {}
 
-    // Chart toggles (per-wing)
+    // Chart toggles
     try {
       setChartLetters({ A: true, B: true, C: false, D: false });
       localStorage.setItem("chartLetters", JSON.stringify({ A: true, B: true, C: false, D: false }));
     } catch {}
 
-    // Close editor if open
+    // Close profile editor if open
     try {
       setIsProfileEditorOpen(false);
       setShowAdvancedJson(false);
@@ -1410,6 +1404,22 @@ export default function App() {
     };
 
 //Simm ref1
+  // Loop types
+  const [loopTypes, setLoopTypes] = useState(() => {
+    try {
+      const s = localStorage.getItem("loopTypes");
+      return s
+        ? JSON.parse(s)
+        : { SL: 0, DL: -7, AS: -10, "AS+": -16, PH: -18, "LF++": -23 };
+    } catch {
+      return { SL: 0, DL: -7, AS: -10, "AS+": -16, PH: -18, "LF++": -23 };
+    }
+  });
+
+  function persistLoopTypes(next) {
+    setLoopTypes(next);
+    localStorage.setItem("loopTypes", JSON.stringify(next));
+  }
 
   /* ===============================
      Loop → adjustment helper
