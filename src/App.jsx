@@ -19,7 +19,7 @@ import BUILTIN_PROFILES from "./wingProfiles.json";
  *   delta     = after - nominal
  */
 
-const APP_VERSION = "0.6Cleanup";
+const APP_VERSION = "0.5cleaned1a.";
 
 
 
@@ -350,15 +350,32 @@ export default function App() {
     profiles[profileKey] || Object.values(profiles)[0] || Object.values(BUILTIN_PROFILES)[0];
 
   // Guided Profile Editor state
-  const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false);
-  const [draftProfileKey, setDraftProfileKey] = useState("");
-  const [draftProfile, setDraftProfile] = useState({});
-  const [showAdvancedJson, setShowAdvancedJson] = useState(false);
 
-  useEffect(() => {
-    setDraftProfileKey(profileKey || "");
-    setDraftProfile(JSON.parse(JSON.stringify(profiles[profileKey] || activeProfile || {})));
-  }, [profileKey, profileJson]); // refresh after edits/import
+const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false);
+const [draftProfileKey, setDraftProfileKey] = useState("");
+const [draftProfile, setDraftProfile] = useState({});
+const [showAdvancedJson, setShowAdvancedJson] = useState(false);
+
+// Sync draft profile with selected profile (after import or save)
+useEffect(() => {
+  setDraftProfileKey(profileKey || "");
+  setDraftProfile(
+    JSON.parse(JSON.stringify(profiles[profileKey] || activeProfile || {}))
+  );
+}, [profileKey, profileJson]); // refresh after edits/import
+
+// Detect unsaved changes in the Profile Editor (mapping/name/etc)
+const draftDirty = useMemo(() => {
+  try {
+    const key = String(draftProfileKey || "").trim();
+    const saved = profiles[key] || null;
+    if (!saved) return true; // new profile or missing saved profile
+    return JSON.stringify(saved) !== JSON.stringify(draftProfile || {});
+  } catch {
+    return true;
+  }
+}, [profiles, draftProfileKey, draftProfile]);
+
 
   // Adjustments (per group)
   const [adjustments, setAdjustments] = useState(() => {
@@ -610,56 +627,10 @@ export default function App() {
     setProfileKey(key);
   }
 
-  
-/* ===============================
-   Import reset (Step 1 → Step 4)
-   When a NEW file is imported, clear per-session/per-wing state so nothing
-   carries over from the previous wing.
-   =============================== */
-function resetForNewImport() {
-  // UI / navigation
-  setStep(2);
-  localStorage.setItem("workflowStep", "2");
+  function onImportFile(file) {
+    const name = (file?.name || "").toLowerCase();
 
-  // Core data
-  setWideRows([]);
-  setMeta({ input1: "", input2: "", tolerance: 0, correction: 0 });
-  setSelectedFileName("");
-
-  // Step 4 visibility defaults
-  setShowCorrected(true);
-  localStorage.setItem("showCorrected", "1");
-
-  // Trimming inputs (per-wing)
-  persistAdjustments({});
-  persistLoopSetup({});
-  persistGroupLoopSetup({});
-
-  // Step 4 filters (if present)
-  try {
-    setIncludedRows({ A: true, B: true, C: true, D: true });
-    setIncludedGroups({});
-  } catch {}
-
-  // Chart toggles (per-wing)
-  try {
-    setChartLetters({ A: true, B: true, C: false, D: false });
-    localStorage.setItem("chartLetters", JSON.stringify({ A: true, B: true, C: false, D: false }));
-  } catch {}
-
-  // Close editor if open (avoids draft state cross-contamination)
-  try {
-    setIsProfileEditorOpen(false);
-    setShowAdvancedJson(false);
-  } catch {}
-}
-
-function onImportFile(file) {
-
-  resetForNewImport();
-  const name = (file?.name || "").toLowerCase();
-
-  // XLSX
+    // XLSX
     if (name.endsWith(".xlsx")) {
       const reader = new FileReader();
       reader.onload = () => {
@@ -985,7 +956,8 @@ function onImportFile(file) {
     setDraftProfileKey(profileKey);
     setDraftProfile(deepClone(profiles[profileKey] || activeProfile || {}));
     setShowAdvancedJson(false);
-    setIsProfileEditorOpen(true);
+	setIsProfileEditorOpen(true);
+	
   }
   function saveDraftProfile() {
     const nextProfiles = { ...profiles };
@@ -1732,228 +1704,182 @@ function onImportFile(file) {
 {/* Adjustment UI */}
             {/* --- ANCHOR: Step 4 adjustments table --- */}
             {/* Adjustment UI */}
-            <div style={{ ...card, background: "#0e1018" }}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 850, marginBottom: 6 }}>
-                    Trim adjustments per line group (mm)
-                  </div>
-                  <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
-                    These simulate changes you apply during trimming.
-                    <br />
-                    <b>Before</b> uses Step 3 baseline loops. <b>After</b> uses Step 4 loop changes + Adjust
-                    mm.
-                    <br />
-                    Positive = longer; negative = shorter.
-                  </div>
-                </div>
+<div style={{ overflowX: "auto" }}>
+  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
+    <thead>
+      <tr style={{ color: "#aab1c3", fontSize: 12 }}>
+        <th style={{ textAlign: "left", padding: "6px 8px" }}>Group</th>
+        <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust L (mm)</th>
+        <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust R (mm)</th>
+        <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ before</th>
+        <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ after</th>
+      </tr>
+    </thead>
 
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  </button>
-                </div>
+    <tbody>
+      {allGroupNames.map((g) => {
+        const kL = `${g}|L`;
+        const kR = `${g}|R`;
+
+        const aL = getAdjustment(adjustments, g, "L");
+        const aR = getAdjustment(adjustments, g, "R");
+
+        // installed loop types are set in Step 3 (baseline)
+        const installedTypeL = groupLoopSetup?.[kL] || "SL";
+        const installedTypeR = groupLoopSetup?.[kR] || "SL";
+
+        const installedMmL = Number(loopTypes?.[installedTypeL] ?? 0);
+        const installedMmR = Number(loopTypes?.[installedTypeR] ?? 0);
+
+        // dropdown should show which loop type would produce the current adjustment relative to installed baseline
+        const loopTypeFromRelativeAdj = (adjMm, installedMm) => {
+          const adj = Number(adjMm ?? 0);
+          const keys = Object.keys(loopTypes || {});
+          for (const name of keys) {
+            const mm = Number(loopTypes[name] ?? 0);
+            if (Number.isFinite(mm) && Number.isFinite(installedMm) && mm - installedMm === adj) return name;
+          }
+          return ""; // Custom
+        };
+
+        const dropL = loopTypeFromRelativeAdj(aL, installedMmL);
+        const dropR = loopTypeFromRelativeAdj(aR, installedMmR);
+
+        // Stats (already computed elsewhere)
+        const statL = groupStats.find((s) => s.groupName === g && s.side === "L");
+        const statR = groupStats.find((s) => s.groupName === g && s.side === "R");
+        const beforeAvg = avg([statL?.before, statR?.before].filter((x) => Number.isFinite(x)));
+        const afterAvg = avg([statL?.after, statR?.after].filter((x) => Number.isFinite(x)));
+
+        const tol = meta.tolerance || 0;
+        const sevAfter = severity(afterAvg, tol);
+
+        return (
+          <tr key={g} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
+            <td style={{ padding: "6px 8px", fontWeight: 900 }}>{g}</td>
+
+            {/* Adjust L (dropdown + input) */}
+            <td style={{ padding: "6px 8px", textAlign: "right" }}>
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+                <select
+                  value={dropL}
+                  onChange={(e) => {
+                    const t = e.target.value;
+                    if (!t) return; // Custom selected: do nothing (leave number)
+                    const chosenMm = Number(loopTypes?.[t] ?? 0);
+                    const adj = chosenMm - installedMmL;
+                    persistAdjustments({ ...adjustments, [kL]: Number.isFinite(adj) ? adj : 0 });
+                  }}
+                  style={{
+                    borderRadius: 10,
+                    border: "1px solid #2a2f3f",
+                    background: "#0d0f16",
+                    color: "#eef1ff",
+                    padding: "6px 8px",
+                    outline: "none",
+                    fontSize: 12,
+                  }}
+                  title={`Pick a loop type to auto-fill Adjust L (relative to installed ${installedTypeL})`}
+                >
+                  <option value="">Custom</option>
+                  {Object.keys(loopTypes).map((name) => (
+                    <option key={name} value={name}>
+                      {name} ({Number(loopTypes[name]) > 0 ? `+${Number(loopTypes[name])}` : `${Number(loopTypes[name])}`}mm)
+                    </option>
+                  ))}
+                </select>
+
+                <input
+                  value={aL}
+                  onChange={(e) => persistAdjustments({ ...adjustments, [kL]: n(e.target.value) ?? 0 })}
+                  style={{
+                    ...input,
+                    width: 110,
+                    padding: "6px 8px",
+                    textAlign: "right",
+                    fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                  }}
+                  inputMode="numeric"
+                  title="Manual override (mm) relative to installed loop"
+                />
               </div>
+            </td>
 
-              <div style={{ height: 10 }} />
+            {/* Adjust R (dropdown + input) */}
+            <td style={{ padding: "6px 8px", textAlign: "right" }}>
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+                <select
+                  value={dropR}
+                  onChange={(e) => {
+                    const t = e.target.value;
+                    if (!t) return;
+                    const chosenMm = Number(loopTypes?.[t] ?? 0);
+                    const adj = chosenMm - installedMmR;
+                    persistAdjustments({ ...adjustments, [kR]: Number.isFinite(adj) ? adj : 0 });
+                  }}
+                  style={{
+                    borderRadius: 10,
+                    border: "1px solid #2a2f3f",
+                    background: "#0d0f16",
+                    color: "#eef1ff",
+                    padding: "6px 8px",
+                    outline: "none",
+                    fontSize: 12,
+                  }}
+                  title={`Pick a loop type to auto-fill Adjust R (relative to installed ${installedTypeR})`}
+                >
+                  <option value="">Custom</option>
+                  {Object.keys(loopTypes).map((name) => (
+                    <option key={name} value={name}>
+                      {name} ({Number(loopTypes[name]) > 0 ? `+${Number(loopTypes[name])}` : `${Number(loopTypes[name])}`}mm)
+                    </option>
+                  ))}
+                </select>
 
-              {!allGroupNames.length ? (
-                <div style={{ ...muted, fontSize: 12 }}>No groups found. Check Step 2 mapping.</div>
-              ) : (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
-                    <thead>
-                      <tr style={{ color: "#aab1c3", fontSize: 12 }}>
-                        <th style={{ textAlign: "left", padding: "6px 8px" }}>Group</th>
+                <input
+                  value={aR}
+                  onChange={(e) => persistAdjustments({ ...adjustments, [kR]: n(e.target.value) ?? 0 })}
+                  style={{
+                    ...input,
+                    width: 110,
+                    padding: "6px 8px",
+                    textAlign: "right",
+                    fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                  }}
+                  inputMode="numeric"
+                  title="Manual override (mm) relative to installed loop"
+                />
+              </div>
+            </td>
 
-                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust L (mm)</th>
-                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust R (mm)</th>
+            <td
+              style={{
+                padding: "6px 8px",
+                textAlign: "right",
+                color: "#aab1c3",
+                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+              }}
+            >
+              {Number.isFinite(beforeAvg) ? Math.round(beforeAvg) : "—"}
+            </td>
 
-                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ before</th>
-                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ after</th>
-                      </tr>
-                    </thead>
+            <td
+              style={{
+                padding: "6px 8px",
+                textAlign: "right",
+                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                ...(sevAfter === "red" ? redCell : sevAfter === "yellow" ? yellowCell : null),
+              }}
+            >
+              {Number.isFinite(afterAvg) ? Math.round(afterAvg) : "—"}
+            </td>
+          </tr>
+        );
+      })}
+    </tbody>
+  </table>
+</div>
 
-                    <tbody>
-                      {allGroupNames.map((g) => {
-                        const kL = `${g}|L`;
-                        const kR = `${g}|R`;
-
-                        const aL = getAdjustment(adjustments, g, "L");
-                        const aR = getAdjustment(adjustments, g, "R");
-
-                        // Step 4 overrides (blank means "no change")
-
-                        // For label
-
-                        // Stats (already computed elsewhere)
-                        const statL = groupStats.find((s) => s.groupName === g && s.side === "L");
-                        const statR = groupStats.find((s) => s.groupName === g && s.side === "R");
-                        const beforeAvg = avg([statL?.before, statR?.before].filter((x) => Number.isFinite(x)));
-                        const afterAvg = avg([statL?.after, statR?.after].filter((x) => Number.isFinite(x)));
-
-                        const tol = meta.tolerance || 0;
-                        const sevAfter = severity(afterAvg, tol);
-
-                        return (
-                          <tr key={g} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
-                            <td style={{ padding: "6px 8px", fontWeight: 900 }}>{g}</td>
-
-                            {/* Adjust L (dropdown + input) */}
-                            <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: 8,
-                                  justifyContent: "flex-end",
-                                  alignItems: "center",
-                                  flexWrap: "wrap",
-                                }}
-                              >
-                                <select
-                                  value={loopTypeFromAdjustment(aL)}
-                                  onChange={(e) => {
-                                    const t = e.target.value;
-                                    if (!t) return; // Custom
-
-                                    // baseline loop is Step 3 installed loop for this group side
-                                const installedType = groupLoopSetup?.[`${g}|L`] || "SL";
-                                    const chosen = Number(loopTypes?.[t] ?? 0);
-                                    const installed = Number(loopTypes?.[installedType] ?? 0);
-
-                                    // adjustment = chosen - installed (relative to baseline loop)
-                                    const adj = Number.isFinite(chosen - installed) ? chosen - installed : 0;
-                                    persistAdjustments({ ...adjustments, [kL]: adj });
-                                  }}
-                                  style={{
-                                    borderRadius: 10,
-                                    border: "1px solid #2a2f3f",
-                                    background: "#0d0f16",
-                                    color: "#eef1ff",
-                                    padding: "6px 8px",
-                                    outline: "none",
-                                    fontSize: 12,
-                                  }}
-                                  title="Pick a loop type to auto-fill Adjust L (relative to Step 3 baseline)"
-                                >
-                                  <option value="">Custom</option>
-                                  {Object.keys(loopTypes).map((name) => (
-                                    <option key={name} value={name}>
-                                      {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
-                                    </option>
-                                  ))}
-                                </select>
-
-                                <input
-                                  value={aL}
-                                  onChange={(e) => persistAdjustments({ ...adjustments, [kL]: n(e.target.value) ?? 0 })}
-                                  style={{
-                                    ...input,
-                                    width: 110,
-                                    padding: "6px 8px",
-                                    textAlign: "right",
-                                    fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                                  }}
-                                  inputMode="numeric"
-                                  title="Manual override (mm)"
-                                />
-                              </div>
-                            </td>
-
-                            {/* Adjust R (dropdown + input) */}
-                            <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: 8,
-                                  justifyContent: "flex-end",
-                                  alignItems: "center",
-                                  flexWrap: "wrap",
-                                }}
-                              >
-                                <select
-                                  value={loopTypeFromAdjustment(aR)}
-                                  onChange={(e) => {
-                                    const t = e.target.value;
-                                    if (!t) return; // Custom
-
-                                const installedType = groupLoopSetup?.[`${g}|R`] || "SL";
-                                    const chosen = Number(loopTypes?.[t] ?? 0);
-                                    const installed = Number(loopTypes?.[installedType] ?? 0);
-
-                                    const adj = Number.isFinite(chosen - installed) ? chosen - installed : 0;
-                                    persistAdjustments({ ...adjustments, [kR]: adj });
-                                  }}
-                                  style={{
-                                    borderRadius: 10,
-                                    border: "1px solid #2a2f3f",
-                                    background: "#0d0f16",
-                                    color: "#eef1ff",
-                                    padding: "6px 8px",
-                                    outline: "none",
-                                    fontSize: 12,
-                                  }}
-                                  title="Pick a loop type to auto-fill Adjust R (relative to Step 3 baseline)"
-                                >
-                                  <option value="">Custom</option>
-                                  {Object.keys(loopTypes).map((name) => (
-                                    <option key={name} value={name}>
-                                      {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
-                                    </option>
-                                  ))}
-                                </select>
-
-                                <input
-                                  value={aR}
-                                  onChange={(e) => persistAdjustments({ ...adjustments, [kR]: n(e.target.value) ?? 0 })}
-                                  style={{
-                                    ...input,
-                                    width: 110,
-                                    padding: "6px 8px",
-                                    textAlign: "right",
-                                    fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                                  }}
-                                  inputMode="numeric"
-                                  title="Manual override (mm)"
-                                />
-                              </div>
-                            </td>
-
-                            <td
-                              style={{
-                                padding: "6px 8px",
-                                textAlign: "right",
-                                color: "#aab1c3",
-                                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                              }}
-                            >
-                              {Number.isFinite(beforeAvg) ? Math.round(beforeAvg) : "—"}
-                            </td>
-
-                            <td
-                              style={{
-                                padding: "6px 8px",
-                                textAlign: "right",
-                                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                                ...(sevAfter === "red" ? redCell : sevAfter === "yellow" ? yellowCell : null),
-                              }}
-                            >
-                              {Number.isFinite(afterAvg) ? Math.round(afterAvg) : "—"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
 
             <div style={{ height: 12 }} />
 
@@ -2244,8 +2170,29 @@ function onImportFile(file) {
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
                 <div style={{ fontWeight: 950, fontSize: 16 }}>Wing Profile Editor</div>
-                <button style={btn} onClick={() => setIsProfileEditorOpen(false)}>Close</button>
-              </div>
+                
+				
+<button
+  style={btn}
+  onClick={() => {
+    if (draftDirty) {
+      const ok = confirm("You have unsaved mapping changes. Save them now?");
+      if (ok) {
+        saveDraftProfile(); // this already closes the modal
+        return;
+      }
+    }
+    setIsProfileEditorOpen(false);
+  }}
+>
+  Close
+</button>
+
+
+			  
+			  
+			  
+			  </div>
 
               <div style={{ height: 10 }} />
 
@@ -2354,6 +2301,7 @@ function onImportFile(file) {
 /* ------------------------- Guided Mapping Editor ------------------------- */
 
 
+
 /* ===============================
    SECTION: Guided profile mapping editor component
    =============================== */
@@ -2362,10 +2310,12 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
   const mapping = draftProfile.mapping || { A: [], B: [], C: [], D: [] };
   const letters = ["A", "B", "C", "D"];
 
-  function setRows(letter, rows) {
-    const next = { ...draftProfile, mapping: { ...mapping, [letter]: rows } };
-    setDraftProfile(next);
-  }
+function setRows(letter, rows) {
+  const next = { ...draftProfile, mapping: { ...mapping, [letter]: rows } };
+  setDraftProfile(next);
+
+}
+
 
   function addRow(letter) {
     const rows = (mapping[letter] || []).slice();
@@ -2395,7 +2345,9 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
   }
 
   function sortRows(letter) {
-    const rows = (mapping[letter] || []).slice().sort((a, b) => (a?.[0] ?? 0) - (b?.[0] ?? 0));
+    const rows = (mapping[letter] || [])
+      .slice()
+      .sort((a, b) => (a?.[0] ?? 0) - (b?.[0] ?? 0));
     setRows(letter, rows);
   }
 
@@ -2404,13 +2356,23 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
       {letters.map((L) => (
         <div
           key={L}
-          style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}
+          style={{
+            border: "1px solid #2a2f3f",
+            borderRadius: 14,
+            padding: 12,
+            background: "#0e1018",
+          }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
             <div style={{ fontWeight: 900 }}>{L} mapping</div>
+
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button style={btn} onClick={() => addRow(L)}>Add row</button>
-              <button style={btn} onClick={() => sortRows(L)}>Sort</button>
+              <button style={btn} onClick={() => addRow(L)}>
+                Add row
+              </button>
+              <button style={btn} onClick={() => sortRows(L)}>
+                Sort
+              </button>
             </div>
           </div>
 
@@ -2480,7 +2442,9 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
                     </td>
 
                     <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                      <button style={btn} onClick={() => removeRow(L, idx)}>Delete</button>
+                      <button style={btn} onClick={() => removeRow(L, idx)}>
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}
