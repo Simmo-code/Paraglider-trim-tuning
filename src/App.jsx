@@ -19,7 +19,7 @@ import BUILTIN_PROFILES from "./wingProfiles.json";
  *   delta     = after - nominal
  */
 
-const APP_VERSION = "0.5cleaned1.";
+const APP_VERSION = "0.5cleaned1a.";
 
 
 
