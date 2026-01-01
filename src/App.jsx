@@ -354,6 +354,8 @@ export default function App() {
   const [draftProfileKey, setDraftProfileKey] = useState("");
   const [draftProfile, setDraftProfile] = useState({});
   const [showAdvancedJson, setShowAdvancedJson] = useState(false);
+  const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false)
+  
 // Track whether the draft profile differs from the saved profile
 const draftDirty = useMemo(() => {
   try {
@@ -949,7 +951,10 @@ const draftDirty = useMemo(() => {
     setDraftProfileKey(profileKey);
     setDraftProfile(deepClone(profiles[profileKey] || activeProfile || {}));
     setShowAdvancedJson(false);
-    setIsProfileEditorOpen(true);
+	setDraftDirty(false);
+	setDraftDirty(false);
+	setIsProfileEditorOpen(true);
+	
   }
   function saveDraftProfile() {
     const nextProfiles = { ...profiles };
@@ -2301,10 +2306,12 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
   const mapping = draftProfile.mapping || { A: [], B: [], C: [], D: [] };
   const letters = ["A", "B", "C", "D"];
 
-  function setRows(letter, rows) {
-    const next = { ...draftProfile, mapping: { ...mapping, [letter]: rows } };
-    setDraftProfile(next);
-  }
+function setRows(letter, rows) {
+  const next = { ...draftProfile, mapping: { ...mapping, [letter]: rows } };
+  setDraftProfile(next);
+  setDraftDirty(true);
+}
+
 
   function addRow(letter) {
     const rows = (mapping[letter] || []).slice();
