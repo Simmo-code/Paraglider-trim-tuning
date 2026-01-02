@@ -340,6 +340,18 @@ export default function App() {
     return "";
   }
 
+function loopTypeFromEffectiveMm(effectiveMm) {
+  for (const [name, val] of Object.entries(loopTypes || {})) {
+    if (Number.isFinite(val) && val === effectiveMm) return name;
+  }
+  return "";
+}
+
+function loopTypeFromInstalledPlusAdj(installedType, adjMm) {
+  const installedMm = Number(loopTypes?.[installedType] ?? 0);
+  const effectiveMm = installedMm + Number(adjMm ?? 0);
+  return loopTypeFromEffectiveMm(effectiveMm) || "";
+}
 
 
   /* ===============================
@@ -820,7 +832,7 @@ export default function App() {
 
   // Group average deltas (before vs after)
   const groupStats = useMemo(() => {
-    const corr = meta.correction || 0;
+    const corr = showCorrected ? (meta?.correction ?? 0) : 0;
 
     const bucketBefore = new Map(); // group|side -> [delta]
     const bucketAfter = new Map();
@@ -887,7 +899,7 @@ export default function App() {
       (groupSortKey(a.groupName) + a.side).localeCompare(groupSortKey(b.groupName) + b.side)
     );
     return out;
-  }, [wideRows, meta.correction, activeProfile, adjustments, groupLoopSetup, loopTypes]);
+ }, [wideRows, meta.correction, showCorrected, activeProfile, adjustments, groupLoopSetup, loopTypes]);
 
   // Chart toggles (A/B/C/D)
   const [chartLetters, setChartLetters] = useState(() => {
@@ -1858,7 +1870,7 @@ export default function App() {
                                 }}
                               >
                                 <select
-                                  value={loopTypeFromAdjustment(aL)}
+                                  value={loopTypeFromInstalledPlusAdj(installedTypeL, aL)}
                                   onChange={(e) => {
                                     const t = e.target.value;
                                     if (!t) return; // Custom
@@ -1919,7 +1931,7 @@ export default function App() {
                                 }}
                               >
                                 <select
-                                  value={loopTypeFromAdjustment(aR)}
+                                  value={loopTypeFromInstalledPlusAdj(installedType, aR)}
                                   onChange={(e) => {
                                     const t = e.target.value;
                                     if (!t) return; // Custom
