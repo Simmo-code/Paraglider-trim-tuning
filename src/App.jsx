@@ -484,12 +484,47 @@ function loopTypeFromInstalledPlusAdj(installedType, adjMm) {
      - Step 3 (groupLoopSetup) is BASELINE "installed loops"
      =============================== */
 
+//sim 1
+// Step 4 loop changes (override) — DOES NOT TOUCH Step 3 baseline
+const [groupLoopChange, setGroupLoopChange] = useState(() => {
+  try {
+    const s = localStorage.getItem("groupLoopChange");
+    return s ? JSON.parse(s) : {};
+  } catch {
+    return {};
+  }
+});
 
-  // Returns the baseline loop type from Step 3 (installed on wing)
-  // Returns the effective loop type for AFTER (Step 4 may override)
-  // If Step 4 hasn't set a change, it falls back to baseline.
-  // Convert loop type => mm delta (negative shortens)
-  // BEFORE uses baseline, AFTER uses effective
+function persistGroupLoopChange(next) {
+  setGroupLoopChange(next);
+  localStorage.setItem("groupLoopChange", JSON.stringify(next));
+}
+
+function clearAllLoopChanges() {
+  persistGroupLoopChange({});
+}
+function getBaselineLoopType(groupName, side) {
+  return groupLoopSetup?.[`${groupName}|${side}`] || "SL";
+}
+
+function getAfterLoopType(groupName, side) {
+  const k = `${groupName}|${side}`;
+  const v = groupLoopChange?.[k];
+  return v ? v : getBaselineLoopType(groupName, side);
+}
+
+function loopDeltaForGroup(groupName, side, which /* "before" | "after" */) {
+  const t = which === "after" ? getAfterLoopType(groupName, side) : getBaselineLoopType(groupName, side);
+  const d = loopTypes?.[t];
+  return Number.isFinite(d) ? d : 0;
+}
+
+// Replace/define your loopDeltaFor(lineId, side) helper as:
+function loopDeltaFor(lineId, side, which = "after") {
+  const g = groupForLine(activeProfile, lineId);
+  if (!g) return 0;
+  return loopDeltaForGroup(g, side, which);
+}
 
   const fileInputRef = useRef(null);
   const profilesImportRef = useRef(null);
