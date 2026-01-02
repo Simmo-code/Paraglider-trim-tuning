@@ -2792,7 +2792,7 @@ function BlockTable({
   showCorrected,
   includedRows,
   includedGroups,
-})) {
+}) {
   const corr = meta.correction || 0;
   const tol = meta.tolerance || 0;
   const corrApplied = showCorrected ? corr : 0;
