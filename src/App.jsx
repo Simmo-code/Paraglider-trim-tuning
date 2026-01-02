@@ -1835,6 +1835,9 @@ function loopTypeFromInstalledPlusAdj(installedType, adjMm) {
 
                     <tbody>
                       {allGroupNames.map((g) => {
+						  const installedTypeL = groupLoopSetup?.[`${g}|L`] || "SL";
+						const installedTypeR = groupLoopSetup?.[`${g}|R`] || "SL";
+
                         const kL = `${g}|L`;
                         const kR = `${g}|R`;
 
@@ -1931,7 +1934,7 @@ function loopTypeFromInstalledPlusAdj(installedType, adjMm) {
                                 }}
                               >
                                 <select
-                                  value={loopTypeFromInstalledPlusAdj(installedType, aR)}
+								value={loopTypeFromInstalledPlusAdj(installedTypeR, aR)}
                                   onChange={(e) => {
                                     const t = e.target.value;
                                     if (!t) return; // Custom
