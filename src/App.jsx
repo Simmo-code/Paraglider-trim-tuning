@@ -1376,7 +1376,7 @@ export default function App() {
       Tip: keep these numbers matching your real loop set. Only one loop type per group side.
     </div>
 
-  {/* Right: compact 2-column editor */}
+{/* Right: compact 2-column editor */}
 <div
   style={{
     display: "grid",
@@ -1449,6 +1449,7 @@ export default function App() {
     ));
   })()}
 </div>
+
 
 
 
