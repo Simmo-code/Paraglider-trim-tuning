@@ -314,24 +314,6 @@ export default function App() {
   });
   useEffect(() => localStorage.setItem("showCorrected", showCorrected ? "1" : "0"), [showCorrected]);
 
-/* ===============================
-   FIX: Ensure Step 4 is independent of Step 3
-   =============================== */
-
-/**
- * Location A:
- * Paste this inside App(), near your other useEffects.
- * Purpose: when entering Step 4, freeze Step 3 loop setup as the baseline exactly once.
- */
-useEffect(() => {
-  if (step !== 4) return;
-
-  // If we don't already have a frozen baseline, take one now.
-  // This prevents Step 3 changes from affecting Step 4 UI/calcs.
-  if (groupLoopBaseline == null) {
-    persistGroupLoopBaseline(JSON.parse(JSON.stringify(groupLoopSetup || {})));
-  }
-}, [step, groupLoopBaseline, groupLoopSetup]);
 
 // Chart letter toggles (A/B/C/D) — persisted
 const [chartLetters, setChartLetters] = useState(() => {
@@ -523,6 +505,28 @@ function persistGroupLoopBaseline(next) {
   if (next == null) localStorage.removeItem("groupLoopBaseline");
   else localStorage.setItem("groupLoopBaseline", JSON.stringify(next));
 }
+
+/* ===============================
+   FIX: Step 4 uses a frozen Step 3 baseline
+   - When you enter Step 4, we snapshot Step 3 loops once into groupLoopBaseline.
+   - If you go back to Step 3, we clear the snapshot so the next Step 4 run re-freezes.
+   =============================== */
+
+// Clear frozen baseline when returning to Step 3
+useEffect(() => {
+  if (step === 3 && groupLoopBaseline != null) {
+    persistGroupLoopBaseline(null);
+  }
+}, [step, groupLoopBaseline]);
+
+// Freeze baseline when entering Step 4 (only if not already frozen)
+useEffect(() => {
+  if (step !== 4) return;
+  if (groupLoopBaseline == null) {
+    persistGroupLoopBaseline(JSON.parse(JSON.stringify(groupLoopSetup || {})));
+  }
+}, [step, groupLoopBaseline, groupLoopSetup]);
+
 
 /* ---------- Step 4: Loop changes (virtual / trim-only) ---------- */
 const [groupLoopChange, setGroupLoopChange] = useState(() => {
