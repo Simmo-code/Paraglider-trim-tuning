@@ -374,6 +374,7 @@ function loopTypeFromInstalledPlusAdj(installedType, adjMm) {
     // Per-wing trimming/session state
     persistAdjustments({});
     persistGroupLoopSetup({});
+	persistGroupLoopChange({}); // clear Step 4 loop overrides
 
     // Step 4 filters
     try {
@@ -531,12 +532,7 @@ function loopDeltaFor(lineId, side, which = "after") {
 }
 
 
-// Replace/define your loopDeltaFor(lineId, side) helper as:
-function loopDeltaFor(lineId, side, which = "after") {
-  const g = groupForLine(activeProfile, lineId);
-  if (!g) return 0;
-  return loopDeltaForGroup(g, side, which);
-}
+
 
   const fileInputRef = useRef(null);
   const profilesImportRef = useRef(null);
@@ -629,26 +625,26 @@ function loopDeltaFor(lineId, side, which = "after") {
         if (!groupIncluded(groupName)) continue;
 
         // LEFT
-        if (Number.isFinite(b.measL)) {
-          const loopType = groupLoopSetup?.[`${groupName}|L`] || "SL";
-          const loopDelta = Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopType] : 0;
-          const adj = getAdjustment(adjustments, groupName, "L") || 0;
+if (Number.isFinite(b.measL)) {
+  const loopDelta = loopDeltaFor(b.line, "L", "after");
+  const adj = getAdjustment(adjustments, groupName, "L") || 0;
 
-          const corrected = b.measL + corr;
-          const afterDelta = corrected + loopDelta + adj - nominal;
-          if (Number.isFinite(afterDelta)) perRow[letter].push(afterDelta);
-        }
+  const corrected = b.measL + corr;
+  const afterDelta = corrected + loopDelta + adj - nominal;
+  if (Number.isFinite(afterDelta)) perRow[letter].push(afterDelta);
+}
+
 
         // RIGHT
-        if (Number.isFinite(b.measR)) {
-          const loopType = groupLoopSetup?.[`${groupName}|R`] || "SL";
-          const loopDelta = Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopType] : 0;
-          const adj = getAdjustment(adjustments, groupName, "R") || 0;
+if (Number.isFinite(b.measR)) {
+  const loopDelta = loopDeltaFor(b.line, "R", "after");
+  const adj = getAdjustment(adjustments, groupName, "R") || 0;
 
-          const corrected = b.measR + corr;
-          const afterDelta = corrected + loopDelta + adj - nominal;
-          if (Number.isFinite(afterDelta)) perRow[letter].push(afterDelta);
-        }
+  const corrected = b.measR + corr;
+  const afterDelta = corrected + loopDelta + adj - nominal;
+  if (Number.isFinite(afterDelta)) perRow[letter].push(afterDelta);
+}
+
       }
     }
 
