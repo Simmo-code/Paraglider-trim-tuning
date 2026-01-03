@@ -450,24 +450,13 @@ function loopTypeFromInstalledPlusAdj(installedType, adjMm) {
     localStorage.setItem("groupAdjustments", JSON.stringify(next));
   }
 
-  // Loop setup (per-line baseline, if used)
-  // (kept for compatibility because resetForNewImport() clears it)
-  const [loopSetup, setLoopSetup] = useState(() => {
-    try {
-      const s = localStorage.getItem("loopSetup");
-      return s ? JSON.parse(s) : {};
-    } catch {
-      return {};
-    }
-  });
+/* ===============================
+   STEP 3 BASELINE + STEP 4 LOOP OVERRIDE (AUTHORITATIVE)
+   =============================== */
 
-  function persistLoopSetup(next) {
-    setLoopSetup(next);
-    localStorage.setItem("loopSetup", JSON.stringify(next));
-  }
-
-
-// Group loop setup (Step 3 baseline) (AR1|L -> "SL")
+/* ---------- Step 3: Installed loops (baseline) ---------- */
+// This represents the REAL loops installed on the wing.
+// Step 4 must NEVER mutate this.
 const [groupLoopSetup, setGroupLoopSetup] = useState(() => {
   try {
     const s = localStorage.getItem("groupLoopSetup");
@@ -476,17 +465,15 @@ const [groupLoopSetup, setGroupLoopSetup] = useState(() => {
     return {};
   }
 });
+
 function persistGroupLoopSetup(next) {
   setGroupLoopSetup(next);
   localStorage.setItem("groupLoopSetup", JSON.stringify(next));
 }
 
-/* ===============================
-   Step 4 loop changes (override)
-   - Step 3 (groupLoopSetup) is BASELINE "installed loops"
-   =============================== */
-
-// Step 4 loop changes — DOES NOT TOUCH Step 3 baseline
+/* ---------- Step 4: Loop changes (virtual / trim-only) ---------- */
+// These are hypothetical changes applied during trimming.
+// They NEVER overwrite Step 3 baseline.
 const [groupLoopChange, setGroupLoopChange] = useState(() => {
   try {
     const s = localStorage.getItem("groupLoopChange");
@@ -505,34 +492,54 @@ function clearAllLoopChanges() {
   persistGroupLoopChange({});
 }
 
-// Returns the baseline loop type from Step 3 (installed on wing)
+/* ---------- Loop resolution helpers ---------- */
+
+// Step 3 baseline loop type (installed on wing)
 function getBaselineLoopType(groupName, side) {
   return groupLoopSetup?.[`${groupName}|${side}`] || "SL";
 }
 
-// Returns the effective loop type for AFTER (Step 4 may override)
+// Effective loop AFTER trimming (Step 4 override if present)
 function getAfterLoopType(groupName, side) {
   const k = `${groupName}|${side}`;
-  const v = groupLoopChange?.[k];
-  return v ? v : getBaselineLoopType(groupName, side);
+  return groupLoopChange?.[k] || getBaselineLoopType(groupName, side);
 }
 
-// Convert loop type => mm delta
+// Convert loop type → mm delta
 function loopDeltaForGroup(groupName, side, which /* "before" | "after" */) {
-  const t = which === "after" ? getAfterLoopType(groupName, side) : getBaselineLoopType(groupName, side);
-  const d = loopTypes?.[t];
-  return Number.isFinite(d) ? d : 0;
+  const loopType =
+    which === "after"
+      ? getAfterLoopType(groupName, side)
+      : getBaselineLoopType(groupName, side);
+
+  const mm = loopTypes?.[loopType];
+  return Number.isFinite(mm) ? mm : 0;
 }
 
-// IMPORTANT: this is the one your tables/charts should call
+// 🚨 THIS is the ONLY helper tables & charts must call
 function loopDeltaFor(lineId, side, which = "after") {
-  const g = groupForLine(activeProfile, lineId);
-  if (!g) return 0;
-  return loopDeltaForGroup(g, side, which);
+  const groupName = groupForLine(activeProfile, lineId);
+  if (!groupName) return 0;
+  return loopDeltaForGroup(groupName, side, which);
 }
 
 
 
+  // Loop setup (per-line baseline, if used)
+  // (kept for compatibility because resetForNewImport() clears it)
+  const [loopSetup, setLoopSetup] = useState(() => {
+    try {
+      const s = localStorage.getItem("loopSetup");
+      return s ? JSON.parse(s) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  function persistLoopSetup(next) {
+    setLoopSetup(next);
+    localStorage.setItem("loopSetup", JSON.stringify(next));
+  }
 
   const fileInputRef = useRef(null);
   const profilesImportRef = useRef(null);
