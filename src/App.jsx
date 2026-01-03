@@ -676,6 +676,7 @@ if (Number.isFinite(b.measR)) {
     activeProfile,
     adjustments,
     groupLoopSetup,
+	groupLoopChange, // ✅ ADD THIS
     loopTypes,
     includedRows,
     includedGroups,
