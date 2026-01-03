@@ -885,198 +885,98 @@ if (Number.isFinite(b.measR)) {
     });
   }
 
-  // Group average deltas (before vs after)
-  const groupStats = useMemo(() => {
-    const corr = showCorrected ? (meta?.correction ?? 0) : 0;
+ // Group average deltas (before vs after)  ✅ FIXED
+const groupStats = useMemo(() => {
+  const corr = showCorrected ? (meta?.correction ?? 0) : 0;
 
-    const bucketBefore = new Map(); // group|side -> [delta]
-    const bucketAfter = new Map();
+  const bucketBefore = new Map(); // group|side -> [delta]
+  const bucketAfter = new Map();
 
-    for (const r of wideRows) {
-      for (const letter of ["A", "B", "C", "D"]) {
-        const b = r[letter];
-        if (!b || !b.line || b.nominal == null) continue;
+  for (const r of wideRows) {
+    for (const letter of ["A", "B", "C", "D"]) {
+      const b = r[letter];
+      if (!b || !b.line || b.nominal == null) continue;
 
-        const g = groupForLine(activeProfile, b.line) || `${letter}?`;
+      const g = groupForLine(activeProfile, b.line) || `${letter}?`;
 
-        const loopL = loopDeltaFor(b.line, "L");
-        const loopR = loopDeltaFor(b.line, "R");
+      // ✅ TRUE before/after loop deltas
+      const loopL_before = loopDeltaFor(b.line, "L", "before");
+      const loopR_before = loopDeltaFor(b.line, "R", "before");
+      const loopL_after = loopDeltaFor(b.line, "L", "after");
+      const loopR_after = loopDeltaFor(b.line, "R", "after");
 
-        const adjL = getAdjustment(adjustments, g, "L");
-        const adjR = getAdjustment(adjustments, g, "R");
+      const adjL = getAdjustment(adjustments, g, "L");
+      const adjR = getAdjustment(adjustments, g, "R");
 
-        const baseL = b.measL == null ? null : b.measL + corr + loopL;
-        const baseR = b.measR == null ? null : b.measR + corr + loopR;
+      const correctedL = b.measL == null ? null : b.measL + corr;
+      const correctedR = b.measR == null ? null : b.measR + corr;
 
-        const afterL = baseL == null ? null : baseL + adjL;
-        const afterR = baseR == null ? null : baseR + adjR;
+      // ✅ baseline (before) uses BEFORE loops
+      const baseL = correctedL == null ? null : correctedL + loopL_before;
+      const baseR = correctedR == null ? null : correctedR + loopR_before;
 
-        const dL_before = baseL == null ? null : baseL - b.nominal;
-        const dR_before = baseR == null ? null : baseR - b.nominal;
+      // ✅ after uses AFTER loops + adjustments
+      const afterL = correctedL == null ? null : correctedL + loopL_after + adjL;
+      const afterR = correctedR == null ? null : correctedR + loopR_after + adjR;
 
-        const dL_after = afterL == null ? null : afterL - b.nominal;
-        const dR_after = afterR == null ? null : afterR - b.nominal;
+      const dL_before = baseL == null ? null : baseL - b.nominal;
+      const dR_before = baseR == null ? null : baseR - b.nominal;
 
-        if (Number.isFinite(dL_before)) {
-          const k = `${g}|L`;
-          if (!bucketBefore.has(k)) bucketBefore.set(k, []);
-          bucketBefore.get(k).push(dL_before);
-        }
-        if (Number.isFinite(dR_before)) {
-          const k = `${g}|R`;
-          if (!bucketBefore.has(k)) bucketBefore.set(k, []);
-          bucketBefore.get(k).push(dR_before);
-        }
-        if (Number.isFinite(dL_after)) {
-          const k = `${g}|L`;
-          if (!bucketAfter.has(k)) bucketAfter.set(k, []);
-          bucketAfter.get(k).push(dL_after);
-        }
-        if (Number.isFinite(dR_after)) {
-          const k = `${g}|R`;
-          if (!bucketAfter.has(k)) bucketAfter.set(k, []);
-          bucketAfter.get(k).push(dR_after);
-        }
+      const dL_after = afterL == null ? null : afterL - b.nominal;
+      const dR_after = afterR == null ? null : afterR - b.nominal;
+
+      if (Number.isFinite(dL_before)) {
+        const k = `${g}|L`;
+        if (!bucketBefore.has(k)) bucketBefore.set(k, []);
+        bucketBefore.get(k).push(dL_before);
+      }
+      if (Number.isFinite(dR_before)) {
+        const k = `${g}|R`;
+        if (!bucketBefore.has(k)) bucketBefore.set(k, []);
+        bucketBefore.get(k).push(dR_before);
+      }
+      if (Number.isFinite(dL_after)) {
+        const k = `${g}|L`;
+        if (!bucketAfter.has(k)) bucketAfter.set(k, []);
+        bucketAfter.get(k).push(dL_after);
+      }
+      if (Number.isFinite(dR_after)) {
+        const k = `${g}|R`;
+        if (!bucketAfter.has(k)) bucketAfter.set(k, []);
+        bucketAfter.get(k).push(dR_after);
       }
     }
+  }
 
-    const out = [];
-    const keys = new Set([...bucketBefore.keys(), ...bucketAfter.keys()]);
-    for (const key of keys) {
-      const [groupName, side] = key.split("|");
-      const before = avg(bucketBefore.get(key) || []);
-      const after = avg(bucketAfter.get(key) || []);
-      if (!Number.isFinite(before) && !Number.isFinite(after)) continue;
-      out.push({ groupName, side, before, after });
-    }
+  const out = [];
+  const keys = new Set([...bucketBefore.keys(), ...bucketAfter.keys()]);
+  for (const key of keys) {
+    const [groupName, side] = key.split("|");
+    const before = avg(bucketBefore.get(key) || []);
+    const after = avg(bucketAfter.get(key) || []);
+    if (!Number.isFinite(before) && !Number.isFinite(after)) continue;
+    out.push({ groupName, side, before, after });
+  }
 
-    out.sort((a, b) =>
-      (groupSortKey(a.groupName) + a.side).localeCompare(groupSortKey(b.groupName) + b.side)
-    );
-    return out;
- }, [wideRows, meta.correction, showCorrected, activeProfile, adjustments, groupLoopSetup, loopTypes]);
+  out.sort((a, b) =>
+    (groupSortKey(a.groupName) + a.side).localeCompare(groupSortKey(b.groupName) + b.side)
+  );
+  return out;
+}, [
+  wideRows,
+  meta?.correction,
+  showCorrected,
+  activeProfile,
+  adjustments,
 
-  // Chart toggles (A/B/C/D)
-  const [chartLetters, setChartLetters] = useState(() => {
-    try {
-      const s = localStorage.getItem("chartLetters");
-      return s ? JSON.parse(s) : { A: true, B: true, C: false, D: false };
-    } catch {
-      return { A: true, B: true, C: false, D: false };
-    }
-  });
-  useEffect(() => localStorage.setItem("chartLetters", JSON.stringify(chartLetters)), [chartLetters]);
+  // ✅ MUST include these so Step 4 loop dropdown updates immediately
+  groupLoopSetup,
+  groupLoopBaseline,
+  groupLoopChange,
 
+  loopTypes,
+]);
 
-
-  const chartPoints = useMemo(() => {
-    const rowIncluded = (L) => !!includedRows?.[L];
-
-    const groupIncluded = (g) => {
-      if (!g) return false;
-      const keys = Object.keys(includedGroups || {});
-      if (keys.length === 0) return true; // empty = all included
-      return !!includedGroups[g];
-    };
-
-    const corr = showCorrected ? (meta?.correction ?? 0) : 0;
-    const tol = meta?.tolerance ?? 0;
-
-    const pts = [];
-
-    for (const r of wideRows || []) {
-      for (const L of ["A", "B", "C", "D"]) {
-        // respect Step 4 chart A/B/C/D checkboxes if you already have them
-        if (typeof chartLetters === "object" && chartLetters !== null) {
-          if (!chartLetters[L]) continue;
-        }
-
-        if (!rowIncluded(L)) continue;
-
-        const b = r?.[L];
-        if (!b?.line) continue;
-
-        const nominal = b.nominal;
-        if (!Number.isFinite(nominal)) continue;
-
-        const groupName = groupForLine(activeProfile, b.line);
-        if (!groupIncluded(groupName)) continue;
-
-        // LEFT point
-        if (Number.isFinite(b.measL)) {
-          const loopType = groupLoopSetup?.[`${groupName}|L`] || "SL";
-          const loopDelta = Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopType] : 0;
-          const adj = getAdjustment(adjustments, groupName, "L") || 0;
-
-          const corrected = b.measL + corr;
-
-          const before = corrected + loopDelta - nominal; // baseline with installed loop
-          const after = corrected + loopDelta + adj - nominal;
-
-          pts.push({
-            letter: L,
-            lineId: b.line,
-            groupName,
-            side: "L",
-            nominal,
-            before,
-            after,
-            sev: severity(after, tol),
-          });
-        }
-
-        // RIGHT point
-        if (Number.isFinite(b.measR)) {
-          const loopType = groupLoopSetup?.[`${groupName}|R`] || "SL";
-          
-		  const loopDelta = Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopType] : 0;
-
-		  const adj = getAdjustment(adjustments, groupName, "R") || 0;
-
-          const corrected = b.measR + corr;
-
-          const before = corrected + loopDelta - nominal;
-          const after = corrected + loopDelta + adj - nominal;
-
-          pts.push({
-            letter: L,
-            lineId: b.line,
-            groupName,
-            side: "R",
-            nominal,
-            before,
-            after,
-            sev: severity(after, tol),
-          });
-        }
-      }
-    }
-
-    // Sort points so A1,A2... then B..., etc for nicer chart order
-    pts.sort((a, b) => {
-      const pa = parseLineId(a.lineId);
-      const pb = parseLineId(b.lineId);
-      const la = pa?.prefix || a.letter;
-      const lb = pb?.prefix || b.letter;
-      if (la !== lb) return la.localeCompare(lb);
-      return (pa?.num ?? 0) - (pb?.num ?? 0);
-    });
-
-    return pts;
-  }, [
-    wideRows,
-    meta?.correction,
-    meta?.tolerance,
-    showCorrected,
-    activeProfile,
-    adjustments,
-    groupLoopSetup,
-    loopTypes,
-    includedRows,
-    includedGroups,
-    // keep if you have chartLetters checkboxes
-    chartLetters,
-  ]);
 
   
   
