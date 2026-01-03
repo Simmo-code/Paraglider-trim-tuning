@@ -314,6 +314,23 @@ export default function App() {
   });
   useEffect(() => localStorage.setItem("showCorrected", showCorrected ? "1" : "0"), [showCorrected]);
 
+// Chart letter toggles (A/B/C/D) — persisted
+const [chartLetters, setChartLetters] = useState(() => {
+  try {
+    const s = localStorage.getItem("chartLetters");
+    return s ? JSON.parse(s) : { A: true, B: true, C: false, D: false };
+  } catch {
+    return { A: true, B: true, C: false, D: false };
+  }
+});
+
+useEffect(() => {
+  try {
+    localStorage.setItem("chartLetters", JSON.stringify(chartLetters));
+  } catch {}
+}, [chartLetters]);
+
+
 //sim ref1
   // Loop types (global / persistent)
   const [loopTypes, setLoopTypes] = useState(() => {
@@ -354,48 +371,50 @@ function loopTypeFromInstalledPlusAdj(installedType, adjMm) {
 }
 
 
-  /* ===============================
-     Import reset (Step 1 → Step 4)
-     =============================== */
-  function resetForNewImport() {
-    // Navigation
-    setStep(2);
-    localStorage.setItem("workflowStep", "2");
+/* ===============================
+   Import reset (Step 1 → Step 4)
+   =============================== */
+function resetForNewImport() {
+  // Navigation
+  setStep(2);
+  localStorage.setItem("workflowStep", "2");
 
-    // Imported data baseline
-    setWideRows([]);
-    setMeta({ input1: "", input2: "", tolerance: 0, correction: 0 });
-    setSelectedFileName("");
+  // Imported data baseline
+  setWideRows([]);
+  setMeta({ input1: "", input2: "", tolerance: 0, correction: 0 });
+  setSelectedFileName("");
 
-    // Step 4 defaults
-    setShowCorrected(true);
-    localStorage.setItem("showCorrected", "1");
+  // Step 4 defaults
+  setShowCorrected(true);
+  localStorage.setItem("showCorrected", "1");
 
-    // Per-wing trimming/session state
-persistGroupLoopBaseline(null); // clear frozen Step 3 snapshot
-persistGroupLoopChange({});     // clear Step 4 loop overrides
-persistAdjustments({});         // clear Step 4 trim mm adjustments
-persistGroupLoopSetup({});
+  // Per-wing trimming/session state
+  persistGroupLoopBaseline(null); // clear frozen Step 3 snapshot
+  persistGroupLoopChange({});     // clear Step 4 loop overrides
+  persistAdjustments({});         // clear Step 4 trim mm adjustments
+  persistGroupLoopSetup({});      // clear Step 3 baseline loops (new wing import)
 
-    // Step 4 filters
-    try {
-      setIncludedRows({ A: true, B: true, C: true, D: true });
-      setIncludedGroups({});
-    } catch {}
+  // Step 4 filters
+  try {
+    setIncludedRows({ A: true, B: true, C: true, D: true });
+    setIncludedGroups({});
+  } catch {}
 
-    // Chart toggles
-    try {
-      setChartLetters({ A: true, B: true, C: false, D: false });
-      localStorage.setItem("chartLetters", JSON.stringify({ A: true, B: true, C: false, D: false }));
-    } catch {}
+  // Chart toggles
+  try {
+    setChartLetters({ A: true, B: true, C: false, D: false });
+    localStorage.setItem(
+      "chartLetters",
+      JSON.stringify({ A: true, B: true, C: false, D: false })
+    );
+  } catch {}
 
-    // Close profile editor if open
-    try {
-      setIsProfileEditorOpen(false);
-      setShowAdvancedJson(false);
-    } catch {}
-  }
-
+  // Close profile editor if open
+  try {
+    setIsProfileEditorOpen(false);
+    setShowAdvancedJson(false);
+  } catch {}
+}
 
  
   // Profiles JSON (persisted)
