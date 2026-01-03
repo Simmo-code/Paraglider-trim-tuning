@@ -372,9 +372,9 @@ function loopTypeFromInstalledPlusAdj(installedType, adjMm) {
     localStorage.setItem("showCorrected", "1");
 
     // Per-wing trimming/session state
-    persistAdjustments({});
-    persistGroupLoopSetup({});
-	persistGroupLoopChange({}); // clear Step 4 loop overrides
+persistGroupLoopBaseline(null);
+persistGroupLoopChange({});
+persistAdjustments({});
 
     // Step 4 filters
     try {
@@ -455,8 +455,6 @@ function loopTypeFromInstalledPlusAdj(installedType, adjMm) {
    =============================== */
 
 /* ---------- Step 3: Installed loops (baseline) ---------- */
-// This represents the REAL loops installed on the wing.
-// Step 4 must NEVER mutate this.
 const [groupLoopSetup, setGroupLoopSetup] = useState(() => {
   try {
     const s = localStorage.getItem("groupLoopSetup");
@@ -471,9 +469,23 @@ function persistGroupLoopSetup(next) {
   localStorage.setItem("groupLoopSetup", JSON.stringify(next));
 }
 
+/* ---------- Frozen baseline snapshot (locks Step 3 once trimming starts) ---------- */
+const [groupLoopBaseline, setGroupLoopBaseline] = useState(() => {
+  try {
+    const s = localStorage.getItem("groupLoopBaseline");
+    return s ? JSON.parse(s) : null;
+  } catch {
+    return null;
+  }
+});
+
+function persistGroupLoopBaseline(next) {
+  setGroupLoopBaseline(next);
+  if (next == null) localStorage.removeItem("groupLoopBaseline");
+  else localStorage.setItem("groupLoopBaseline", JSON.stringify(next));
+}
+
 /* ---------- Step 4: Loop changes (virtual / trim-only) ---------- */
-// These are hypothetical changes applied during trimming.
-// They NEVER overwrite Step 3 baseline.
 const [groupLoopChange, setGroupLoopChange] = useState(() => {
   try {
     const s = localStorage.getItem("groupLoopChange");
@@ -494,9 +506,10 @@ function clearAllLoopChanges() {
 
 /* ---------- Loop resolution helpers ---------- */
 
-// Step 3 baseline loop type (installed on wing)
+// Baseline loop type: uses frozen snapshot if present, else live Step 3 state
 function getBaselineLoopType(groupName, side) {
-  return groupLoopSetup?.[`${groupName}|${side}`] || "SL";
+  const src = groupLoopBaseline || groupLoopSetup;
+  return src?.[`${groupName}|${side}`] || "SL";
 }
 
 // Effective loop AFTER trimming (Step 4 override if present)
@@ -507,16 +520,15 @@ function getAfterLoopType(groupName, side) {
 
 // Convert loop type → mm delta
 function loopDeltaForGroup(groupName, side, which /* "before" | "after" */) {
-  const loopType =
-    which === "after"
-      ? getAfterLoopType(groupName, side)
-      : getBaselineLoopType(groupName, side);
+  const loopType = which === "after"
+    ? getAfterLoopType(groupName, side)
+    : getBaselineLoopType(groupName, side);
 
   const mm = loopTypes?.[loopType];
   return Number.isFinite(mm) ? mm : 0;
 }
 
-// 🚨 THIS is the ONLY helper tables & charts must call
+// 🚨 ONLY helper tables & charts should call
 function loopDeltaFor(lineId, side, which = "after") {
   const groupName = groupForLine(activeProfile, lineId);
   if (!groupName) return 0;
@@ -1599,10 +1611,21 @@ if (Number.isFinite(b.measR)) {
     </div>
 
     <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-      <button onClick={() => setStep(4)} style={btnWarn} disabled={!allGroupNames.length}>
-        Continue to Step 4 (Tables + Graphs)
-      </button>
-      <button onClick={() => setStep(2)} style={btn}>Back</button>
+<button
+  onClick={() => {
+    // Freeze Step 3 as the trimming baseline ONCE
+    persistGroupLoopBaseline(
+      JSON.parse(JSON.stringify(groupLoopSetup || {}))
+    );
+    setStep(4);
+  }}
+  style={btnWarn}
+  disabled={!allGroupNames.length}
+>
+  Continue to Step 4 (Tables + Graphs)
+</button>
+
+
     </div>
   </div>
 ) : null}
