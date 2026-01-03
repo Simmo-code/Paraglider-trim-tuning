@@ -314,6 +314,25 @@ export default function App() {
   });
   useEffect(() => localStorage.setItem("showCorrected", showCorrected ? "1" : "0"), [showCorrected]);
 
+/* ===============================
+   FIX: Ensure Step 4 is independent of Step 3
+   =============================== */
+
+/**
+ * Location A:
+ * Paste this inside App(), near your other useEffects.
+ * Purpose: when entering Step 4, freeze Step 3 loop setup as the baseline exactly once.
+ */
+useEffect(() => {
+  if (step !== 4) return;
+
+  // If we don't already have a frozen baseline, take one now.
+  // This prevents Step 3 changes from affecting Step 4 UI/calcs.
+  if (groupLoopBaseline == null) {
+    persistGroupLoopBaseline(JSON.parse(JSON.stringify(groupLoopSetup || {})));
+  }
+}, [step, groupLoopBaseline, groupLoopSetup]);
+
 // Chart letter toggles (A/B/C/D) — persisted
 const [chartLetters, setChartLetters] = useState(() => {
   try {
@@ -875,9 +894,10 @@ if (Number.isFinite(b.measR)) {
     for (const g of allGroupNames) next[`${g}|L`] = next[`${g}|R`] || "SL";
     persistGroupLoopSetup(next);
   }
-  function resetAdjustments() {
-    persistAdjustments({});
-  }
+function resetAdjustments() {
+  persistAdjustments({});
+  persistGroupLoopChange({});
+}
 
   const compactBlocks = useMemo(() => {
     const blocks = { A: [], B: [], C: [], D: [] };
