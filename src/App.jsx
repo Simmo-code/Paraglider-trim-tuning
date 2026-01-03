@@ -466,26 +466,26 @@ function loopTypeFromInstalledPlusAdj(installedType, adjMm) {
   }
 
 
-  // Group loop setup (AR1|L -> "SL")
-  const [groupLoopSetup, setGroupLoopSetup] = useState(() => {
-    try {
-      const s = localStorage.getItem("groupLoopSetup");
-      return s ? JSON.parse(s) : {};
-    } catch {
-      return {};
-    }
-  });
-  function persistGroupLoopSetup(next) {
-    setGroupLoopSetup(next);
-    localStorage.setItem("groupLoopSetup", JSON.stringify(next));
+// Group loop setup (Step 3 baseline) (AR1|L -> "SL")
+const [groupLoopSetup, setGroupLoopSetup] = useState(() => {
+  try {
+    const s = localStorage.getItem("groupLoopSetup");
+    return s ? JSON.parse(s) : {};
+  } catch {
+    return {};
   }
-  /* ===============================
-     Step 4 loop changes (override)
-     - Step 3 (groupLoopSetup) is BASELINE "installed loops"
-     =============================== */
+});
+function persistGroupLoopSetup(next) {
+  setGroupLoopSetup(next);
+  localStorage.setItem("groupLoopSetup", JSON.stringify(next));
+}
 
-//sim 1
-// Step 4 loop changes (override) — DOES NOT TOUCH Step 3 baseline
+/* ===============================
+   Step 4 loop changes (override)
+   - Step 3 (groupLoopSetup) is BASELINE "installed loops"
+   =============================== */
+
+// Step 4 loop changes — DOES NOT TOUCH Step 3 baseline
 const [groupLoopChange, setGroupLoopChange] = useState(() => {
   try {
     const s = localStorage.getItem("groupLoopChange");
@@ -503,21 +503,33 @@ function persistGroupLoopChange(next) {
 function clearAllLoopChanges() {
   persistGroupLoopChange({});
 }
+
+// Returns the baseline loop type from Step 3 (installed on wing)
 function getBaselineLoopType(groupName, side) {
   return groupLoopSetup?.[`${groupName}|${side}`] || "SL";
 }
 
+// Returns the effective loop type for AFTER (Step 4 may override)
 function getAfterLoopType(groupName, side) {
   const k = `${groupName}|${side}`;
   const v = groupLoopChange?.[k];
   return v ? v : getBaselineLoopType(groupName, side);
 }
 
+// Convert loop type => mm delta
 function loopDeltaForGroup(groupName, side, which /* "before" | "after" */) {
   const t = which === "after" ? getAfterLoopType(groupName, side) : getBaselineLoopType(groupName, side);
   const d = loopTypes?.[t];
   return Number.isFinite(d) ? d : 0;
 }
+
+// IMPORTANT: this is the one your tables/charts should call
+function loopDeltaFor(lineId, side, which = "after") {
+  const g = groupForLine(activeProfile, lineId);
+  if (!g) return 0;
+  return loopDeltaForGroup(g, side, which);
+}
+
 
 // Replace/define your loopDeltaFor(lineId, side) helper as:
 function loopDeltaFor(lineId, side, which = "after") {
@@ -807,16 +819,7 @@ function loopDeltaFor(lineId, side, which = "after") {
     reader.readAsText(file);
   }
 
-  function loopDeltaFor(lineId, side) {
-    const g = groupForLine(activeProfile, lineId);
-    if (g) {
-      const key = `${g}|${side}`;
-      const type = groupLoopSetup[key] || "SL";
-      const v = loopTypes?.[type];
-      return Number.isFinite(v) ? v : 0;
-    }
-    return 0;
-  }
+
 
   function applyAllSL() {
     const next = {};
