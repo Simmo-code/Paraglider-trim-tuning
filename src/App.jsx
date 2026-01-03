@@ -372,9 +372,10 @@ function loopTypeFromInstalledPlusAdj(installedType, adjMm) {
     localStorage.setItem("showCorrected", "1");
 
     // Per-wing trimming/session state
-persistGroupLoopBaseline(null);
-persistGroupLoopChange({});
-persistAdjustments({});
+persistGroupLoopBaseline(null); // clear frozen Step 3 snapshot
+persistGroupLoopChange({});     // clear Step 4 loop overrides
+persistAdjustments({});         // clear Step 4 trim mm adjustments
+persistGroupLoopSetup({});
 
     // Step 4 filters
     try {
@@ -1868,28 +1869,29 @@ if (Number.isFinite(b.measR)) {
             </thead>
 
             <tbody>
-              {allGroupNames.map((g) => {
-                const kL = `${g}|L`;
-                const kR = `${g}|R`;
+{allGroupNames.map((g) => {
+  const kL = `${g}|L`;
+  const kR = `${g}|R`;
 
-                const installedTypeL = groupLoopSetup?.[kL] || "SL";
-                const installedTypeR = groupLoopSetup?.[kR] || "SL";
+  const installedTypeL = getBaselineLoopType(g, "L");
+  const installedTypeR = getBaselineLoopType(g, "R");
 
-                const effectiveTypeL = (groupLoopChange?.[kL] || installedTypeL);
-                const effectiveTypeR = (groupLoopChange?.[kR] || installedTypeR);
+  const effectiveTypeL = groupLoopChange?.[kL] || installedTypeL;
+  const effectiveTypeR = groupLoopChange?.[kR] || installedTypeR;
 
-                const aL = getAdjustment(adjustments, g, "L");
-                const aR = getAdjustment(adjustments, g, "R");
+  const aL = getAdjustment(adjustments, g, "L");
+  const aR = getAdjustment(adjustments, g, "R");
 
-                const statL = groupStats.find((s) => s.groupName === g && s.side === "L");
-                const statR = groupStats.find((s) => s.groupName === g && s.side === "R");
-                const beforeAvg = avg([statL?.before, statR?.before].filter((x) => Number.isFinite(x)));
-                const afterAvg = avg([statL?.after, statR?.after].filter((x) => Number.isFinite(x)));
+  const statL = groupStats.find((s) => s.groupName === g && s.side === "L");
+  const statR = groupStats.find((s) => s.groupName === g && s.side === "R");
+  const beforeAvg = avg([statL?.before, statR?.before].filter((x) => Number.isFinite(x)));
+  const afterAvg = avg([statL?.after, statR?.after].filter((x) => Number.isFinite(x)));
 
-                const tol = meta.tolerance || 0;
-                const sevAfter = severity(afterAvg, tol);
+  const tol = meta.tolerance || 0;
+  const sevAfter = severity(afterAvg, tol);
 
-                return (
+  return (
+
                   <tr key={g} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
                     <td style={{ padding: "6px 8px", fontWeight: 900 }}>{g}</td>
 
