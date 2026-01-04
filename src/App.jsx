@@ -19,8 +19,31 @@ import BUILTIN_PROFILES from "./wingProfiles.json";
  *   delta     = after - nominal
  */
 
-const APP_VERSION = "0.7";
+const APP_VERSION = "0.5";
 
+
+
+// Sample test data (CSV) for Step 1 "Try without uploading"
+const SAMPLE_CSV_TEXT = `Make,Model,Toleranz,Korrektur,,,,,,,,,,,,
+Ozone,Speedster3,6,-502,,,,,,,,,,,,
+A,Soll,Ist L,Ist R,B,Soll,L,R,C,Soll,Ist L,Ist R,D,Soll,L,R
+A1,6717,7240,7239,B1,6635,7143,7145,C1,6712,7221,7215,D1,6871,7380,7382
+A2,6676,7204,7200,B2,6593,7099,7102,C2,6672,7180,7177,D2,6833,7338,7342
+A3,6646,7170,7171,B3,6566,7072,7079,C3,6644,7150,7149,D3,6801,7308,7309
+A4,6660,7181,7185,B4,6581,7089,7094,C4,6658,7163,7164,D4,6813,7319,7319
+A5,6637,7160,7160,B5,6567,7079,7082,C5,6640,7145,7147,D5,6785,7298,7294
+A6,6617,7140,7139,B6,6549,7059,7062,C6,6621,7129,7127,D6,6764,7278,7274
+A7,6600,7120,7121,B7,6541,7049,7049,C7,6610,7116,7114,D7,6740,7255,7246
+A8,6612,7132,7131,B8,6555,7063,7061,C8,6622,7129,7126,D8,6748,7261,7253
+A9,6553,7064,7066,B9,6502,7011,7010,C9,6570,7077,7074,D9,6680,7185,7186
+A10,6504,7017,7018,B10,6458,6965,6964,C10,6526,7031,7030,D10,6631,7137,7139
+A11,6430,6941,6943,B11,6393,6903,6898,C11,6459,6967,6967,D11,6555,7068,7064
+A12,6421,6932,6934,B12,6385,6894,6894,C12,6448,6955,6954,D12,6538,7049,7047
+A13,6329,6834,6834,B13,6303,6807,6804,C13,6362,6871,6871,D13,6442,6950,6945
+A14,6307,6811,6810,B14,6278,6784,6779,C14,6335,6841,6840,D14,6408,6916,6914
+A15,6053,6559,6553,B15,6074,6577,6575,C15,6156,6663,6660,,,,
+A16,6017,6521,6515,B16,6030,6534,6532,C16,6107,6613,6610,,,,
+`;
 /* ------------------------- Helpers ------------------------- */
 
 function n(x) {
@@ -744,6 +767,33 @@ const fileInputRef = useRef(null);
     reader.readAsText(file);
   }
 
+
+  function loadSampleData() {
+  try {
+    // Parse the embedded CSV text (no network fetch required)
+    const { grid } = parseDelimited(SAMPLE_CSV_TEXT);
+    const parsed = parseWideFlexible(grid);
+
+    // Move into workflow and apply parsed sample
+    setStep(2);
+    localStorage.setItem("workflowStep", "2");
+
+    setWideRows(parsed.rows || []);
+    setMeta(parsed.meta || { input1: "", input2: "", tolerance: 0, correction: 0 });
+    setSelectedFileName("Sample data (built-in)");
+
+    // Clear Step 4 session state so the sample starts clean
+    try { persistGroupLoopBaseline(null); } catch {}
+    try { persistGroupLoopChange({}); } catch {}
+    try { persistAdjustments({}); } catch {}
+
+    // Keep Step 3 baseline loops as-is (user sets them in Step 3)
+  } catch (e) {
+    console.error("loadSampleData failed:", e);
+    alert("Could not load sample data. " + (e?.message || ""));
+  }
+}
+
   
 
 
@@ -1186,6 +1236,17 @@ if (Number.isFinite(dL_before)) {
                   <>No file selected.</>
                 )}
               </div>
+            </div>
+
+            <div style={{ height: 10 }} />
+            <div style={{ padding: 12, borderRadius: 14, border: "1px solid #2a2f3f", background: "#0b0c10" }}>
+              <div style={{ fontWeight: 850, marginBottom: 6 }}>Try the app with sample data</div>
+              <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5, marginBottom: 10 }}>
+                Loads a built-in CSV example so you can run Steps 2–4 without uploading a file.
+              </div>
+              <button onClick={loadSampleData} style={btnWarn}>
+                Load sample data
+              </button>
             </div>
           </div>
         ) : null}
