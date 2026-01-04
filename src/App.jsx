@@ -19,7 +19,7 @@ import BUILTIN_PROFILES from "./wingProfiles.json";
  *   delta     = after - nominal
  */
 
-const APP_VERSION = "0.8";
+const APP_VERSION = "0.5";
 
 
 
@@ -769,20 +769,30 @@ const fileInputRef = useRef(null);
 
 
   function loadSampleData() {
-    try {
-      resetForNewImport();
-      const { grid } = parseDelimited(SAMPLE_CSV_TEXT);
-      const { meta: m2, rows } = parseWideFlexible(grid);
-      setMeta(m2);
-      setWideRows(rows);
-      setSelectedFileName("Sample data");
-      setStep(2);
-      localStorage.setItem("workflowStep", "2");
-    } catch (e) {
-      console.error(e);
-      alert("Could not load sample data.");
-    }
+  try {
+    // Parse the embedded CSV text (no network fetch required)
+    const { grid } = parseDelimited(SAMPLE_CSV_TEXT);
+    const parsed = parseWideFlexible(grid);
+
+    // Move into workflow and apply parsed sample
+    setStep(2);
+    localStorage.setItem("workflowStep", "2");
+
+    setWideRows(parsed.rows || []);
+    setMeta(parsed.meta || { input1: "", input2: "", tolerance: 0, correction: 0 });
+    setSelectedFileName("Sample data (built-in)");
+
+    // Clear Step 4 session state so the sample starts clean
+    try { persistGroupLoopBaseline(null); } catch {}
+    try { persistGroupLoopChange({}); } catch {}
+    try { persistAdjustments({}); } catch {}
+
+    // Keep Step 3 baseline loops as-is (user sets them in Step 3)
+  } catch (e) {
+    console.error("loadSampleData failed:", e);
+    alert("Could not load sample data. " + (e?.message || ""));
   }
+}
 
   
 
