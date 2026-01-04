@@ -19,14 +19,8 @@ import BUILTIN_PROFILES from "./wingProfiles.json";
  *   delta     = after - nominal
  */
 
-const APP_VERSION = "0.5cleaned1";
+const APP_VERSION = "0.5";
 
-
-
-/* ===============================
-   SECTION: Global constants / version
-   (anchor for locating top-of-file settings)
-   =============================== */
 /* ------------------------- Helpers ------------------------- */
 
 function n(x) {
@@ -187,11 +181,6 @@ function safeParseProfilesJson(text) {
  * - Reads measurement rows by scanning for line IDs like A1, B12, C03, D7 and reading next 3 cells:
  *      [LineId] [Soll] [Ist L] [Ist R]
  */
-
-/* ===============================
-   SECTION: File parsing (CSV/XLSX -> wideRows)
-   =============================== */
-
 function parseWideFlexible(grid) {
   // 1) Meta header detection (optional)
   let headerRow = -1;
@@ -262,11 +251,6 @@ function parseWideFlexible(grid) {
 
 /* -------- Zeroing wizard: median correction suggestion -------- */
 
-
-/* =====================================================================
-   SECTION MARKER 1 — around line 265 (helper navigation)
-   ===================================================================== */
-
 function median(values) {
   const v = values.filter((x) => Number.isFinite(x)).slice().sort((a, b) => a - b);
   if (!v.length) return null;
@@ -291,12 +275,6 @@ function suggestCorrectionFromWideRows(wideRows) {
 
 /* ------------------------- App ------------------------- */
 
-
-
-/* ===============================
-   SECTION: App component (all workflow steps)
-   =============================== */
-
 export default function App() {
   const [step, setStep] = useState(() => {
     const s = localStorage.getItem("workflowStep");
@@ -315,6 +293,24 @@ export default function App() {
   useEffect(() => localStorage.setItem("showCorrected", showCorrected ? "1" : "0"), [showCorrected]);
 
  
+
+
+  // Chart letter toggles (A/B/C/D) — persisted
+  const [chartLetters, setChartLetters] = useState(() => {
+    try {
+      const s = localStorage.getItem("chartLetters");
+      return s ? JSON.parse(s) : { A: true, B: true, C: false, D: false };
+    } catch {
+      return { A: true, B: true, C: false, D: false };
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("chartLetters", JSON.stringify(chartLetters));
+    } catch {}
+  }, [chartLetters]);
+
   // Profiles JSON (persisted)
   const [profileJson, setProfileJson] = useState(() => {
     const saved = localStorage.getItem("wingProfilesJson");
@@ -391,6 +387,11 @@ export default function App() {
   }
 
   // Group loop setup (AR1|L -> "SL")
+  /* ===============================
+     STEP 3 BASELINE + STEP 4 LOOP OVERRIDE (AUTHORITATIVE)
+     =============================== */
+
+  /* ---------- Step 3: Installed loops (baseline) ---------- */
   const [groupLoopSetup, setGroupLoopSetup] = useState(() => {
     try {
       const s = localStorage.getItem("groupLoopSetup");
@@ -399,23 +400,92 @@ export default function App() {
       return {};
     }
   });
+
   function persistGroupLoopSetup(next) {
     setGroupLoopSetup(next);
     localStorage.setItem("groupLoopSetup", JSON.stringify(next));
   }
-  /* ===============================
-     Step 4 loop changes (override)
-     - Step 3 (groupLoopSetup) is BASELINE "installed loops"
-     =============================== */
+
+  /* ---------- Frozen baseline snapshot (locks Step 3 once trimming starts) ---------- */
+  const [groupLoopBaseline, setGroupLoopBaseline] = useState(() => {
+    try {
+      const s = localStorage.getItem("groupLoopBaseline");
+      return s ? JSON.parse(s) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  function persistGroupLoopBaseline(next) {
+    setGroupLoopBaseline(next);
+    if (next == null) localStorage.removeItem("groupLoopBaseline");
+    else localStorage.setItem("groupLoopBaseline", JSON.stringify(next));
+  }
+
+  // When entering Step 4, freeze Step 3 state exactly once (unless already frozen).
+  useEffect(() => {
+    if (step !== 4) return;
+    if (groupLoopBaseline == null) {
+      persistGroupLoopBaseline(JSON.parse(JSON.stringify(groupLoopSetup || {})));
+    }
+  }, [step, groupLoopBaseline, groupLoopSetup]);
+
+  /* ---------- Step 4: Loop changes (virtual / trim-only) ---------- */
+  const [groupLoopChange, setGroupLoopChange] = useState(() => {
+    try {
+      const s = localStorage.getItem("groupLoopChange");
+      return s ? JSON.parse(s) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  function persistGroupLoopChange(next) {
+    setGroupLoopChange(next);
+    localStorage.setItem("groupLoopChange", JSON.stringify(next));
+  }
+
+  function clearAllLoopChanges() {
+    persistGroupLoopChange({});
+  }
+
+  /* ---------- Loop resolution helpers ---------- */
+
+  // Baseline loop type: uses frozen snapshot if present, else live Step 3 state
+  function getBaselineLoopType(groupName, side) {
+    const src = groupLoopBaseline || groupLoopSetup;
+    return src?.[`${groupName}|${side}`] || "SL";
+  }
+
+  // Effective loop AFTER trimming (Step 4 override if present)
+  function getAfterLoopType(groupName, side) {
+    const k = `${groupName}|${side}`;
+    return groupLoopChange?.[k] || getBaselineLoopType(groupName, side);
+  }
 
 
-  // Returns the baseline loop type from Step 3 (installed on wing)
-  // Returns the effective loop type for AFTER (Step 4 may override)
-  // If Step 4 hasn't set a change, it falls back to baseline.
-  // Convert loop type => mm delta (negative shortens)
-  // BEFORE uses baseline, AFTER uses effective
+  // Alias used by some UI blocks (Step 4)
+  function getEffectiveLoopType(groupName, side) {
+    return getAfterLoopType(groupName, side);
+  }
 
-  const fileInputRef = useRef(null);
+  // Convert loop type → mm delta
+  function loopDeltaForGroup(groupName, side, which /* "before" | "after" */) {
+    const loopType = which === "after" ? getAfterLoopType(groupName, side) : getBaselineLoopType(groupName, side);
+    const mm = loopTypes?.[loopType];
+    return Number.isFinite(mm) ? mm : 0;
+  }
+
+  // 🚨 ONLY helper tables & charts should call
+  function loopDeltaFor(lineId, side, which = "after") {
+    const groupName = groupForLine(activeProfile, lineId);
+    if (!groupName) return 0;
+    return loopDeltaForGroup(groupName, side, which);
+  }
+
+
+
+const fileInputRef = useRef(null);
   const profilesImportRef = useRef(null);
   const [selectedFileName, setSelectedFileName] = useState("");
 
@@ -535,7 +605,8 @@ export default function App() {
     activeProfile,
     adjustments,
     groupLoopSetup,
-    loopTypes,
+    groupLoopChange,
+        loopTypes,
     includedRows,
     includedGroups,
   ]);
@@ -673,16 +744,8 @@ export default function App() {
     reader.readAsText(file);
   }
 
-  function loopDeltaFor(lineId, side) {
-    const g = groupForLine(activeProfile, lineId);
-    if (g) {
-      const key = `${g}|${side}`;
-      const type = groupLoopSetup[key] || "SL";
-      const v = loopTypes?.[type];
-      return Number.isFinite(v) ? v : 0;
-    }
-    return 0;
-  }
+  
+
 
   function applyAllSL() {
     const next = {};
@@ -704,6 +767,7 @@ export default function App() {
   }
   function resetAdjustments() {
     persistAdjustments({});
+    persistGroupLoopChange({});
   }
 
   const compactBlocks = useMemo(() => {
@@ -745,25 +809,33 @@ export default function App() {
 
         const g = groupForLine(activeProfile, b.line) || `${letter}?`;
 
-        const loopL = loopDeltaFor(b.line, "L");
-        const loopR = loopDeltaFor(b.line, "R");
+        const loopL_before = loopDeltaFor(b.line, "L", "before");
+        const loopR_before = loopDeltaFor(b.line, "R", "before");
+        const loopL_after = loopDeltaFor(b.line, "L", "after");
+        const loopR_after = loopDeltaFor(b.line, "R", "after");
 
         const adjL = getAdjustment(adjustments, g, "L");
         const adjR = getAdjustment(adjustments, g, "R");
 
-        const baseL = b.measL == null ? null : b.measL + corr + loopL;
-        const baseR = b.measR == null ? null : b.measR + corr + loopR;
+        // Before = corrected + baseline loop
+        const baseL_before = b.measL == null ? null : b.measL + corr + loopL_before;
+        const baseR_before = b.measR == null ? null : b.measR + corr + loopR_before;
 
-        const afterL = baseL == null ? null : baseL + adjL;
-        const afterR = baseR == null ? null : baseR + adjR;
+        // After = corrected + (Step 4 loop override) + adjustment
+        const baseL_after = b.measL == null ? null : b.measL + corr + loopL_after;
+        const baseR_after = b.measR == null ? null : b.measR + corr + loopR_after;
 
-        const dL_before = baseL == null ? null : baseL - b.nominal;
-        const dR_before = baseR == null ? null : baseR - b.nominal;
+        const afterL = baseL_after == null ? null : baseL_after + adjL;
+        const afterR = baseR_after == null ? null : baseR_after + adjR;
+
+        const dL_before = baseL_before == null ? null : baseL_before - b.nominal;
+        const dR_before = baseR_before == null ? null : baseR_before - b.nominal;
 
         const dL_after = afterL == null ? null : afterL - b.nominal;
         const dR_after = afterR == null ? null : afterR - b.nominal;
 
-        if (Number.isFinite(dL_before)) {
+
+if (Number.isFinite(dL_before)) {
           const k = `${g}|L`;
           if (!bucketBefore.has(k)) bucketBefore.set(k, []);
           bucketBefore.get(k).push(dL_before);
@@ -802,127 +874,103 @@ export default function App() {
     return out;
   }, [wideRows, meta.correction, activeProfile, adjustments, groupLoopSetup, loopTypes]);
 
-  // Chart toggles (A/B/C/D)
-  const [chartLetters, setChartLetters] = useState(() => {
-    try {
-      const s = localStorage.getItem("chartLetters");
-      return s ? JSON.parse(s) : { A: true, B: true, C: false, D: false };
-    } catch {
-      return { A: true, B: true, C: false, D: false };
-    }
-  });
-  useEffect(() => localStorage.setItem("chartLetters", JSON.stringify(chartLetters)), [chartLetters]);
-
 
 
   const chartPoints = useMemo(() => {
-    const rowIncluded = (L) => !!includedRows?.[L];
+  const tol = meta?.tolerance ?? 0;
+  const corr = showCorrected ? (meta?.correction ?? 0) : 0;
 
-    const groupIncluded = (g) => {
-      if (!g) return false;
-      const keys = Object.keys(includedGroups || {});
-      if (keys.length === 0) return true; // empty = all included
-      return !!includedGroups[g];
-    };
+  // Build stable X positions by lineId order (A1..Dxx)
+  const lineIds = [];
+  const seen = new Set();
+  for (const r of wideRows || []) {
+    for (const L of ["A", "B", "C", "D"]) {
+      const b = r?.[L];
+      if (!b?.line) continue;
+      if (seen.has(b.line)) continue;
+      seen.add(b.line);
+      lineIds.push(b.line);
+    }
+  }
+  lineIds.sort((a, b) => {
+    const pa = parseLineId(a);
+    const pb = parseLineId(b);
+    if (!pa || !pb) return String(a).localeCompare(String(b));
+    if (pa.prefix !== pb.prefix) return pa.prefix.localeCompare(pb.prefix);
+    return (pa.num ?? 0) - (pb.num ?? 0);
+  });
+  const xIndexByLine = new Map(lineIds.map((id, i) => [id, i]));
+  const maxX = Math.max(1, lineIds.length - 1);
 
-    const corr = showCorrected ? (meta?.correction ?? 0) : 0;
-    const tol = meta?.tolerance ?? 0;
+  const pts = [];
+  for (const r of wideRows || []) {
+    for (const L of ["A", "B", "C", "D"]) {
+      const b = r?.[L];
+      if (!b?.line) continue;
+      const groupName = groupForLine(activeProfile, b.line);
 
-    const pts = [];
+      const nominal = b.nominal;
+      if (!Number.isFinite(nominal)) continue;
 
-    for (const r of wideRows || []) {
-      for (const L of ["A", "B", "C", "D"]) {
-        // respect Step 4 chart A/B/C/D checkboxes if you already have them
-        if (typeof chartLetters === "object" && chartLetters !== null) {
-          if (!chartLetters[L]) continue;
-        }
+      // LEFT
+      if (Number.isFinite(b.measL)) {
+        const corrected = b.measL + corr;
+        const before = corrected + loopDeltaFor(b.line, "L", "before") - nominal;
+        const after = corrected + loopDeltaFor(b.line, "L", "after") + getAdjustment(adjustments, groupName, "L") - nominal;
+        pts.push({
+          id: `${b.line}-L`,
+          line: b.line,
+          side: "L",
+          before,
+          after,
+          sevAfter: severity(after, tol),
+          xIndex: xIndexByLine.get(b.line) ?? 0,
+        });
+      }
 
-        if (!rowIncluded(L)) continue;
-
-        const b = r?.[L];
-        if (!b?.line) continue;
-
-        const nominal = b.nominal;
-        if (!Number.isFinite(nominal)) continue;
-
-        const groupName = groupForLine(activeProfile, b.line);
-        if (!groupIncluded(groupName)) continue;
-
-        // LEFT point
-        if (Number.isFinite(b.measL)) {
-          const loopType = groupLoopSetup?.[`${groupName}|L`] || "SL";
-          const loopDelta = Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopType] : 0;
-          const adj = getAdjustment(adjustments, groupName, "L") || 0;
-
-          const corrected = b.measL + corr;
-
-          const before = corrected + loopDelta - nominal; // baseline with installed loop
-          const after = corrected + loopDelta + adj - nominal;
-
-          pts.push({
-            letter: L,
-            lineId: b.line,
-            groupName,
-            side: "L",
-            nominal,
-            before,
-            after,
-            sev: severity(after, tol),
-          });
-        }
-
-        // RIGHT point
-        if (Number.isFinite(b.measR)) {
-          const loopType = groupLoopSetup?.[`${groupName}|R`] || "SL";
-          
-		  const loopDelta = Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopType] : 0;
-
-		  const adj = getAdjustment(adjustments, groupName, "R") || 0;
-
-          const corrected = b.measR + corr;
-
-          const before = corrected + loopDelta - nominal;
-          const after = corrected + loopDelta + adj - nominal;
-
-          pts.push({
-            letter: L,
-            lineId: b.line,
-            groupName,
-            side: "R",
-            nominal,
-            before,
-            after,
-            sev: severity(after, tol),
-          });
-        }
+      // RIGHT
+      if (Number.isFinite(b.measR)) {
+        const corrected = b.measR + corr;
+        const before = corrected + loopDeltaFor(b.line, "R", "before") - nominal;
+        const after = corrected + loopDeltaFor(b.line, "R", "after") + getAdjustment(adjustments, groupName, "R") - nominal;
+        pts.push({
+          id: `${b.line}-R`,
+          line: b.line,
+          side: "R",
+          before,
+          after,
+          sevAfter: severity(after, tol),
+          xIndex: xIndexByLine.get(b.line) ?? 0,
+        });
       }
     }
+  }
 
-    // Sort points so A1,A2... then B..., etc for nicer chart order
-    pts.sort((a, b) => {
-      const pa = parseLineId(a.lineId);
-      const pb = parseLineId(b.lineId);
-      const la = pa?.prefix || a.letter;
-      const lb = pb?.prefix || b.letter;
-      if (la !== lb) return la.localeCompare(lb);
-      return (pa?.num ?? 0) - (pb?.num ?? 0);
-    });
+  // Filter by selected chart letters (A/B/C/D)
+  const filtered = pts.filter((p) => {
+    const prefix = parseLineId(p.line)?.prefix;
+    return prefix ? !!chartLetters?.[prefix] : true;
+  });
 
-    return pts;
-  }, [
-    wideRows,
-    meta?.correction,
-    meta?.tolerance,
-    showCorrected,
-    activeProfile,
-    adjustments,
-    groupLoopSetup,
-    loopTypes,
-    includedRows,
-    includedGroups,
-    // keep if you have chartLetters checkboxes
-    chartLetters,
-  ]);
+  // Normalise xIndex range if needed (DeltaLineChart expects maxX >= 1)
+  for (const p of filtered) {
+    p.xIndex = Math.max(0, Math.min(maxX, p.xIndex ?? 0));
+  }
+
+  return filtered;
+}, [
+  wideRows,
+  activeProfile,
+  meta?.tolerance,
+  meta?.correction,
+  showCorrected,
+  adjustments,
+  chartLetters,
+  groupLoopSetup,
+  groupLoopBaseline,
+  groupLoopChange,
+  loopTypes,
+]);
 
   
   
@@ -1056,7 +1104,6 @@ export default function App() {
 
 
   return (
-    <ErrorBoundary>
     <div style={page}>
       <div style={wrap}>
         {/* Header */}
@@ -1098,7 +1145,6 @@ export default function App() {
         </div>
 
         {/* STEP 1 */}
-        {/* --- ANCHOR: STEP 1 UI block start --- */}
         {step === 1 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 1 — Import measurement CSV / Excel</div>
@@ -1145,7 +1191,6 @@ export default function App() {
         ) : null}
 
         {/* STEP 2 */}
-        {/* --- ANCHOR: STEP 2 UI block start --- */}
         {step === 2 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 2 — Wing layout (profile mapping)</div>
@@ -1252,7 +1297,6 @@ export default function App() {
         ) : null}
 
         {/* STEP 3 */}
-        {/* --- ANCHOR: STEP 3 UI block start --- */}
         {step === 3 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 3 — Maillon loop setup (baseline)</div>
@@ -1477,7 +1521,6 @@ export default function App() {
         ) : null}
 
         {/* STEP 4 */}
-        {/* --- ANCHOR: STEP 4 UI block start --- */}
         {step === 4 ? (
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 4 — Tables + Graphs</div>
@@ -1684,190 +1727,317 @@ export default function App() {
 
 
 {/* Adjustment UI */}
-            {/* --- ANCHOR: Step 4 adjustments table --- */}
             {/* Adjustment UI */}
-<div style={{ overflowX: "auto" }}>
-  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
-    <thead>
-      <tr style={{ color: "#aab1c3", fontSize: 12 }}>
-        <th style={{ textAlign: "left", padding: "6px 8px" }}>Group</th>
-        <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust L (mm)</th>
-        <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust R (mm)</th>
-        <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ before</th>
-        <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ after</th>
-      </tr>
-    </thead>
+            <div style={{ ...card, background: "#0e1018" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 850, marginBottom: 6 }}>
+                    Trim adjustments per line group (mm)
+                  </div>
+                  <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
+                    These simulate changes you apply during trimming.
+                    <br />
+                    <b>Before</b> uses Step 3 baseline loops. <b>After</b> uses Step 4 loop changes + Adjust
+                    mm.
+                    <br />
+                    Positive = longer; negative = shorter.
+                  </div>
+                </div>
 
-    <tbody>
-      {allGroupNames.map((g) => {
-        const kL = `${g}|L`;
-        const kR = `${g}|R`;
-
-        const aL = getAdjustment(adjustments, g, "L");
-        const aR = getAdjustment(adjustments, g, "R");
-
-        // installed loop types are set in Step 3 (baseline)
-        const installedTypeL = groupLoopSetup?.[kL] || "SL";
-        const installedTypeR = groupLoopSetup?.[kR] || "SL";
-
-        const installedMmL = Number(loopTypes?.[installedTypeL] ?? 0);
-        const installedMmR = Number(loopTypes?.[installedTypeR] ?? 0);
-
-        // dropdown should show which loop type would produce the current adjustment relative to installed baseline
-        const loopTypeFromRelativeAdj = (adjMm, installedMm) => {
-          const adj = Number(adjMm ?? 0);
-          const keys = Object.keys(loopTypes || {});
-          for (const name of keys) {
-            const mm = Number(loopTypes[name] ?? 0);
-            if (Number.isFinite(mm) && Number.isFinite(installedMm) && mm - installedMm === adj) return name;
-          }
-          return ""; // Custom
-        };
-
-        const dropL = loopTypeFromRelativeAdj(aL, installedMmL);
-        const dropR = loopTypeFromRelativeAdj(aR, installedMmR);
-
-        // Stats (already computed elsewhere)
-        const statL = groupStats.find((s) => s.groupName === g && s.side === "L");
-        const statR = groupStats.find((s) => s.groupName === g && s.side === "R");
-        const beforeAvg = avg([statL?.before, statR?.before].filter((x) => Number.isFinite(x)));
-        const afterAvg = avg([statL?.after, statR?.after].filter((x) => Number.isFinite(x)));
-
-        const tol = meta.tolerance || 0;
-        const sevAfter = severity(afterAvg, tol);
-
-        return (
-          <tr key={g} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
-            <td style={{ padding: "6px 8px", fontWeight: 900 }}>{g}</td>
-
-            {/* Adjust L (dropdown + input) */}
-            <td style={{ padding: "6px 8px", textAlign: "right" }}>
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
-                <select
-                  value={dropL}
-                  onChange={(e) => {
-                    const t = e.target.value;
-                    if (!t) return; // Custom selected: do nothing (leave number)
-                    const chosenMm = Number(loopTypes?.[t] ?? 0);
-                    const adj = chosenMm - installedMmL;
-                    persistAdjustments({ ...adjustments, [kL]: Number.isFinite(adj) ? adj : 0 });
-                  }}
-                  style={{
-                    borderRadius: 10,
-                    border: "1px solid #2a2f3f",
-                    background: "#0d0f16",
-                    color: "#eef1ff",
-                    padding: "6px 8px",
-                    outline: "none",
-                    fontSize: 12,
-                  }}
-                  title={`Pick a loop type to auto-fill Adjust L (relative to installed ${installedTypeL})`}
-                >
-                  <option value="">Custom</option>
-                  {Object.keys(loopTypes).map((name) => (
-                    <option key={name} value={name}>
-                      {name} ({Number(loopTypes[name]) > 0 ? `+${Number(loopTypes[name])}` : `${Number(loopTypes[name])}`}mm)
-                    </option>
-                  ))}
-                </select>
-
-                <input
-                  value={aL}
-                  onChange={(e) => persistAdjustments({ ...adjustments, [kL]: n(e.target.value) ?? 0 })}
-                  style={{
-                    ...input,
-                    width: 110,
-                    padding: "6px 8px",
-                    textAlign: "right",
-                    fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                  }}
-                  inputMode="numeric"
-                  title="Manual override (mm) relative to installed loop"
-                />
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button onClick={clearAllLoopChanges} style={btn}>
+                    Clear all loop changes (Step 4)
+                  </button>
+                </div>
               </div>
-            </td>
 
-            {/* Adjust R (dropdown + input) */}
-            <td style={{ padding: "6px 8px", textAlign: "right" }}>
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
-                <select
-                  value={dropR}
-                  onChange={(e) => {
-                    const t = e.target.value;
-                    if (!t) return;
-                    const chosenMm = Number(loopTypes?.[t] ?? 0);
-                    const adj = chosenMm - installedMmR;
-                    persistAdjustments({ ...adjustments, [kR]: Number.isFinite(adj) ? adj : 0 });
-                  }}
-                  style={{
-                    borderRadius: 10,
-                    border: "1px solid #2a2f3f",
-                    background: "#0d0f16",
-                    color: "#eef1ff",
-                    padding: "6px 8px",
-                    outline: "none",
-                    fontSize: 12,
-                  }}
-                  title={`Pick a loop type to auto-fill Adjust R (relative to installed ${installedTypeR})`}
-                >
-                  <option value="">Custom</option>
-                  {Object.keys(loopTypes).map((name) => (
-                    <option key={name} value={name}>
-                      {name} ({Number(loopTypes[name]) > 0 ? `+${Number(loopTypes[name])}` : `${Number(loopTypes[name])}`}mm)
-                    </option>
-                  ))}
-                </select>
+              <div style={{ height: 10 }} />
 
-                <input
-                  value={aR}
-                  onChange={(e) => persistAdjustments({ ...adjustments, [kR]: n(e.target.value) ?? 0 })}
-                  style={{
-                    ...input,
-                    width: 110,
-                    padding: "6px 8px",
-                    textAlign: "right",
-                    fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                  }}
-                  inputMode="numeric"
-                  title="Manual override (mm) relative to installed loop"
-                />
-              </div>
-            </td>
+              {!allGroupNames.length ? (
+                <div style={{ ...muted, fontSize: 12 }}>No groups found. Check Step 2 mapping.</div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1100 }}>
+                    <thead>
+                      <tr style={{ color: "#aab1c3", fontSize: 12 }}>
+                        <th style={{ textAlign: "left", padding: "6px 8px" }}>Group</th>
 
-            <td
-              style={{
-                padding: "6px 8px",
-                textAlign: "right",
-                color: "#aab1c3",
-                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-              }}
-            >
-              {Number.isFinite(beforeAvg) ? Math.round(beforeAvg) : "—"}
-            </td>
+                        <th style={{ textAlign: "left", padding: "6px 8px" }}>Loop change L</th>
+                        <th style={{ textAlign: "left", padding: "6px 8px" }}>Loop change R</th>
 
-            <td
-              style={{
-                padding: "6px 8px",
-                textAlign: "right",
-                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                ...(sevAfter === "red" ? redCell : sevAfter === "yellow" ? yellowCell : null),
-              }}
-            >
-              {Number.isFinite(afterAvg) ? Math.round(afterAvg) : "—"}
-            </td>
-          </tr>
-        );
-      })}
-    </tbody>
-  </table>
-</div>
+                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust L (mm)</th>
+                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust R (mm)</th>
 
+                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ before</th>
+                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ after</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {allGroupNames.map((g) => {
+                        const kL = `${g}|L`;
+                        const kR = `${g}|R`;
+
+                        const aL = getAdjustment(adjustments, g, "L");
+                        const aR = getAdjustment(adjustments, g, "R");
+
+                        // Step 4 overrides (blank means "no change")
+                        const chL = (groupLoopChange && groupLoopChange[kL]) || "";
+                        const chR = (groupLoopChange && groupLoopChange[kR]) || "";
+
+                        // For label
+                        const effectiveL = getEffectiveLoopType(g, "L");
+                        const effectiveR = getEffectiveLoopType(g, "R");
+
+                        // Stats (already computed elsewhere)
+                        const statL = groupStats.find((s) => s.groupName === g && s.side === "L");
+                        const statR = groupStats.find((s) => s.groupName === g && s.side === "R");
+                        const beforeAvg = avg([statL?.before, statR?.before].filter((x) => Number.isFinite(x)));
+                        const afterAvg = avg([statL?.after, statR?.after].filter((x) => Number.isFinite(x)));
+
+                        const tol = meta.tolerance || 0;
+                        const sevAfter = severity(afterAvg, tol);
+
+                        return (
+                          <tr key={g} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
+                            <td style={{ padding: "6px 8px", fontWeight: 900 }}>{g}</td>
+
+                            {/* Loop change L */}
+                            <td style={{ padding: "6px 8px" }}>
+                              <select
+                                value={chL}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  const next = { ...(groupLoopChange || {}) };
+                                  if (!v) delete next[kL];
+                                  else next[kL] = v;
+                                  persistGroupLoopChange(next);
+                                }}
+                                style={{
+                                  width: 190,
+                                  borderRadius: 10,
+                                  border: "1px solid #2a2f3f",
+                                  background: "#0d0f16",
+                                  color: "#eef1ff",
+                                  padding: "6px 10px",
+                                  outline: "none",
+                                  fontSize: 12,
+                                }}
+                                title="Step 4 loop change (Left). Leave blank to keep Step 3 baseline."
+                              >
+                                <option value="">
+                                  — no change — (uses {getBaselineLoopType(g, "L")})
+                                </option>
+                                {Object.keys(loopTypes).map((name) => (
+                                  <option key={name} value={name}>
+                                    {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
+                                  </option>
+                                ))}
+                              </select>
+                              <div style={{ ...muted, fontSize: 11, marginTop: 4 }}>
+                                After uses: <b>{effectiveL}</b>
+                              </div>
+                            </td>
+
+                            {/* Loop change R */}
+                            <td style={{ padding: "6px 8px" }}>
+                              <select
+                                value={chR}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  const next = { ...(groupLoopChange || {}) };
+                                  if (!v) delete next[kR];
+                                  else next[kR] = v;
+                                  persistGroupLoopChange(next);
+                                }}
+                                style={{
+                                  width: 190,
+                                  borderRadius: 10,
+                                  border: "1px solid #2a2f3f",
+                                  background: "#0d0f16",
+                                  color: "#eef1ff",
+                                  padding: "6px 10px",
+                                  outline: "none",
+                                  fontSize: 12,
+                                }}
+                                title="Step 4 loop change (Right). Leave blank to keep Step 3 baseline."
+                              >
+                                <option value="">
+                                  — no change — (uses {getBaselineLoopType(g, "R")})
+                                </option>
+                                {Object.keys(loopTypes).map((name) => (
+                                  <option key={name} value={name}>
+                                    {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
+                                  </option>
+                                ))}
+                              </select>
+                              <div style={{ ...muted, fontSize: 11, marginTop: 4 }}>
+                                After uses: <b>{effectiveR}</b>
+                              </div>
+                            </td>
+
+                            {/* Adjust L (dropdown + input) */}
+                            <td style={{ padding: "6px 8px", textAlign: "right" }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: 8,
+                                  justifyContent: "flex-end",
+                                  alignItems: "center",
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <select
+                                  value={loopTypeFromAdjustment(aL)}
+                                  onChange={(e) => {
+                                    const t = e.target.value;
+                                    if (!t) return; // Custom
+
+                                    // baseline loop is Step 3 installed loop for this group side
+                                    const installedType = getBaselineLoopType(g, "L") || "SL";
+                                    const chosen = Number(loopTypes?.[t] ?? 0);
+                                    const installed = Number(loopTypes?.[installedType] ?? 0);
+
+                                    // adjustment = chosen - installed (relative to baseline loop)
+                                    const adj = Number.isFinite(chosen - installed) ? chosen - installed : 0;
+                                    persistAdjustments({ ...adjustments, [kL]: adj });
+                                  }}
+                                  style={{
+                                    borderRadius: 10,
+                                    border: "1px solid #2a2f3f",
+                                    background: "#0d0f16",
+                                    color: "#eef1ff",
+                                    padding: "6px 8px",
+                                    outline: "none",
+                                    fontSize: 12,
+                                  }}
+                                  title="Pick a loop type to auto-fill Adjust L (relative to Step 3 baseline)"
+                                >
+                                  <option value="">Custom</option>
+                                  {Object.keys(loopTypes).map((name) => (
+                                    <option key={name} value={name}>
+                                      {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
+                                    </option>
+                                  ))}
+                                </select>
+
+                                <input
+                                  value={aL}
+                                  onChange={(e) => persistAdjustments({ ...adjustments, [kL]: n(e.target.value) ?? 0 })}
+                                  style={{
+                                    ...input,
+                                    width: 110,
+                                    padding: "6px 8px",
+                                    textAlign: "right",
+                                    fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                                  }}
+                                  inputMode="numeric"
+                                  title="Manual override (mm)"
+                                />
+                              </div>
+                            </td>
+
+                            {/* Adjust R (dropdown + input) */}
+                            <td style={{ padding: "6px 8px", textAlign: "right" }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: 8,
+                                  justifyContent: "flex-end",
+                                  alignItems: "center",
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <select
+                                  value={loopTypeFromAdjustment(aR)}
+                                  onChange={(e) => {
+                                    const t = e.target.value;
+                                    if (!t) return; // Custom
+
+                                    const installedType = getBaselineLoopType(g, "R") || "SL";
+                                    const chosen = Number(loopTypes?.[t] ?? 0);
+                                    const installed = Number(loopTypes?.[installedType] ?? 0);
+
+                                    const adj = Number.isFinite(chosen - installed) ? chosen - installed : 0;
+                                    persistAdjustments({ ...adjustments, [kR]: adj });
+                                  }}
+                                  style={{
+                                    borderRadius: 10,
+                                    border: "1px solid #2a2f3f",
+                                    background: "#0d0f16",
+                                    color: "#eef1ff",
+                                    padding: "6px 8px",
+                                    outline: "none",
+                                    fontSize: 12,
+                                  }}
+                                  title="Pick a loop type to auto-fill Adjust R (relative to Step 3 baseline)"
+                                >
+                                  <option value="">Custom</option>
+                                  {Object.keys(loopTypes).map((name) => (
+                                    <option key={name} value={name}>
+                                      {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
+                                    </option>
+                                  ))}
+                                </select>
+
+                                <input
+                                  value={aR}
+                                  onChange={(e) => persistAdjustments({ ...adjustments, [kR]: n(e.target.value) ?? 0 })}
+                                  style={{
+                                    ...input,
+                                    width: 110,
+                                    padding: "6px 8px",
+                                    textAlign: "right",
+                                    fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                                  }}
+                                  inputMode="numeric"
+                                  title="Manual override (mm)"
+                                />
+                              </div>
+                            </td>
+
+                            <td
+                              style={{
+                                padding: "6px 8px",
+                                textAlign: "right",
+                                color: "#aab1c3",
+                                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                              }}
+                            >
+                              {Number.isFinite(beforeAvg) ? Math.round(beforeAvg) : "—"}
+                            </td>
+
+                            <td
+                              style={{
+                                padding: "6px 8px",
+                                textAlign: "right",
+                                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                                ...(sevAfter === "red" ? redCell : sevAfter === "yellow" ? yellowCell : null),
+                              }}
+                            >
+                              {Number.isFinite(afterAvg) ? Math.round(afterAvg) : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
 
             <div style={{ height: 12 }} />
 
 
             {/* Pitch Trim (A − D) */}
-            {/* --- ANCHOR: Pitch trim card --- */}
             <div style={{ ...card, background: "#0e1018" }}>
               <div style={{ fontWeight: 900, marginBottom: 8 }}>Pitch trim (A − D)</div>
               <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
@@ -2002,7 +2172,6 @@ export default function App() {
 
             {/* Graph controls */}
             <div style={{ ...card, background: "#0e1018" }}>
-              {/* --- ANCHOR: Step 4 graphs card --- */}
               <div style={{ fontWeight: 850, marginBottom: 8 }}>Graphs</div>
               <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
                 Before vs After overlay uses Δ = (after - nominal). Target is 0mm (factory trim).
@@ -2122,7 +2291,6 @@ export default function App() {
         ) : null}
 
         {/* Guided Profile Editor Modal */}
-        {/* --- ANCHOR: Guided Profile Editor Modal --- */}
         {isProfileEditorOpen ? (
           <div
             style={{
@@ -2248,24 +2416,12 @@ export default function App() {
         ) : null}
       </div>
     </div>
-    </ErrorBoundary>
   );
 }
 
 
 
-
-/* =====================================================================
-   SECTION MARKER 2 — around line 2298 (helper navigation)
-   ===================================================================== */
-
 /* ------------------------- Guided Mapping Editor ------------------------- */
-
-
-
-/* ===============================
-   SECTION: Guided profile mapping editor component
-   =============================== */
 
 function MappingEditor({ draftProfile, setDraftProfile, btn }) {
   const mapping = draftProfile.mapping || { A: [], B: [], C: [], D: [] };
@@ -2304,9 +2460,7 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
   }
 
   function sortRows(letter) {
-    const rows = (mapping[letter] || [])
-      .slice()
-      .sort((a, b) => (a?.[0] ?? 0) - (b?.[0] ?? 0));
+    const rows = (mapping[letter] || []).slice().sort((a, b) => (a?.[0] ?? 0) - (b?.[0] ?? 0));
     setRows(letter, rows);
   }
 
@@ -2315,23 +2469,13 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
       {letters.map((L) => (
         <div
           key={L}
-          style={{
-            border: "1px solid #2a2f3f",
-            borderRadius: 14,
-            padding: 12,
-            background: "#0e1018",
-          }}
+          style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
             <div style={{ fontWeight: 900 }}>{L} mapping</div>
-
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button style={btn} onClick={() => addRow(L)}>
-                Add row
-              </button>
-              <button style={btn} onClick={() => sortRows(L)}>
-                Sort
-              </button>
+              <button style={btn} onClick={() => addRow(L)}>Add row</button>
+              <button style={btn} onClick={() => sortRows(L)}>Sort</button>
             </div>
           </div>
 
@@ -2401,9 +2545,7 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
                     </td>
 
                     <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                      <button style={btn} onClick={() => removeRow(L, idx)}>
-                        Delete
-                      </button>
+                      <button style={btn} onClick={() => removeRow(L, idx)}>Delete</button>
                     </td>
                   </tr>
                 ))}
@@ -2430,11 +2572,6 @@ function MappingEditor({ draftProfile, setDraftProfile, btn }) {
 
 /* ------------------------- Charts ------------------------- */
 
-
-
-/* ===============================
-   SECTION: Chart components
-   =============================== */
 
 function DeltaLineChart({ title, points, tolerance }) {
   const width = 1100;
@@ -2621,16 +2758,6 @@ function DeltaLineChart({ title, points, tolerance }) {
 }
 
 
-
-
-/* ===============================
-   SECTION: Chart components
-   =============================== */
-
-
-/* =====================================================================
-   SECTION MARKER 3 — around line 2651 (helper navigation)
-   ===================================================================== */
 
 function WingProfileChart({ title, groupStats, tolerance }) {
   const width = 1100;
@@ -2821,8 +2948,10 @@ function BlockTable({
               rows.map((b, idx) => {
                 const groupName = groupForLine(activeProfile, b.line) || `${title}?`;
 
-                const loopL = loopDeltaFor(b.line, "L");
-                const loopR = loopDeltaFor(b.line, "R");
+                const loopL_before = loopDeltaFor(b.line, "L", "before");
+            const loopL_after = loopDeltaFor(b.line, "L", "after");
+                const loopR_before = loopDeltaFor(b.line, "R", "before");
+            const loopR_after = loopDeltaFor(b.line, "R", "after");
 
                 const adjL = getAdjustment(adjustments, groupName, "L");
                 const adjR = getAdjustment(adjustments, groupName, "R");
@@ -2830,19 +2959,22 @@ function BlockTable({
                 const correctedL = b.measL == null ? null : b.measL + corr;
                 const correctedR = b.measR == null ? null : b.measR + corr;
 
-                const baseL = correctedL == null ? null : correctedL + loopL;
-                const baseR = correctedR == null ? null : correctedR + loopR;
+                const baseL_before = correctedL == null ? null : correctedL + loopL_before;
+const baseR_before = correctedR == null ? null : correctedR + loopR_before;
 
-                const afterL = baseL == null ? null : baseL + adjL;
-                const afterR = baseR == null ? null : baseR + adjR;
+const baseL_after = correctedL == null ? null : correctedL + loopL_after;
+const baseR_after = correctedR == null ? null : correctedR + loopR_after;
 
-                const dL_before = baseL == null || b.nominal == null ? null : baseL - b.nominal;
-                const dR_before = baseR == null || b.nominal == null ? null : baseR - b.nominal;
+const afterL = baseL_after == null ? null : baseL_after + adjL;
+const afterR = baseR_after == null ? null : baseR_after + adjR;
 
-                const dL_after = afterL == null || b.nominal == null ? null : afterL - b.nominal;
-                const dR_after = afterR == null || b.nominal == null ? null : afterR - b.nominal;
+const dL_before = baseL_before == null || b.nominal == null ? null : baseL_before - b.nominal;
+const dR_before = baseR_before == null || b.nominal == null ? null : baseR_before - b.nominal;
 
-                const sevL = severity(dL_after, tol);
+const dL_after = afterL == null || b.nominal == null ? null : afterL - b.nominal;
+const dR_after = afterR == null || b.nominal == null ? null : afterR - b.nominal;
+
+const sevL = severity(dL_after, tol);
                 const sevR = severity(dR_after, tol);
 
                 const displayL = showCorrected ? correctedL : b.measL;
@@ -2874,7 +3006,7 @@ function BlockTable({
                         title="Edit raw measured (Ist). Correction/loops/adjustments are applied automatically."
                       />
                       <div style={{ color: "#aab1c3", fontSize: 10, marginTop: 4, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                        show {displayL == null ? "—" : Math.round(displayL)} | loop {loopL > 0 ? `+${loopL}` : `${loopL}`} | adj{" "}
+                        show {displayL == null ? "—" : Math.round(displayL)} | loop {loopL_after > 0 ? `+${loopL_after}` : `${loopL_after}`} | adj{" "}
                         {adjL > 0 ? `+${adjL}` : `${adjL}`}
                       </div>
                       <div style={{ color: "#aab1c3", fontSize: 10, marginTop: 2, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
@@ -2900,7 +3032,7 @@ function BlockTable({
                         title="Edit raw measured (Ist). Correction/loops/adjustments are applied automatically."
                       />
                       <div style={{ color: "#aab1c3", fontSize: 10, marginTop: 4, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                        show {displayR == null ? "—" : Math.round(displayR)} | loop {loopR > 0 ? `+${loopR}` : `${loopR}`} | adj{" "}
+                        show {displayR == null ? "—" : Math.round(displayR)} | loop {loopR_after > 0 ? `+${loopR_after}` : `${loopR_after}`} | adj{" "}
                         {adjR > 0 ? `+${adjR}` : `${adjR}`}
                       </div>
                       <div style={{ color: "#aab1c3", fontSize: 10, marginTop: 2, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
@@ -2923,16 +3055,6 @@ function BlockTable({
     </div>
   );
 }
-
-
-/* ===============================
-   SECTION: Chart components
-   =============================== */
-
-
-/* =====================================================================
-   SECTION MARKER 4 — around line 2948 (helper navigation)
-   ===================================================================== */
 
 function RearViewWingChart({
   wideRows,
@@ -3435,53 +3557,3 @@ function RearViewWingChart({
   );
 }
 
-
-
-/* =====================================================================
-   SECTION MARKER 5 — around line 3450 (helper navigation)
-   ===================================================================== */
-
-/* ------------------------- Error boundary ------------------------- */
-class ErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error, info) {
-    console.error('App crashed:', error, info);
-  }
-
-  render() {
-    if (!this.state.hasError) return this.props.children;
-    return (
-      <div style={{ padding: 16, maxWidth: 900, margin: '0 auto', color: '#eef1ff', fontFamily: 'system-ui, sans-serif' }}>
-        <h2 style={{ margin: '8px 0' }}>Something went wrong</h2>
-        <div style={{ color: '#aab1c3', fontSize: 13, lineHeight: 1.5 }}>The app hit a runtime error. This usually means a bad paste or an unexpected CSV layout.</div>
-        <div style={{ height: 10 }} />
-        <pre style={{ whiteSpace: 'pre-wrap', background: '#0b0c10', border: '1px solid #2a2f3f', borderRadius: 12, padding: 12, color: '#eef1ff' }}>
-          {String(this.state.error?.message || this.state.error || 'Unknown error')}
-        </pre>
-        <div style={{ height: 12 }} />
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button
-            onClick={() => window.location.reload()} 
-            style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid #2a2f3f', background: '#0e1018', color: '#eef1ff', cursor: 'pointer' }}
-          >
-            Reload
-          </button>
-          <button
-            onClick={() => { localStorage.clear(); window.location.reload(); }}
-            style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid rgba(255,107,107,0.6)', background: 'rgba(255,107,107,0.12)', color: '#eef1ff', cursor: 'pointer' }}
-          >
-            Reset saved settings
-          </button>
-        </div>
-      </div>
-    );
-  }
-}
