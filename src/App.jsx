@@ -19,7 +19,7 @@ import BUILTIN_PROFILES from "./wingProfiles.json";
  *   delta     = after - nominal
  */
 
-const APP_VERSION = "0.5";
+const APP_VERSION = "0.8";
 
 
 
@@ -318,7 +318,68 @@ export default function App() {
  
 
 
-  // Chart letter toggles (A/B/C/D) — persisted
+  
+  /* ===============================
+     UI polish: button click animation + click sound
+     =============================== */
+  useEffect(() => {
+    // Global button press animation (CSS :active)
+    const style = document.createElement("style");
+    style.textContent = `
+      button {
+        transition: transform 80ms ease, filter 80ms ease;
+        will-change: transform;
+      }
+      button:hover:not(:disabled) {
+        filter: brightness(1.06);
+      }
+      button:active:not(:disabled) {
+        transform: scale(0.97);
+        filter: brightness(1.12);
+      }
+    `;
+    document.head.appendChild(style);
+    return () => style.remove();
+  }, []);
+
+  useEffect(() => {
+    // Click sound for any enabled <button>
+    let ctx = null;
+
+    function playClick() {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!ctx) ctx = new AC();
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      const now = ctx.currentTime;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = "square";
+      osc.frequency.setValueAtTime(800, now);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(0.08, now + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.03);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.035);
+    }
+
+    function handler(e) {
+      const btn = e.target?.closest?.("button");
+      if (!btn || btn.disabled) return;
+      playClick();
+    }
+
+    document.addEventListener("click", handler, true);
+    return () => document.removeEventListener("click", handler, true);
+  }, []);
+// Chart letter toggles (A/B/C/D) — persisted
   const [chartLetters, setChartLetters] = useState(() => {
     try {
       const s = localStorage.getItem("chartLetters");
@@ -1598,22 +1659,22 @@ if (Number.isFinite(dL_before)) {
               <div style={{ height: 10 }} />
 
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-                <div style={{ minWidth: 220 }}>
+                <div style={{ minWidth: 140 }}>
                   <div style={{ ...muted, fontSize: 12, marginBottom: 6 }}>Tolerance (mm)</div>
                   <input
                     value={meta.tolerance ?? 0}
                     onChange={(e) => setMeta((m) => ({ ...m, tolerance: n(e.target.value) ?? 0 }))}
-                    style={{ ...input, textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}
+                    style={{ ...input, textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace", width: 110, fontSize: 16, color: "#ff4d4d" }}
                     inputMode="numeric"
                   />
                 </div>
 
-                <div style={{ minWidth: 220 }}>
+                <div style={{ minWidth: 140 }}>
                   <div style={{ ...muted, fontSize: 12, marginBottom: 6 }}>Correction (mm)</div>
                   <input
                     value={meta.correction ?? 0}
                     onChange={(e) => setMeta((m) => ({ ...m, correction: n(e.target.value) ?? 0 }))}
-                    style={{ ...input, textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}
+                    style={{ ...input, textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace", width: 110, fontSize: 16, color: "#ff4d4d" }}
                     inputMode="numeric"
                   />
                 </div>
