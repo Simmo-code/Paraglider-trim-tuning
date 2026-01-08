@@ -1,3681 +1,1515 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
-import BUILTIN_PROFILES from "./wingProfiles.json";
 
-/**
- * Paraglider Trim Tuning
- * - CSV + XLSX import (flexible scan)
- * - Step 2: Guided profile editor (mapping)
- * - Step 3: Loops per LINE GROUP (AR1 affects A1–A4, etc.)
- * - Step 4: Compact measurement tables + Raw/Corrected toggle
- * - Graphs:
- *    (1) Δ line chart: Before vs After overlay + points + hover tooltip
- *    (2) Wing profile chart: Group averages laid out left/right (updates live)
- *
- * Math:
- *   corrected = rawMeasured + correction
- *   baseline  = corrected + loopDelta
- *   after     = baseline + adjustment
- *   delta     = after - nominal
- */
+const SITE_VERSION = "Trim Tuning • Step1–3 Sandbox • v1.4.3";
 
-const APP_VERSION = "0.8.5";
-
-
-
-// Sample test data (CSV) for Step 1 "Try without uploading"
-const SAMPLE_CSV_TEXT = `Make,Model,Toleranz,Korrektur,,,,,,,,,,,,
-Ozone,Speedster3,6,-502,,,,,,,,,,,,
+const ATTACHED_TEST_CSV = `Make ,Model,tolerance ,Korrektur,,,,,,,,,,,,
+Ozone,Speedster3,10,-507,,,,,,,,,,,,
 A,Soll,Ist L,Ist R,B,Soll,L,R,C,Soll,Ist L,Ist R,D,Soll,L,R
-A1,6717,7240,7239,B1,6635,7143,7145,C1,6712,7221,7215,D1,6871,7380,7382
-A2,6676,7204,7200,B2,6593,7099,7102,C2,6672,7180,7177,D2,6833,7338,7342
-A3,6646,7170,7171,B3,6566,7072,7079,C3,6644,7150,7149,D3,6801,7308,7309
-A4,6660,7181,7185,B4,6581,7089,7094,C4,6658,7163,7164,D4,6813,7319,7319
-A5,6637,7160,7160,B5,6567,7079,7082,C5,6640,7145,7147,D5,6785,7298,7294
-A6,6617,7140,7139,B6,6549,7059,7062,C6,6621,7129,7127,D6,6764,7278,7274
-A7,6600,7120,7121,B7,6541,7049,7049,C7,6610,7116,7114,D7,6740,7255,7246
-A8,6612,7132,7131,B8,6555,7063,7061,C8,6622,7129,7126,D8,6748,7261,7253
-A9,6553,7064,7066,B9,6502,7011,7010,C9,6570,7077,7074,D9,6680,7185,7186
-A10,6504,7017,7018,B10,6458,6965,6964,C10,6526,7031,7030,D10,6631,7137,7139
-A11,6430,6941,6943,B11,6393,6903,6898,C11,6459,6967,6967,D11,6555,7068,7064
-A12,6421,6932,6934,B12,6385,6894,6894,C12,6448,6955,6954,D12,6538,7049,7047
-A13,6329,6834,6834,B13,6303,6807,6804,C13,6362,6871,6871,D13,6442,6950,6945
-A14,6307,6811,6810,B14,6278,6784,6779,C14,6335,6841,6840,D14,6408,6916,6914
-A15,6053,6559,6553,B15,6074,6577,6575,C15,6156,6663,6660,,,,
-A16,6017,6521,6515,B16,6030,6534,6532,C16,6107,6613,6610,,,,
-`;
-/* ------------------------- Helpers ------------------------- */
+A1,6717,7220,7222,B1,6635,7142,7145,C1,6712,7219,7213,D1,6871,7379,7380
+A2,6676,7184,7185,B2,6593,7100,7101,C2,6672,7177,7175,D2,6833,7334,7341
+A3,6646,7151,7156,B3,6566,7071,7077,C3,6644,7149,7149,D3,6801,7309,7309
+A4,6616,7119,7123,B4,6534,7038,7041,C4,6613,7116,7116,D4,6769,7276,7279
+A5,6590,7090,7093,B5,6504,7007,7008,C5,6587,7088,7088,D5,6742,7247,7247
+A6,6563,7060,7060,B6,6473,6978,6975,C6,6560,7059,7056,D6,6716,7217,7213
+A7,6532,7026,7028,B7,6441,6944,6948,C7,6529,7027,7027,D7,6683,7184,7184
+A8,6498,6991,6994,B8,6408,6909,6914,C8,6495,6991,6991,D8,6648,7149,7151
+A9,6468,6958,6958,B9,6375,6879,6879,C9,6465,6956,6957,D9,6616,7118,7118
+A10,6440,6929,6928,B10,6347,6850,6851,C10,6437,6927,6927,D10,6585,7088,7090
+A11,6412,6900,6900,B11,6318,6820,6822,C11,6409,6898,6898,D11,6552,7053,7052
+A12,6382,6868,6869,B12,6287,6788,6791,C12,6380,6867,6867,D12,6518,7016,7017
+A13,6352,6839,6839,B13,6257,6760,6760,C13,6350,6838,6838,D13,6486,6987,6986
+A14,6322,6808,6808,B14,6226,6729,6730,C14,6320,6808,6808,D14,6453,6952,6953
+A15,6294,6779,6779,B15,6197,6702,6702,C15,6292,6777,6777,D15,6422,6922,6923
+A16,6264,6749,6749,B16,6165,6670,6671,C16,6262,6748,6748,D16,6389,6887,6887`;
 
-function n(x) {
-  const v = parseFloat(String(x ?? "").replace(",", "."));
-  return Number.isFinite(v) ? v : null;
+const theme = {
+  bg: "#0f1115",
+  panel: "rgba(255,255,255,0.05)",
+  panel2: "rgba(0,0,0,0.35)",
+  border: "rgba(255,255,255,0.14)",
+  text: "rgba(255,255,255,0.92)",
+  good: "rgba(34,197,94,0.95)",
+  bad: "rgba(239,68,68,0.95)",
+  warnBg: "rgba(245,158,11,0.10)",
+  warnStroke: "rgba(245,158,11,0.55)",
+};
+
+const PALETTE = {
+  A: { base: "#1e6eff", s2: "#2d7fff", s3: "#5aa6ff", s4: "#86c4ff" },
+  B: { base: "#8b5cf6", s2: "#9d73ff", s3: "#b69bff", s4: "#cdbbff" },
+  C: { base: "#ff9f43", s2: "#ffb76b", s3: "#ffd1a3", s4: "#ffe2c7" },
+  D: { base: "#facc15", s2: "#fde047", s3: "#fef08a", s4: "#fff6bf" },
+};
+
+function clamp(n, a, b) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return a;
+  return Math.max(a, Math.min(b, x));
+}
+function safeNum(v) {
+  const n = Number(String(v ?? "").trim().replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+function deepClone(obj) {
+  try {
+    return JSON.parse(JSON.stringify(obj));
+  } catch {
+    return obj;
+  }
+}
+function chipColorFromLineId(lineId) {
+  const first = String(lineId || "").trim().toUpperCase().charAt(0);
+  return (PALETTE[first] || PALETTE.A).base;
+}
+function groupColor(letter, bucket) {
+  const p = PALETTE[letter] || PALETTE.A;
+  if (bucket === 1) return p.base;
+  if (bucket === 2) return p.s2;
+  if (bucket === 3) return p.s3;
+  return p.s4;
 }
 
-function parseDelimited(text) {
-  const lines = text
-    .replace(/\uFEFF/g, "")
+// ---------------- Parsing ----------------
+function rowsFromCSVText(text) {
+  const lines = String(text || "")
     .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
+    .filter((l) => l.trim().length > 0);
 
-  if (!lines.length) return { delim: ",", grid: [] };
+  const rows = [];
+  for (const line of lines) {
+    const out = [];
+    let cur = "";
+    let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        inQ = !inQ;
+        continue;
+      }
+      if (ch === "," && !inQ) {
+        out.push(cur);
+        cur = "";
+      } else {
+        cur += ch;
+      }
+    }
+    out.push(cur);
+    rows.push(out);
+  }
+  return rows;
+}
+function rowsFromSheetAOA(sheet) {
+  return XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" });
+}
+function parseWideTableFromRows(rows) {
+  const meta = { make: "", model: "", tolerance: 10, correction: 0 };
+  const wideRows = [];
 
-  const first = lines[0];
-  const counts = {
-    ",": (first.match(/,/g) || []).length,
-    ";": (first.match(/;/g) || []).length,
-    "\t": (first.match(/\t/g) || []).length,
+  if (!Array.isArray(rows) || rows.length < 4) return { meta, wideRows };
+
+  const metaKeys = rows[0] || [];
+  const metaVals = rows[1] || [];
+
+  const findMeta = (needle) => {
+    const idx = metaKeys.findIndex((k) => String(k || "").toLowerCase().includes(needle));
+    return idx >= 0 ? metaVals[idx] : null;
   };
-  const delim =
-    Object.entries(counts).sort((a, b) => b[1] - a[1])[0][1] > 0
-      ? Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0]
-      : ",";
 
-  const grid = lines.map((l) => l.split(delim).map((c) => c.trim()));
-  return { delim, grid };
-}
+  meta.make = String(findMeta("make") ?? metaVals[0] ?? "").trim();
+  meta.model = String(findMeta("model") ?? metaVals[1] ?? "").trim();
 
-function makeProfileNameFromMeta(meta) {
-  const a = String(meta?.input1 || "").trim();
-  const b = String(meta?.input2 || "").trim();
-  const combined = `${a} ${b}`.trim().replace(/\s+/g, " ");
-  return combined || "Imported Wing";
-}
-function deltaMm({ nominal, measured, correction, adjustment }) {
-  if (nominal == null || measured == null) return null;
-  const corr = Number.isFinite(correction) ? correction : 0;
-  const adj = Number.isFinite(adjustment) ? adjustment : 0;
-  return measured + corr + adj - nominal;
-}
+  const tolVal = findMeta("tolerance");
+  const corrVal = findMeta("korrektur") ?? findMeta("correction");
+  if (safeNum(tolVal) != null) meta.tolerance = safeNum(tolVal);
+  if (safeNum(corrVal) != null) meta.correction = safeNum(corrVal);
 
-function severity(delta, tolerance) {
-  if (!Number.isFinite(delta)) return "none";
-  const a = Math.abs(delta);
-  const tol = Number.isFinite(tolerance) ? tolerance : 0;
-  if (tol <= 0) return "ok";
-  const warnBand = Math.max(0, tol - 3); // yellow within 3mm of tolerance
-  if (a >= tol) return "red";
-  if (a >= warnBand) return "yellow";
-  return "ok";
-}
+  const header = (rows[2] || []).map((h) => String(h ?? "").trim());
+  const letters = ["A", "B", "C", "D"];
 
-function parseLineId(lineId) {
-  const m = String(lineId || "")
-    .trim()
-    .match(/^([A-Za-z])\s*0*([0-9]+)$/);
-  if (!m) return null;
-  return { prefix: m[1].toUpperCase(), num: parseInt(m[2], 10) };
-}
-
-function groupForLine(profile, lineId) {
-  const p = parseLineId(lineId);
-  if (!p) return null;
-  const rules = profile?.mapping?.[p.prefix];
-  if (!rules) return null;
-  for (const [min, max, groupName] of rules) {
-    if (p.num >= min && p.num <= max) return groupName;
+  const letterCols = [];
+  for (let c = 0; c < header.length; c++) {
+    const h = header[c].toUpperCase();
+    if (letters.includes(h)) letterCols.push({ letter: h, colStart: c });
   }
-  return null;
-}
+  if (letterCols.length === 0 && header.length >= 16) {
+    letterCols.push({ letter: "A", colStart: 0 });
+    letterCols.push({ letter: "B", colStart: 4 });
+    letterCols.push({ letter: "C", colStart: 8 });
+    letterCols.push({ letter: "D", colStart: 12 });
+  }
 
-function groupSortKey(g) {
-  const m = String(g).match(/^([A-D])R(\d+)$/i);
-  if (m) return `${m[1].toUpperCase()}-${m[2].padStart(2, "0")}`;
-  return g;
-}
+  for (let r = 3; r < rows.length; r++) {
+    const row = rows[r] || [];
+    for (const blk of letterCols) {
+      const c = blk.colStart;
+      const base = String(row[c] ?? "").trim();
+      if (!base) continue;
 
-function extractGroupNames(wideRows, profile) {
-  const set = new Set();
-  for (const r of wideRows || []) {
-    for (const k of ["A", "B", "C", "D"]) {
-      const b = r?.[k];
-      if (!b?.line) continue;
-      const g = groupForLine(profile, b.line);
-      if (g) set.add(g);
+      const nominal = safeNum(row[c + 1]);
+      const measuredL = safeNum(row[c + 2]);
+      const measuredR = safeNum(row[c + 3]);
+
+      const m = base.match(/^([A-Za-z])\s*([0-9]+)\s*$/);
+      const letter = (m?.[1] || blk.letter || "").toUpperCase();
+      const idx = m ? Number(m[2]) : safeNum(base.replace(/[^\d]/g, "")) || null;
+
+      if (!["A", "B", "C", "D"].includes(letter) || idx == null) continue;
+      wideRows.push({ letter, idx, lineBase: `${letter}${idx}`, nominal, measuredL, measuredR });
     }
   }
-  if (!set.size && profile?.mapping) {
-    for (const prefix of Object.keys(profile.mapping)) {
-      for (const [, , g] of profile.mapping[prefix]) set.add(g);
-    }
-  }
-  return Array.from(set).sort((a, b) => groupSortKey(a).localeCompare(groupSortKey(b)));
+
+  return { meta, wideRows };
 }
 
-function getAllLinesFromWide(wideRows) {
-  const seen = new Set();
+// ---------------- Step 2 grouping ----------------
+function makeDefaultRanges(maxIdx, groupCount) {
+  const m = Math.max(1, maxIdx);
+  if (groupCount === 4) {
+    return {
+      1: { start: 1, end: Math.min(3, m) },
+      2: { start: Math.min(4, m), end: Math.min(6, m) },
+      3: { start: Math.min(7, m), end: Math.min(9, m) },
+      4: { start: Math.min(10, m), end: m },
+    };
+  }
+  return {
+    1: { start: 1, end: Math.min(4, m) },
+    2: { start: Math.min(5, m), end: Math.min(8, m) },
+    3: { start: Math.min(9, m), end: m },
+  };
+}
+function buildInitialLineToGroup({ maxByLetter, groupCountByLetter, prefixByLetter, rangesByLetter }) {
+  const mapping = {};
+  for (const letter of ["A", "B", "C", "D"]) {
+    const maxIdx = Math.max(0, Number(maxByLetter?.[letter] || 0));
+    const count = Number(groupCountByLetter?.[letter] || 3);
+    const ranges = rangesByLetter?.[letter] || makeDefaultRanges(maxIdx, count);
+    const prefix = prefixByLetter?.[letter] || `${letter}R`;
+
+    for (let idx = 1; idx <= maxIdx; idx++) {
+      let bucket = 1;
+      for (let b = 1; b <= count; b++) {
+        const s = clamp(ranges[b]?.start ?? 1, 1, maxIdx);
+        const e = clamp(ranges[b]?.end ?? maxIdx, 1, maxIdx);
+        if (idx >= s && idx <= e) {
+          bucket = b;
+          break;
+        }
+      }
+      mapping[`${letter}${idx}L`] = `${prefix}${bucket}L`;
+      mapping[`${letter}${idx}R`] = `${prefix}${bucket}R`;
+    }
+  }
+  return mapping;
+}
+function getGroupOptions(prefixByLetter, groupCountByLetter) {
   const out = [];
-  for (const r of wideRows || []) {
-    for (const letter of ["A", "B", "C", "D"]) {
-      const b = r?.[letter];
-      const lineId = b?.line;
-      if (!lineId) continue;
-      if (seen.has(lineId)) continue;
-      seen.add(lineId);
-      out.push({ lineId, letter });
+  for (const letter of ["A", "B", "C", "D"]) {
+    const prefix = prefixByLetter[letter] || `${letter}R`;
+    const count = Number(groupCountByLetter[letter] || 3);
+    for (let b = 1; b <= count; b++) {
+      out.push(`${prefix}${b}L`);
+      out.push(`${prefix}${b}R`);
     }
   }
-  out.sort((a, b) => {
-    const pa = parseLineId(a.lineId);
-    const pb = parseLineId(b.lineId);
-    const la = pa?.prefix || a.letter;
-    const lb = pb?.prefix || b.letter;
-    if (la !== lb) return la.localeCompare(lb);
-    return (pa?.num ?? 0) - (pb?.num ?? 0);
-  });
+  out.push("CUSTOM_L", "CUSTOM_R");
   return out;
 }
 
+// ---------------- Diagram ----------------
+const DIAGRAM_SCALE = 0.85;
+const DIAGRAM_BASE_W = 2400;
+const DIAGRAM_BASE_H = 980;
+const DIAGRAM_W = Math.round(DIAGRAM_BASE_W * DIAGRAM_SCALE);
+const DIAGRAM_H = Math.round(DIAGRAM_BASE_H * DIAGRAM_SCALE);
 
-function avg(nums) {
-  const v = nums.filter((x) => Number.isFinite(x));
-  if (!v.length) return null;
-  return v.reduce((a, b) => a + b, 0) / v.length;
+function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showWingOutline, compactLayout, setLineToGroupFromDrag }) {
+  const W = DIAGRAM_W;
+  const H = DIAGRAM_H;
+  const cx = W / 2;
+  const [drag, setDrag] = useState({ active: false });
+
+  const rowY = {
+    A: Math.round(170 * DIAGRAM_SCALE),
+    B: Math.round(375 * DIAGRAM_SCALE),
+    C: Math.round(580 * DIAGRAM_SCALE),
+    D: Math.round(785 * DIAGRAM_SCALE),
+  };
+
+  const centerGap = compactLayout ? Math.round(26 * DIAGRAM_SCALE) : Math.round(34 * DIAGRAM_SCALE);
+  const bucketSpacing = compactLayout ? Math.round(8 * DIAGRAM_SCALE) : Math.round(12 * DIAGRAM_SCALE);
+
+  const chip = compactLayout
+    ? { w: Math.round(86 * DIAGRAM_SCALE), h: Math.round(32 * DIAGRAM_SCALE), gapX: Math.round(10 * DIAGRAM_SCALE), gapY: Math.round(8 * DIAGRAM_SCALE) }
+    : { w: Math.round(90 * DIAGRAM_SCALE), h: Math.round(34 * DIAGRAM_SCALE), gapX: Math.round(10 * DIAGRAM_SCALE), gapY: Math.round(8 * DIAGRAM_SCALE) };
+
+  const maxCols = compactLayout ? 7 : 8;
+  function chooseCols(n) {
+    if (n <= 1) return 1;
+    const ideal = Math.ceil(Math.sqrt(n) * 1.15);
+    return clamp(ideal, 2, maxCols);
+  }
+  function boxSizeForLines(lines) {
+    const n = lines.length;
+    const cols = n <= 1 ? 1 : chooseCols(n);
+    const rows = Math.max(1, Math.ceil(n / cols));
+    const innerW = cols * chip.w + (cols - 1) * chip.gapX;
+    const innerH = rows * chip.h + (rows - 1) * chip.gapY;
+    const padW = compactLayout ? Math.round(28 * DIAGRAM_SCALE) : Math.round(32 * DIAGRAM_SCALE);
+    const padH = compactLayout ? Math.round(46 * DIAGRAM_SCALE) : Math.round(50 * DIAGRAM_SCALE);
+    return { bw: innerW + padW, bh: innerH + padH, cols };
+  }
+
+  const layout = useMemo(() => {
+    const zones = [];
+    const blocks = [];
+    for (const letter of ["A", "B", "C", "D"]) {
+      const prefix = prefixByLetter[letter] || `${letter}R`;
+      const count = Number(groupCountByLetter[letter] || 3);
+
+      for (const side of ["L", "R"]) {
+        const groups = [];
+        for (let b = 1; b <= count; b++) {
+          const groupId = `${prefix}${b}${side}`;
+          const lines = Object.keys(lineToGroup || {}).filter((lineId) => lineToGroup[lineId] === groupId);
+
+          const sorted = lines
+            .slice()
+            .sort((a, b2) => {
+              const ai = Number(String(a).match(/(\d+)/)?.[1] || 0);
+              const bi = Number(String(b2).match(/(\d+)/)?.[1] || 0);
+              return side === "L" ? bi - ai : ai - bi;
+            });
+
+          groups.push({ bucket: b, groupId, lines: sorted });
+        }
+
+        const y = rowY[letter];
+        const measured = groups.map((g) => ({ ...g, ...boxSizeForLines(g.lines) }));
+
+        if (side === "R") {
+          let x = cx + centerGap;
+          for (const g of measured) {
+            const boxX = x;
+            const boxY = y - g.bh / 2;
+            zones.push({ groupId: g.groupId, x: boxX, y: boxY, w: g.bw, h: g.bh });
+            blocks.push({ letter, side, groupId: g.groupId, boxX, boxY, bw: g.bw, bh: g.bh, lines: g.lines, cols: g.cols, bucketNum: g.bucket });
+            x = x + g.bw + bucketSpacing;
+          }
+        } else {
+          let x = cx - centerGap;
+          for (const g of measured) {
+            const boxX = x - g.bw;
+            const boxY = y - g.bh / 2;
+            zones.push({ groupId: g.groupId, x: boxX, y: boxY, w: g.bw, h: g.bh });
+            blocks.push({ letter, side, groupId: g.groupId, boxX, boxY, bw: g.bw, bh: g.bh, lines: g.lines, cols: g.cols, bucketNum: g.bucket });
+            x = x - g.bw - bucketSpacing;
+          }
+        }
+      }
+    }
+    return { zones, blocks };
+  }, [lineToGroup, prefixByLetter, groupCountByLetter, compactLayout]);
+
+  function screenToSvgPoint(e) {
+    const svg = e.currentTarget.ownerSVGElement || e.currentTarget;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const m = svg.getScreenCTM();
+    if (!m) return { x: 0, y: 0 };
+    const p = pt.matrixTransform(m.inverse());
+    return { x: p.x, y: p.y };
+  }
+  function findZoneAt(x, y) {
+    return layout.zones.find((z) => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) || null;
+  }
+
+  function onPointerDownChip(e, payload) {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
+    const { x, y } = screenToSvgPoint(e);
+    setDrag({ active: true, ...payload, x, y });
+  }
+  function onPointerMove(e) {
+    if (!drag.active) return;
+    const { x, y } = screenToSvgPoint(e);
+    setDrag((d) => ({ ...d, x, y }));
+  }
+  function onPointerUp(e) {
+    if (!drag.active) return;
+    const { x, y } = screenToSvgPoint(e);
+    const zone = findZoneAt(x, y);
+    if (zone?.groupId) setLineToGroupFromDrag(drag.lineId, zone.groupId);
+    setDrag({ active: false });
+  }
+
+  const items = [];
+  items.push(<rect key="bg" x={0} y={0} width={W} height={H} fill="rgba(0,0,0,0)" />);
+
+  if (showWingOutline) {
+    items.push(
+      <path
+        key="wing"
+        d={`M ${W / 2} ${Math.round(62 * DIAGRAM_SCALE)}
+           C ${W / 2 - Math.round(740 * DIAGRAM_SCALE)} ${Math.round(88 * DIAGRAM_SCALE)}, ${W / 2 - Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(260 * DIAGRAM_SCALE)}, ${W / 2 - Math.round(1460 * DIAGRAM_SCALE)} ${Math.round(470 * DIAGRAM_SCALE)}
+           C ${W / 2 - Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(720 * DIAGRAM_SCALE)}, ${W / 2 - Math.round(740 * DIAGRAM_SCALE)} ${Math.round(860 * DIAGRAM_SCALE)}, ${W / 2} ${Math.round(900 * DIAGRAM_SCALE)}
+           C ${W / 2 + Math.round(740 * DIAGRAM_SCALE)} ${Math.round(860 * DIAGRAM_SCALE)}, ${W / 2 + Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(720 * DIAGRAM_SCALE)}, ${W / 2 + Math.round(1460 * DIAGRAM_SCALE)} ${Math.round(470 * DIAGRAM_SCALE)}
+           C ${W / 2 + Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(260 * DIAGRAM_SCALE)}, ${W / 2 + Math.round(740 * DIAGRAM_SCALE)} ${Math.round(88 * DIAGRAM_SCALE)}, ${W / 2} ${Math.round(62 * DIAGRAM_SCALE)}`}
+        fill="none"
+        stroke="rgba(255,255,255,0.18)"
+        strokeWidth={Math.max(2, Math.round(4 * DIAGRAM_SCALE))}
+      />
+    );
+  }
+
+  items.push(<line key="center" x1={cx} y1={20} x2={cx} y2={H - 20} stroke="rgba(255,255,255,0.14)" strokeWidth={2} />);
+
+  for (const b of layout.blocks) {
+    const bucketNum = Number(String(b.groupId).match(/(\d+)/)?.[1] || b.bucketNum || 1);
+    const bucketStroke = groupColor(b.letter, bucketNum);
+
+    items.push(
+      <rect
+        key={`box-${b.groupId}-${b.side}-${b.boxX}`}
+        x={b.boxX}
+        y={b.boxY}
+        width={b.bw}
+        height={b.bh}
+        rx={18}
+        ry={18}
+        fill={bucketStroke}
+        opacity={0.09}
+        stroke={bucketStroke}
+        strokeOpacity={0.92}
+        strokeWidth={2}
+      />
+    );
+
+    const title = b.groupId;
+    const pillW = Math.max(120, title.length * 10);
+    const pillH = 30;
+    const pillX = b.boxX + (b.bw - pillW) / 2;
+
+    items.push(
+      <g key={`title-${b.groupId}-${b.side}-${b.boxX}`}>
+        <rect x={pillX} y={b.boxY + 8} width={pillW} height={pillH} rx={16} ry={16} fill="rgba(0,0,0,0.58)" stroke={bucketStroke} strokeOpacity={0.85} />
+        <text x={pillX + pillW / 2} y={b.boxY + 30} textAnchor="middle" fill={bucketStroke} fontWeight={950} fontSize={18}>
+          {title}
+        </text>
+      </g>
+    );
+
+    const innerX = b.boxX + 16;
+    const innerY = b.boxY + 44;
+    const cols = b.cols || 1;
+
+    for (let i = 0; i < b.lines.length; i++) {
+      const lineId = b.lines[i];
+      const rr = Math.floor(i / cols);
+      const ccRaw = i % cols;
+      const cc = b.side === "L" ? cols - 1 - ccRaw : ccRaw;
+      const x = innerX + cc * (chip.w + chip.gapX);
+      const yy = innerY + rr * (chip.h + chip.gapY);
+
+      const chipStroke = chipColorFromLineId(lineId);
+
+      items.push(
+        <g key={`chip-${b.groupId}-${lineId}`}>
+          <rect x={x} y={yy} width={chip.w} height={chip.h} rx={12} ry={12} fill="rgba(255,255,255,0.10)" stroke={chipStroke} strokeOpacity={0.60} />
+          <text x={x + chip.w / 2} y={yy + chip.h * 0.74} textAnchor="middle" fill="rgba(255,255,255,0.93)" fontSize={18} fontWeight={950}>
+            {lineId}
+          </text>
+          <rect x={x} y={yy} width={chip.w} height={chip.h} rx={12} ry={12} fill="transparent" style={{ cursor: "grab" }} onPointerDown={(e) => onPointerDownChip(e, { lineId, color: chipStroke })} />
+        </g>
+      );
+    }
+  }
+
+  return (
+    <div style={{ width: "100%", border: `1px solid ${theme.border}`, borderRadius: 18, background: "rgba(0,0,0,0.38)", overflow: "hidden" }}>
+      <svg
+        width="100%"
+        viewBox={`0 0 ${W} ${H}`}
+        style={{ display: "block", touchAction: "none" }}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onPointerLeave={onPointerUp}
+      >
+        {items}
+      </svg>
+    </div>
+  );
 }
 
-function getAdjustment(adjustments, groupName, side) {
-  const key = `${groupName}|${side}`;
-  return Number.isFinite(adjustments[key]) ? adjustments[key] : 0;
+// ---------------- UI atoms ----------------
+function Panel({ title, right, children, tint = false }) {
+  return (
+    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 18, background: tint ? "linear-gradient(180deg, rgba(59,130,246,0.08), rgba(255,255,255,0.04))" : theme.panel, overflow: "hidden" }}>
+      <div style={{ padding: "10px 12px", borderBottom: `1px solid ${theme.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", background: "rgba(255,255,255,0.035)" }}>
+        <div style={{ fontWeight: 950, letterSpacing: -0.2, fontSize: 16 }}>{title}</div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>{right}</div>
+      </div>
+      <div style={{ padding: 12 }}>{children}</div>
+    </div>
+  );
+}
+function NumInput({ value, onChange, min = -99999, max = 99999, step = 1, width = 120 }) {
+  return (
+    <input
+      type="number"
+      value={value}
+      min={min}
+      max={max}
+      step={step}
+      onChange={(e) => onChange?.(Number(e.target.value))}
+      style={{
+        width,
+        padding: "7px 10px",
+        borderRadius: 12,
+        border: `1px solid ${theme.border}`,
+        background: "rgba(0,0,0,0.68)",
+        color: theme.text,
+        outline: "none",
+        fontWeight: 900,
+        fontSize: 14,
+      }}
+    />
+  );
+}
+function Select({ value, onChange, options, width = 140 }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange?.(e.target.value)}
+      style={{
+        width,
+        padding: "7px 10px",
+        borderRadius: 12,
+        border: `1px solid ${theme.border}`,
+        background: "rgba(0,0,0,0.80)",
+        color: theme.text,
+        outline: "none",
+        fontWeight: 950,
+        fontSize: 14,
+      }}
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value} style={{ color: "#111" }}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+function Toggle({ value, onChange, label }) {
+  return (
+    <label style={{ display: "inline-flex", alignItems: "center", gap: 10, cursor: "pointer", userSelect: "none" }}>
+      <span
+        style={{
+          width: 40,
+          height: 24,
+          borderRadius: 999,
+          border: `1px solid ${theme.border}`,
+          background: value ? "rgba(59,130,246,0.35)" : "rgba(255,255,255,0.08)",
+          position: "relative",
+        }}
+        onClick={() => onChange?.(!value)}
+      >
+        <span
+          style={{
+            width: 18,
+            height: 18,
+            borderRadius: 999,
+            background: value ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.58)",
+            position: "absolute",
+            top: 2.5,
+            left: value ? 19 : 3,
+          }}
+        />
+      </span>
+      <span style={{ opacity: 0.92, fontWeight: 900, fontSize: 14 }}>{label}</span>
+    </label>
+  );
+}
+function ImportStatusRadio({ loaded, label = "Import status" }) {
+  const color = loaded ? theme.good : theme.bad;
+  const text = loaded ? "File loaded" : "No file loaded";
+  return (
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.45)" }}>
+      <span style={{ width: 14, height: 14, borderRadius: 999, background: color }} />
+      <div style={{ display: "grid", lineHeight: 1.05 }}>
+        <span style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>{label}</span>
+        <span style={{ fontSize: 13, fontWeight: 950, color }}>{text}</span>
+      </div>
+    </div>
+  );
+}
+function WarningBanner({ title, children }) {
+  return (
+    <div style={{ border: `1px solid ${theme.warnStroke}`, background: theme.warnBg, borderRadius: 16, padding: 10 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <div style={{ width: 10, height: 10, borderRadius: 999, background: theme.warnStroke, marginTop: 5 }} />
+        <div style={{ display: "grid", gap: 6 }}>
+          <div style={{ fontWeight: 950 }}>{title}</div>
+          <div style={{ opacity: 0.82, fontWeight: 800, fontSize: 13 }}>{children}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+function SegTabs({ value, onChange, tabs }) {
+  return (
+    <div style={{ display: "inline-flex", border: `1px solid ${theme.border}`, borderRadius: 14, overflow: "hidden", background: "rgba(0,0,0,0.35)", flexWrap: "wrap" }}>
+      {tabs.map((t) => {
+        const active = value === t.value;
+        return (
+          <button
+            key={t.value}
+            onClick={() => onChange(t.value)}
+            style={{
+              padding: "9px 12px",
+              border: "none",
+              background: active ? "rgba(59,130,246,0.25)" : "transparent",
+              color: theme.text,
+              cursor: "pointer",
+              fontWeight: 950,
+              fontSize: 14,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
-function downloadTextFile(filename, text) {
-  const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+// JSON helpers
+function downloadJSON(obj, filename) {
+  const json = JSON.stringify(obj, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename;
+  a.download = filename || "wing-profile.json";
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 2500);
 }
-
-function safeParseProfilesJson(text) {
-  const obj = JSON.parse(text);
-  if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
-    throw new Error("Profiles JSON must be an object of { profileName: { ... } }");
-  }
-  return obj;
+async function readFileText(file) {
+  return await file.text();
 }
-
-/**
- * Flexible parser for BOTH CSV + XLSX:
- * - Attempts to read meta (Eingabe/Input + Toleranz/Tolerance + Korrektur/Correction) if present
- * - Reads measurement rows by scanning for line IDs like A1, B12, C03, D7 and reading next 3 cells:
- *      [LineId] [Soll] [Ist L] [Ist R]
- */
-function parseWideFlexible(grid) {
-  // 1) Meta header detection (optional)
-  let headerRow = -1;
-  let inputCol = 0;
-  let tolCol = -1;
-  let corrCol = -1;
-
-  const maxScan = Math.min(20, grid.length);
-  for (let r = 0; r < maxScan; r++) {
-    const row = grid[r] || [];
-    for (let c = 0; c < row.length; c++) {
-      const t = String(row[c] ?? "").toLowerCase();
-      if (!t) continue;
-
-      if (t.includes("eingabe") || t.includes("input")) {
-        headerRow = r;
-        inputCol = c;
-      }
-      if (t.includes("toleranz") || t.includes("tolerance")) {
-        headerRow = r;
-        tolCol = c;
-      }
-      if (t.includes("korrektur") || t.includes("correction")) {
-        headerRow = r;
-        corrCol = c;
-      }
-    }
-    if (headerRow >= 0 && (tolCol >= 0 || corrCol >= 0)) break;
-  }
-
-  const metaRow = headerRow >= 0 ? headerRow + 1 : 1;
-  const metaValues = grid[metaRow] || [];
-
-  const meta = {
-    input1: String(metaValues[inputCol] ?? ""),
-    input2: String(metaValues[inputCol + 1] ?? ""),
-    tolerance: tolCol >= 0 ? (n(metaValues[tolCol]) ?? 0) : 0,
-    correction: corrCol >= 0 ? (n(metaValues[corrCol]) ?? 0) : 0,
-  };
-
-  // 2) Measurement rows by scanning for line IDs
-  const rows = [];
-  for (let r = 0; r < grid.length; r++) {
-    const row = grid[r] || [];
-    const entry = { A: null, B: null, C: null, D: null };
-
-    for (let c = 0; c <= row.length - 4; c++) {
-      const cell = String(row[c] ?? "").trim();
-      const m = cell.match(/^([A-Da-d])\s*0*([0-9]+)$/);
-      if (!m) continue;
-
-      const letter = m[1].toUpperCase();
-      const line = `${letter}${parseInt(m[2], 10)}`;
-
-      const nominal = n(row[c + 1]);
-      const measL = n(row[c + 2]);
-      const measR = n(row[c + 3]);
-
-      entry[letter] = { line, nominal, measL, measR };
-      c += 3;
-    }
-
-    if (entry.A || entry.B || entry.C || entry.D) rows.push(entry);
-  }
-
-  return { meta, rows };
-}
-
-/* -------- Zeroing wizard: median correction suggestion -------- */
-
-function median(values) {
-  const v = values.filter((x) => Number.isFinite(x)).slice().sort((a, b) => a - b);
-  if (!v.length) return null;
-  const mid = Math.floor(v.length / 2);
-  if (v.length % 2) return v[mid];
-  return (v[mid - 1] + v[mid]) / 2;
-}
-
-function suggestCorrectionFromWideRows(wideRows) {
-  const offsets = [];
-  for (const r of wideRows || []) {
-    for (const letter of ["A", "B", "C", "D"]) {
-      const b = r?.[letter];
-      if (!b || b.nominal == null) continue;
-      if (b.measL != null) offsets.push(b.nominal - b.measL);
-      if (b.measR != null) offsets.push(b.nominal - b.measR);
-    }
-  }
-  const med = median(offsets);
-  return med == null ? null : Math.round(med);
-}
-
-/* ------------------------- App ------------------------- */
 
 export default function App() {
-  const [step, setStep] = useState(() => {
-    const s = localStorage.getItem("workflowStep");
-    const v = parseInt(s || "1", 10);
-    return Number.isFinite(v) ? Math.min(4, Math.max(1, v)) : 1;
-  });
-  useEffect(() => localStorage.setItem("workflowStep", String(step)), [step]);
+  const [step, setStep] = useState(1);
 
-  const [meta, setMeta] = useState({ input1: "", input2: "", tolerance: 0, correction: 0 });
+  // Step 1
+  const [meta, setMeta] = useState({ make: "", model: "", tolerance: 10, correction: 0 });
   const [wideRows, setWideRows] = useState([]);
+  const [importStatus, setImportStatus] = useState({ ok: false, name: "", err: "" });
+  const [tab, setTab] = useState("import");
+  const fileInputRef = useRef(null);
 
-  const [showCorrected, setShowCorrected] = useState(() => {
-    const s = localStorage.getItem("showCorrected");
-    return s ? s === "1" : true;
+  // Step 2
+  const [prefixByLetter, setPrefixByLetter] = useState({ A: "AR", B: "BR", C: "CR", D: "DR" });
+  const [groupCountByLetter, setGroupCountByLetter] = useState({ A: 3, B: 3, C: 3, D: 3 });
+  const [maxByLetter, setMaxByLetter] = useState({ A: 0, B: 0, C: 0, D: 0 });
+  const [rangesByLetter, setRangesByLetter] = useState({
+    A: makeDefaultRanges(1, 3),
+    B: makeDefaultRanges(1, 3),
+    C: makeDefaultRanges(1, 3),
+    D: makeDefaultRanges(1, 3),
   });
-  useEffect(() => localStorage.setItem("showCorrected", showCorrected ? "1" : "0"), [showCorrected]);
+  const [lineToGroup, setLineToGroup] = useState({});
+  const [rangeTab, setRangeTab] = useState("A");
+  const [showOverrides, setShowOverrides] = useState(true);
 
- 
+  // Step 3 diagram + summary
+  const [diagramZoom, setDiagramZoom] = useState(1.0);
+  const [diagramWingOutline, setDiagramWingOutline] = useState(true);
+  const [diagramCompact, setDiagramCompact] = useState(false);
+  const diagramBoxRef = useRef(null);
 
+  // Baseline mapping snapshot for “changes summary”
+  const [defaultMappingSnapshot, setDefaultMappingSnapshot] = useState(null);
 
-  
-  /* ===============================
-     UI polish: button click animation + click sound
-     =============================== */
-  useEffect(() => {
-    // Global button press animation (CSS :active)
-    const style = document.createElement("style");
-    style.textContent = `
-      button {
-        transition: transform 80ms ease, filter 80ms ease;
-        will-change: transform;
-      }
-      button:hover:not(:disabled) {
-        filter: brightness(1.06);
-      }
-      button:active:not(:disabled) {
-        transform: scale(0.97);
-        filter: brightness(1.12);
-      }
-    `;
-    document.head.appendChild(style);
-    return () => style.remove();
-  }, []);
+  // Profile JSON
+  const [profileName, setProfileName] = useState("");
+  const profileImportRef = useRef(null);
 
-  useEffect(() => {
-    // Click sound for any enabled <button>
-    let ctx = null;
+  function resetAll() {
+    setStep(1);
+    setMeta({ make: "", model: "", tolerance: 10, correction: 0 });
+    setWideRows([]);
+    setImportStatus({ ok: false, name: "", err: "" });
 
-    function playClick() {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (!AC) return;
-      if (!ctx) ctx = new AC();
-      if (ctx.state === "suspended") ctx.resume().catch(() => {});
-      const now = ctx.currentTime;
+    setPrefixByLetter({ A: "AR", B: "BR", C: "CR", D: "DR" });
+    setGroupCountByLetter({ A: 3, B: 3, C: 3, D: 3 });
+    setMaxByLetter({ A: 0, B: 0, C: 0, D: 0 });
+    setRangesByLetter({
+      A: makeDefaultRanges(1, 3),
+      B: makeDefaultRanges(1, 3),
+      C: makeDefaultRanges(1, 3),
+      D: makeDefaultRanges(1, 3),
+    });
+    setLineToGroup({});
+    setRangeTab("A");
+    setShowOverrides(true);
 
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+    setDiagramZoom(1.0);
+    setDiagramWingOutline(true);
+    setDiagramCompact(false);
 
-      osc.type = "square";
-      osc.frequency.setValueAtTime(800, now);
-
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.linearRampToValueAtTime(0.08, now + 0.005);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.03);
-
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.start(now);
-      osc.stop(now + 0.035);
-    }
-
-    function handler(e) {
-      const btn = e.target?.closest?.("button");
-      if (!btn || btn.disabled) return;
-      playClick();
-    }
-
-    document.addEventListener("click", handler, true);
-    return () => document.removeEventListener("click", handler, true);
-  }, []);
-// Chart letter toggles (A/B/C/D) — persisted
-  const [chartLetters, setChartLetters] = useState(() => {
-    try {
-      const s = localStorage.getItem("chartLetters");
-      return s ? JSON.parse(s) : { A: true, B: true, C: false, D: false };
-    } catch {
-      return { A: true, B: true, C: false, D: false };
-    }
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("chartLetters", JSON.stringify(chartLetters));
-    } catch {}
-  }, [chartLetters]);
-
-  // Profiles JSON (persisted)
-  const [profileJson, setProfileJson] = useState(() => {
-    const saved = localStorage.getItem("wingProfilesJson");
-    return saved || JSON.stringify({ ...BUILTIN_PROFILES }, null, 2);
-  });
-
-  /* ===============================
-     Loop → adjustment helper
-     =============================== */
-
-  function loopTypeFromAdjustment(mm) {
-    if (!Number.isFinite(mm)) return "";
-    for (const [name, val] of Object.entries(loopTypes)) {
-      if (Number.isFinite(val) && val === mm) return name;
-    }
-    return ""; // Custom / manual value
+    setDefaultMappingSnapshot(null);
+    setProfileName("");
   }
 
-  /* ===============================
-     rest of App logic
-     =============================== */
+  function applyParsedImport(parsed, name) {
+    setMeta(parsed.meta);
+    setWideRows(parsed.wideRows);
+    setImportStatus({ ok: true, name, err: "" });
 
-  const profiles = useMemo(() => {
-    try {
-      const obj = JSON.parse(profileJson);
-      if (obj && typeof obj === "object") return obj;
-    } catch {}
-    return { ...BUILTIN_PROFILES };
-  }, [profileJson]);
-
-  const [profileKey, setProfileKey] = useState(() => Object.keys(BUILTIN_PROFILES)[0] || "");
-  const activeProfile =
-    profiles[profileKey] || Object.values(profiles)[0] || Object.values(BUILTIN_PROFILES)[0];
-
-  // Guided Profile Editor state
-  const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false);
-  const [draftProfileKey, setDraftProfileKey] = useState("");
-  const [draftProfile, setDraftProfile] = useState({});
-  const [showAdvancedJson, setShowAdvancedJson] = useState(false);
-
-  useEffect(() => {
-    setDraftProfileKey(profileKey || "");
-    setDraftProfile(JSON.parse(JSON.stringify(profiles[profileKey] || activeProfile || {})));
-  }, [profileKey, profileJson]); // refresh after edits/import
-
-  // Adjustments (per group)
-  const [adjustments, setAdjustments] = useState(() => {
-    try {
-      const s = localStorage.getItem("groupAdjustments");
-      return s ? JSON.parse(s) : {};
-    } catch {
-      return {};
+    const max = { A: 0, B: 0, C: 0, D: 0 };
+    for (const r of parsed.wideRows) {
+      if (!r?.letter || r.idx == null) continue;
+      max[r.letter] = Math.max(max[r.letter] || 0, Number(r.idx || 0));
     }
-  });
-  function persistAdjustments(next) {
-    setAdjustments(next);
-    localStorage.setItem("groupAdjustments", JSON.stringify(next));
-  }
+    setMaxByLetter(max);
 
-  // Loop types
-  const [loopTypes, setLoopTypes] = useState(() => {
-    try {
-      const s = localStorage.getItem("loopTypes");
-      return s
-        ? JSON.parse(s)
-        : { SL: 0, DL: -7, AS: -10, "AS+": -16, PH: -18, "LF++": -23 };
-    } catch {
-      return { SL: 0, DL: -7, AS: -10, "AS+": -16, PH: -18, "LF++": -23 };
-    }
-  });
-  function persistLoopTypes(next) {
-    setLoopTypes(next);
-    localStorage.setItem("loopTypes", JSON.stringify(next));
-  }
-
-  // Group loop setup (AR1|L -> "SL")
-  /* ===============================
-     STEP 3 BASELINE + STEP 4 LOOP OVERRIDE (AUTHORITATIVE)
-     =============================== */
-
-  /* ---------- Step 3: Installed loops (baseline) ---------- */
-  const [groupLoopSetup, setGroupLoopSetup] = useState(() => {
-    try {
-      const s = localStorage.getItem("groupLoopSetup");
-      return s ? JSON.parse(s) : {};
-    } catch {
-      return {};
-    }
-  });
-
-  function persistGroupLoopSetup(next) {
-    setGroupLoopSetup(next);
-    localStorage.setItem("groupLoopSetup", JSON.stringify(next));
-  }
-
-  /* ---------- Frozen baseline snapshot (locks Step 3 once trimming starts) ---------- */
-  const [groupLoopBaseline, setGroupLoopBaseline] = useState(() => {
-    try {
-      const s = localStorage.getItem("groupLoopBaseline");
-      return s ? JSON.parse(s) : null;
-    } catch {
-      return null;
-    }
-  });
-
-  function persistGroupLoopBaseline(next) {
-    setGroupLoopBaseline(next);
-    if (next == null) localStorage.removeItem("groupLoopBaseline");
-    else localStorage.setItem("groupLoopBaseline", JSON.stringify(next));
-  }
-
-  // When entering Step 4, freeze Step 3 state exactly once (unless already frozen).
-  useEffect(() => {
-    if (step !== 4) return;
-    if (groupLoopBaseline == null) {
-      persistGroupLoopBaseline(JSON.parse(JSON.stringify(groupLoopSetup || {})));
-    }
-  }, [step, groupLoopBaseline, groupLoopSetup]);
-
-  /* ---------- Step 4: Loop changes (virtual / trim-only) ---------- */
-  const [groupLoopChange, setGroupLoopChange] = useState(() => {
-    try {
-      const s = localStorage.getItem("groupLoopChange");
-      return s ? JSON.parse(s) : {};
-    } catch {
-      return {};
-    }
-  });
-
-  function persistGroupLoopChange(next) {
-    setGroupLoopChange(next);
-    localStorage.setItem("groupLoopChange", JSON.stringify(next));
-  }
-
-  function clearAllLoopChanges() {
-    persistGroupLoopChange({});
-  }
-
-  /* ---------- Loop resolution helpers ---------- */
-
-  // Baseline loop type: uses frozen snapshot if present, else live Step 3 state
-  function getBaselineLoopType(groupName, side) {
-    const src = groupLoopBaseline || groupLoopSetup;
-    return src?.[`${groupName}|${side}`] || "SL";
-  }
-
-  // Effective loop AFTER trimming (Step 4 override if present)
-  function getAfterLoopType(groupName, side) {
-    const k = `${groupName}|${side}`;
-    return groupLoopChange?.[k] || getBaselineLoopType(groupName, side);
-  }
-
-
-  // Alias used by some UI blocks (Step 4)
-  function getEffectiveLoopType(groupName, side) {
-    return getAfterLoopType(groupName, side);
-  }
-
-  // Convert loop type → mm delta
-  function loopDeltaForGroup(groupName, side, which /* "before" | "after" */) {
-    const loopType = which === "after" ? getAfterLoopType(groupName, side) : getBaselineLoopType(groupName, side);
-    const mm = loopTypes?.[loopType];
-    return Number.isFinite(mm) ? mm : 0;
-  }
-
-  // 🚨 ONLY helper tables & charts should call
-  function loopDeltaFor(lineId, side, which = "after") {
-    const groupName = groupForLine(activeProfile, lineId);
-    if (!groupName) return 0;
-    return loopDeltaForGroup(groupName, side, which);
-  }
-
-
-
-const fileInputRef = useRef(null);
-  const profilesImportRef = useRef(null);
-  const [selectedFileName, setSelectedFileName] = useState("");
-
-  const hasCSV = wideRows.length > 0;
-
-  const allLines = useMemo(() => getAllLinesFromWide(wideRows), [wideRows]);
-  const allGroupNames = useMemo(() => extractGroupNames(wideRows, activeProfile), [wideRows, activeProfile]);
-//here
-
-
-  const groupToLines = useMemo(() => {
-    const map = new Map();
-    for (const { lineId } of allLines) {
-      const g = groupForLine(activeProfile, lineId);
-      if (!g) continue;
-      if (!map.has(g)) map.set(g, []);
-      map.get(g).push(lineId);
-    }
-    for (const [k, arr] of map.entries()) {
-      arr.sort((a, b) => {
-        const pa = parseLineId(a);
-        const pb = parseLineId(b);
-        if (!pa || !pb) return a.localeCompare(b);
-        if (pa.prefix !== pb.prefix) return pa.prefix.localeCompare(pb.prefix);
-        return pa.num - pb.num;
-      });
-      map.set(k, arr);
-    }
-    return map;
-  }, [allLines, activeProfile]);
-
-
-  /* ===============================
-     Pitch Trim calculation (A − D)
-     =============================== */
-
-  // ---------------- Filters (rows + groups) ----------------
-  const [includedRows, setIncludedRows] = useState({ A: true, B: true, C: true, D: true });
-  const [includedGroups, setIncludedGroups] = useState({}); // empty = treat as all selected
-
-  const pitchTrim = useMemo(() => {
-    const rowIncluded = (L) => !!includedRows?.[L];
-
-    const groupIncluded = (g) => {
-      if (!g) return false;
-      const keys = Object.keys(includedGroups || {});
-      if (keys.length === 0) return true; // empty = all included
-      return !!includedGroups[g];
+    const newRanges = {
+      A: makeDefaultRanges(max.A || 1, groupCountByLetter.A || 3),
+      B: makeDefaultRanges(max.B || 1, groupCountByLetter.B || 3),
+      C: makeDefaultRanges(max.C || 1, groupCountByLetter.C || 3),
+      D: makeDefaultRanges(max.D || 1, groupCountByLetter.D || 3),
     };
+    setRangesByLetter(newRanges);
 
-    const corr = showCorrected ? (meta?.correction ?? 0) : 0;
+    const initMap = buildInitialLineToGroup({
+      maxByLetter: max,
+      groupCountByLetter,
+      prefixByLetter,
+      rangesByLetter: newRanges,
+    });
 
-    const perRow = { A: [], B: [], C: [], D: [] };
-
-    for (const r of wideRows || []) {
-      for (const letter of ["A", "B", "C", "D"]) {
-        if (!rowIncluded(letter)) continue;
-
-        const b = r?.[letter];
-        if (!b?.line) continue;
-
-        const nominal = b.nominal;
-        if (!Number.isFinite(nominal)) continue;
-
-        const groupName = groupForLine(activeProfile, b.line);
-        if (!groupIncluded(groupName)) continue;
-
-        // LEFT
-        if (Number.isFinite(b.measL)) {
-          const loopType = groupLoopSetup?.[`${groupName}|L`] || "SL";
-          const loopDelta = Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopType] : 0;
-          const adj = getAdjustment(adjustments, groupName, "L") || 0;
-
-          const corrected = b.measL + corr;
-          const afterDelta = corrected + loopDelta + adj - nominal;
-          if (Number.isFinite(afterDelta)) perRow[letter].push(afterDelta);
-        }
-
-        // RIGHT
-        if (Number.isFinite(b.measR)) {
-          const loopType = groupLoopSetup?.[`${groupName}|R`] || "SL";
-          const loopDelta = Number.isFinite(loopTypes?.[loopType]) ? loopTypes[loopType] : 0;
-          const adj = getAdjustment(adjustments, groupName, "R") || 0;
-
-          const corrected = b.measR + corr;
-          const afterDelta = corrected + loopDelta + adj - nominal;
-          if (Number.isFinite(afterDelta)) perRow[letter].push(afterDelta);
-        }
-      }
-    }
-
-    const avg = (arr) => {
-      const v = (arr || []).filter((x) => Number.isFinite(x));
-      if (!v.length) return null;
-      return v.reduce((a, b) => a + b, 0) / v.length;
-    };
-
-    const A = avg(perRow.A);
-    const B = avg(perRow.B);
-    const C = avg(perRow.C);
-    const D = avg(perRow.D);
-
-    const pitch = Number.isFinite(A) && Number.isFinite(D) ? A - D : null;
-
-    return {
-      A,
-      B,
-      C,
-      D,
-      pitch,
-      count: { A: perRow.A.length, B: perRow.B.length, C: perRow.C.length, D: perRow.D.length },
-    };
-  }, [
-    wideRows,
-    meta?.correction,
-    showCorrected,
-    activeProfile,
-    adjustments,
-    groupLoopSetup,
-    groupLoopChange,
-        loopTypes,
-    includedRows,
-    includedGroups,
-  ]);
-
-
-//end here
-  const csvProfileName = useMemo(() => makeProfileNameFromMeta(meta), [meta]);
-
-  function setProfilesObject(nextProfiles) {
-    const json = JSON.stringify(nextProfiles, null, 2);
-    setProfileJson(json);
-    localStorage.setItem("wingProfilesJson", json);
-  }
-
-  function exportAllProfiles() {
-    const filename = `wing-profiles-${new Date().toISOString().slice(0, 10)}.json`;
-    downloadTextFile(filename, JSON.stringify(profiles, null, 2));
-  }
-
-  function exportCurrentProfileOnly() {
-    const p = profiles[profileKey];
-    if (!p) return alert("No profile selected.");
-    const filename = `${(profileKey || "profile").replace(/[^\w\- ]+/g, "")}.json`;
-    downloadTextFile(filename, JSON.stringify({ [profileKey]: p }, null, 2));
-  }
-
-  function resetProfilesToBuiltIn() {
-    localStorage.removeItem("wingProfilesJson");
-    setProfileJson(JSON.stringify({ ...BUILTIN_PROFILES }, null, 2));
-    const first = Object.keys(BUILTIN_PROFILES)[0] || "";
-    setProfileKey(first);
-  }
-
-  async function importProfilesFromFile(file) {
-    try {
-      const text = await file.text();
-      const incoming = safeParseProfilesJson(text);
-
-      const merged = { ...profiles, ...incoming };
-      for (const [k, v] of Object.entries(merged)) {
-        if (v && typeof v === "object" && !v.name) v.name = k;
-      }
-
-      setProfilesObject(merged);
-
-      const keys = Object.keys(incoming);
-      if (keys.length === 1) setProfileKey(keys[0]);
-
-      alert(`Imported ${Object.keys(incoming).length} profile(s).`);
-    } catch (e) {
-      console.error(e);
-      alert("Could not import profiles JSON. Make sure it is valid JSON exported from this app.");
-    }
-  }
-
-  function ensureProfileExistsByName(name) {
-    const key = String(name || "").trim();
-    if (!key) return;
-
-    if (profiles[key]) {
-      setProfileKey(key);
-      return;
-    }
-
-    const nextProfiles = { ...profiles };
-    const base = profiles[profileKey] || activeProfile || Object.values(BUILTIN_PROFILES)[0];
-    const clone = JSON.parse(JSON.stringify(base));
-    clone.name = key;
-    nextProfiles[key] = clone;
-
-    setProfilesObject(nextProfiles);
-    setProfileKey(key);
-  }
-
-  function onImportFile(file) {
-    const name = (file?.name || "").toLowerCase();
-
-    // XLSX
-    if (name.endsWith(".xlsx")) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const data = reader.result;
-          const wb = XLSX.read(data, { type: "array" });
-
-          const sheetName = wb.SheetNames[0];
-          const ws = wb.Sheets[sheetName];
-
-          const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" });
-
-          const w = parseWideFlexible(grid);
-          if (!w.rows.length) {
-            alert("Excel imported, but no line rows were detected.\n\nCheck that line IDs look like A1, B12, C03 etc.");
-            return;
-          }
-
-          setMeta(w.meta);
-          setWideRows(w.rows);
-
-          const importName = makeProfileNameFromMeta(w.meta);
-          ensureProfileExistsByName(importName);
-
-          setSelectedFileName(file.name);
-          setStep(2);
-        } catch (err) {
-          console.error(err);
-          alert("Failed to read Excel file. Please check it is a .xlsx in the same layout as the CSV.");
-        }
-      };
-      reader.readAsArrayBuffer(file);
-      return;
-    }
-
-    // CSV
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = String(reader.result || "");
-      const parsed = parseDelimited(text);
-
-      const w = parseWideFlexible(parsed.grid);
-      if (!w.rows.length) {
-        alert("File imported, but no line rows were detected.\n\nCheck that line IDs look like A1, B12, C03 etc.");
-        return;
-      }
-
-      setMeta(w.meta);
-      setWideRows(w.rows);
-
-      const importName = makeProfileNameFromMeta(w.meta);
-      ensureProfileExistsByName(importName);
-
-      setSelectedFileName(file.name);
-      setStep(2);
-    };
-    reader.readAsText(file);
-  }
-
-
-  function loadSampleData() {
-  try {
-    // Parse the embedded CSV text (no network fetch required)
-    const { grid } = parseDelimited(SAMPLE_CSV_TEXT);
-    const parsed = parseWideFlexible(grid);
-
-    // Move into workflow and apply parsed sample
+    setLineToGroup(initMap);
+    setDefaultMappingSnapshot(deepClone(initMap));
+    setRangeTab("A");
     setStep(2);
-    localStorage.setItem("workflowStep", "2");
-
-    setWideRows(parsed.rows || []);
-    setMeta(parsed.meta || { input1: "", input2: "", tolerance: 0, correction: 0 });
-    setSelectedFileName("Sample data (built-in)");
-
-    // Clear Step 4 session state so the sample starts clean
-    try { persistGroupLoopBaseline(null); } catch {}
-    try { persistGroupLoopChange({}); } catch {}
-    try { persistAdjustments({}); } catch {}
-
-    // Keep Step 3 baseline loops as-is (user sets them in Step 3)
-  } catch (e) {
-    console.error("loadSampleData failed:", e);
-    alert("Could not load sample data. " + (e?.message || ""));
-  }
-}
-
-  
-
-
-  function applyAllSL() {
-    const next = {};
-    for (const g of allGroupNames) {
-      next[`${g}|L`] = "SL";
-      next[`${g}|R`] = "SL";
-    }
-    persistGroupLoopSetup(next);
-  }
-  function mirrorLtoR() {
-    const next = { ...groupLoopSetup };
-    for (const g of allGroupNames) next[`${g}|R`] = next[`${g}|L`] || "SL";
-    persistGroupLoopSetup(next);
-  }
-  function mirrorRtoL() {
-    const next = { ...groupLoopSetup };
-    for (const g of allGroupNames) next[`${g}|L`] = next[`${g}|R`] || "SL";
-    persistGroupLoopSetup(next);
-  }
-  function resetAdjustments() {
-    persistAdjustments({});
-    persistGroupLoopChange({});
   }
 
-  const compactBlocks = useMemo(() => {
-    const blocks = { A: [], B: [], C: [], D: [] };
-    for (let i = 0; i < wideRows.length; i++) {
-      for (const k of ["A", "B", "C", "D"]) {
-        const b = wideRows[i][k];
-        if (!b) continue;
-        blocks[k].push({ rowIndex: i, ...b });
+  async function handleFile(file) {
+    if (!file) return;
+    resetAll();
+
+    const name = file.name || "file";
+    const lower = name.toLowerCase();
+
+    try {
+      if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: "array" });
+        const sheetName = wb.SheetNames[0];
+        const sheet = wb.Sheets[sheetName];
+        const rows = rowsFromSheetAOA(sheet);
+        const parsed = parseWideTableFromRows(rows);
+        applyParsedImport(parsed, name);
+      } else {
+        const text = await file.text();
+        const rows = rowsFromCSVText(text);
+        const parsed = parseWideTableFromRows(rows);
+        applyParsedImport(parsed, name);
       }
+      setTab("import");
+    } catch (e) {
+      console.error("Import error:", e);
+      resetAll();
+      setImportStatus({ ok: false, name, err: "Import failed. Check file format." });
+      alert("Import failed. Please check the file format.");
     }
-    return blocks;
+  }
+
+  function loadAttachedTestData() {
+    resetAll();
+    const rows = rowsFromCSVText(ATTACHED_TEST_CSV);
+    const parsed = parseWideTableFromRows(rows);
+    applyParsedImport(parsed, "Speedster3 ML.csv (attached)");
+    setTab("testdata");
+  }
+
+  const loaded = importStatus.ok && wideRows.length > 0;
+
+  const summary = useMemo(() => {
+    const max = { A: 0, B: 0, C: 0, D: 0 };
+    for (const r of wideRows) {
+      if (!r?.letter || r.idx == null) continue;
+      max[r.letter] = Math.max(max[r.letter] || 0, Number(r.idx || 0));
+    }
+    const totalLines = (max.A + max.B + max.C + max.D) * 2;
+    return { max, totalLines };
   }, [wideRows]);
 
-  function setCell(rowIndex, blockKey, field, value) {
-    setWideRows((prev) => {
-      const next = prev.slice();
-      const row = { ...next[rowIndex] };
-      const block = row[blockKey] ? { ...row[blockKey] } : null;
-      if (!block) return prev;
-      block[field] = value === "" ? null : n(value);
-      row[blockKey] = block;
-      next[rowIndex] = row;
+  const groupOptionsForSelect = useMemo(() => {
+    const opts = getGroupOptions(prefixByLetter, groupCountByLetter);
+    return opts.map((g) => ({ value: g, label: g }));
+  }, [prefixByLetter, groupCountByLetter]);
+
+  const letterIdxRows = useMemo(() => {
+    const out = [];
+    for (const L of ["A", "B", "C", "D"]) {
+      const m = Number(maxByLetter[L] || 0);
+      for (let i = 1; i <= m; i++) out.push({ letter: L, idx: i });
+    }
+    return out;
+  }, [maxByLetter]);
+
+  function setRange(letter, bucket, field, value) {
+    setRangesByLetter((prev) => {
+      const next = { ...(prev || {}) };
+      const count = Number(groupCountByLetter[letter] || 3);
+      const cur = next[letter] || makeDefaultRanges(maxByLetter[letter] || 1, count);
+      const b = { ...(cur[bucket] || {}) };
+      b[field] = Number.isFinite(Number(value)) ? Number(value) : b[field];
+      next[letter] = { ...cur, [bucket]: b };
       return next;
     });
   }
 
-  // Group average deltas (before vs after)
-  const groupStats = useMemo(() => {
-    const corr = meta.correction || 0;
+  function rebuildMappingFromRanges(resetOverridesToRanges = false) {
+    const initMap = buildInitialLineToGroup({
+      maxByLetter,
+      groupCountByLetter,
+      prefixByLetter,
+      rangesByLetter,
+    });
 
-    const bucketBefore = new Map(); // group|side -> [delta]
-    const bucketAfter = new Map();
+    if (resetOverridesToRanges) {
+      setLineToGroup(initMap);
+      setDefaultMappingSnapshot(deepClone(initMap));
+      return;
+    }
 
-    for (const r of wideRows) {
-      for (const letter of ["A", "B", "C", "D"]) {
-        const b = r[letter];
-        if (!b || !b.line || b.nominal == null) continue;
-
-        const g = groupForLine(activeProfile, b.line) || `${letter}?`;
-
-        const loopL_before = loopDeltaFor(b.line, "L", "before");
-        const loopR_before = loopDeltaFor(b.line, "R", "before");
-        const loopL_after = loopDeltaFor(b.line, "L", "after");
-        const loopR_after = loopDeltaFor(b.line, "R", "after");
-
-        const adjL = getAdjustment(adjustments, g, "L");
-        const adjR = getAdjustment(adjustments, g, "R");
-
-        // Before = corrected + baseline loop
-        const baseL_before = b.measL == null ? null : b.measL + corr + loopL_before;
-        const baseR_before = b.measR == null ? null : b.measR + corr + loopR_before;
-
-        // After = corrected + (Step 4 loop override) + adjustment
-        const baseL_after = b.measL == null ? null : b.measL + corr + loopL_after;
-        const baseR_after = b.measR == null ? null : b.measR + corr + loopR_after;
-
-        const afterL = baseL_after == null ? null : baseL_after + adjL;
-        const afterR = baseR_after == null ? null : baseR_after + adjR;
-
-        const dL_before = baseL_before == null ? null : baseL_before - b.nominal;
-        const dR_before = baseR_before == null ? null : baseR_before - b.nominal;
-
-        const dL_after = afterL == null ? null : afterL - b.nominal;
-        const dR_after = afterR == null ? null : afterR - b.nominal;
-
-
-if (Number.isFinite(dL_before)) {
-          const k = `${g}|L`;
-          if (!bucketBefore.has(k)) bucketBefore.set(k, []);
-          bucketBefore.get(k).push(dL_before);
-        }
-        if (Number.isFinite(dR_before)) {
-          const k = `${g}|R`;
-          if (!bucketBefore.has(k)) bucketBefore.set(k, []);
-          bucketBefore.get(k).push(dR_before);
-        }
-        if (Number.isFinite(dL_after)) {
-          const k = `${g}|L`;
-          if (!bucketAfter.has(k)) bucketAfter.set(k, []);
-          bucketAfter.get(k).push(dL_after);
-        }
-        if (Number.isFinite(dR_after)) {
-          const k = `${g}|R`;
-          if (!bucketAfter.has(k)) bucketAfter.set(k, []);
-          bucketAfter.get(k).push(dR_after);
+    setLineToGroup((prev) => {
+      const next = { ...(prev || {}) };
+      for (const L of ["A", "B", "C", "D"]) {
+        const m = Number(maxByLetter[L] || 0);
+        for (let i = 1; i <= m; i++) {
+          const l = `${L}${i}L`;
+          const r = `${L}${i}R`;
+          if (!next[l]) next[l] = initMap[l] || "";
+          if (!next[r]) next[r] = initMap[r] || "";
         }
       }
-    }
-
-    const out = [];
-    const keys = new Set([...bucketBefore.keys(), ...bucketAfter.keys()]);
-    for (const key of keys) {
-      const [groupName, side] = key.split("|");
-      const before = avg(bucketBefore.get(key) || []);
-      const after = avg(bucketAfter.get(key) || []);
-      if (!Number.isFinite(before) && !Number.isFinite(after)) continue;
-      out.push({ groupName, side, before, after });
-    }
-
-    out.sort((a, b) =>
-      (groupSortKey(a.groupName) + a.side).localeCompare(groupSortKey(b.groupName) + b.side)
-    );
-    return out;
-  }, [wideRows, meta.correction, activeProfile, adjustments, groupLoopSetup, loopTypes]);
-
-
-
-  const chartPoints = useMemo(() => {
-  const tol = meta?.tolerance ?? 0;
-  const corr = showCorrected ? (meta?.correction ?? 0) : 0;
-
-  // Build stable X positions by lineId order (A1..Dxx)
-  const lineIds = [];
-  const seen = new Set();
-  for (const r of wideRows || []) {
-    for (const L of ["A", "B", "C", "D"]) {
-      const b = r?.[L];
-      if (!b?.line) continue;
-      if (seen.has(b.line)) continue;
-      seen.add(b.line);
-      lineIds.push(b.line);
-    }
-  }
-  lineIds.sort((a, b) => {
-    const pa = parseLineId(a);
-    const pb = parseLineId(b);
-    if (!pa || !pb) return String(a).localeCompare(String(b));
-    if (pa.prefix !== pb.prefix) return pa.prefix.localeCompare(pb.prefix);
-    return (pa.num ?? 0) - (pb.num ?? 0);
-  });
-  const xIndexByLine = new Map(lineIds.map((id, i) => [id, i]));
-  const maxX = Math.max(1, lineIds.length - 1);
-
-  const pts = [];
-  for (const r of wideRows || []) {
-    for (const L of ["A", "B", "C", "D"]) {
-      const b = r?.[L];
-      if (!b?.line) continue;
-      const groupName = groupForLine(activeProfile, b.line);
-
-      const nominal = b.nominal;
-      if (!Number.isFinite(nominal)) continue;
-
-      // LEFT
-      if (Number.isFinite(b.measL)) {
-        const corrected = b.measL + corr;
-        const before = corrected + loopDeltaFor(b.line, "L", "before") - nominal;
-        const after = corrected + loopDeltaFor(b.line, "L", "after") + getAdjustment(adjustments, groupName, "L") - nominal;
-        pts.push({
-          id: `${b.line}-L`,
-          line: b.line,
-          side: "L",
-          before,
-          after,
-          sevAfter: severity(after, tol),
-          xIndex: xIndexByLine.get(b.line) ?? 0,
-        });
-      }
-
-      // RIGHT
-      if (Number.isFinite(b.measR)) {
-        const corrected = b.measR + corr;
-        const before = corrected + loopDeltaFor(b.line, "R", "before") - nominal;
-        const after = corrected + loopDeltaFor(b.line, "R", "after") + getAdjustment(adjustments, groupName, "R") - nominal;
-        pts.push({
-          id: `${b.line}-R`,
-          line: b.line,
-          side: "R",
-          before,
-          after,
-          sevAfter: severity(after, tol),
-          xIndex: xIndexByLine.get(b.line) ?? 0,
-        });
-      }
-    }
+      return next;
+    });
   }
 
-  // Filter by selected chart letters (A/B/C/D)
-  const filtered = pts.filter((p) => {
-    const prefix = parseLineId(p.line)?.prefix;
-    return prefix ? !!chartLetters?.[prefix] : true;
-  });
-
-  // Normalise xIndex range if needed (DeltaLineChart expects maxX >= 1)
-  for (const p of filtered) {
-    p.xIndex = Math.max(0, Math.min(maxX, p.xIndex ?? 0));
+  function setLineToGroupFromDrag(lineId, newGroupId) {
+    if (!lineId || !newGroupId) return;
+    setLineToGroup((prev) => ({ ...(prev || {}), [lineId]: newGroupId }));
   }
 
-  return filtered;
-}, [
-  wideRows,
-  activeProfile,
-  meta?.tolerance,
-  meta?.correction,
-  showCorrected,
-  adjustments,
-  chartLetters,
-  groupLoopSetup,
-  groupLoopBaseline,
-  groupLoopChange,
-  loopTypes,
-]);
-
-  
-  
-  // Step guard
+  function fitDiagramToScreen() {
+    const el = diagramBoxRef.current;
+    if (!el) return;
+    const available = Math.max(320, el.clientWidth - 24);
+    const z = clamp(available / DIAGRAM_W, 0.4, 1.8);
+    setDiagramZoom(Number(z.toFixed(2)));
+  }
   useEffect(() => {
-    if (step > 1 && !hasCSV) setStep(1);
-  }, [step, hasCSV]);
+    if (step !== 3) return;
+    const t = setTimeout(() => fitDiagramToScreen(), 80);
+    return () => clearTimeout(t);
+  }, [step]);
 
-  // Guided editor helpers
-  function deepClone(x) {
-    return JSON.parse(JSON.stringify(x));
-  }
-  function openProfileEditor() {
-    setDraftProfileKey(profileKey);
-    setDraftProfile(deepClone(profiles[profileKey] || activeProfile || {}));
-    setShowAdvancedJson(false);
-    setIsProfileEditorOpen(true);
-  }
-  function saveDraftProfile() {
-    const nextProfiles = { ...profiles };
-    const key = String(draftProfileKey || "").trim();
-    if (!key) return alert("Profile name cannot be empty.");
-
-    const p = deepClone(draftProfile || {});
-    p.name = key;
-    p.mmPerLoop = Number.isFinite(n(p.mmPerLoop)) ? n(p.mmPerLoop) : 10;
-    p.mapping = p.mapping && typeof p.mapping === "object" ? p.mapping : { A: [], B: [], C: [], D: [] };
-
-    nextProfiles[key] = p;
-    setProfilesObject(nextProfiles);
-    setProfileKey(key);
-    setIsProfileEditorOpen(false);
-  }
-  function newProfileFromCurrent() {
-    const base = deepClone(profiles[profileKey] || activeProfile || {});
-    const name = prompt("New profile name?", `${profileKey} (copy)`);
-    if (!name) return;
-    base.name = name;
-    setDraftProfileKey(name);
-    setDraftProfile(base);
-    setShowAdvancedJson(false);
-    setIsProfileEditorOpen(true);
-  }
-  function deleteSelectedProfile() {
-    if (!confirm(`Delete profile "${profileKey}"? This cannot be undone.`)) return;
-    const nextProfiles = { ...profiles };
-    delete nextProfiles[profileKey];
-
-    setProfilesObject(nextProfiles);
-
-    const first = Object.keys(nextProfiles)[0] || Object.keys(BUILTIN_PROFILES)[0] || "";
-    setProfileKey(first);
-  }
-
-  function StepButton({ current, num, setStep, enabled, label }) {
-    const active = current === num;
-    return (
-      <button
-        onClick={() => enabled && setStep(num)}
-        disabled={!enabled}
-        style={{
-          padding: "8px 10px",
-          borderRadius: 10,
-          border: "1px solid #2a2f3f",
-          background: active ? "rgba(176,132,255,0.14)" : "#0d0f16",
-          color: active ? "#eef1ff" : enabled ? "#aab1c3" : "rgba(170,177,195,0.4)",
-          cursor: enabled ? "pointer" : "not-allowed",
-          fontWeight: 800,
-          fontSize: 12,
-        }}
-        title={!enabled ? "Complete previous steps first" : ""}
-      >
-        {label}
-      </button>
-    );
-  }
-
-  // Styles
-  const page = {
-    minHeight: "100vh",
-    background: "#0b0c10",
-    color: "#eef1ff",
-    fontFamily: "system-ui, sans-serif",
-  };
-
-  const wrap = {
-    maxWidth: 1200,
-    margin: "0 auto",
-    padding: 16,
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-  };
-
-  const card = {
-    border: "1px solid #2a2f3f",
-    borderRadius: 16,
-    padding: 14,
-    background: "#0e1018",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
-    overflow: "hidden",
-  };
-
-  const muted = { color: "#aab1c3" };
-
-  const input = {
-    width: "100%",
-    borderRadius: 12,
-    border: "1px solid #2a2f3f",
-    background: "#0b0c10",
-    color: "#eef1ff",
-    padding: "10px 12px",
-    outline: "none",
-  };
-
-  const btn = {
-    borderRadius: 12,
-    border: "1px solid #2a2f3f",
-    background: "#0d0f16",
-    color: "#eef1ff",
-    padding: "10px 12px",
-    fontWeight: 800,
-    cursor: "pointer",
-  };
-
-  const btnWarn = { ...btn, border: "1px solid rgba(255,214,102,0.55)", background: "rgba(255,214,102,0.12)" };
-  const btnDanger = { ...btn, border: "1px solid rgba(255,107,107,0.6)", background: "rgba(255,107,107,0.12)" };
-
-  const redCell = { border: "1px solid rgba(255,107,107,0.85)", background: "rgba(255,107,107,0.14)" };
-  const yellowCell = { border: "1px solid rgba(255,214,102,0.95)", background: "rgba(255,214,102,0.14)" };
-
-
-  return (
-    <div style={page}>
-      <div style={wrap}>
-        {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 22 }}>
-              Paraglider Trim Tuning{" "}
-              <span style={{ ...muted, fontSize: 12, fontWeight: 700 }}>v{APP_VERSION}</span>
-            </h1>
-            <div style={{ ...muted, fontSize: 12, marginTop: 6 }}>
-              Red: |Δ| ≥ tolerance. Yellow: within 3mm of tolerance.
-            </div>
-          </div>
-          <div style={{ ...muted, fontSize: 12 }}>
-            Profile (from CSV/XLSX meta): <b style={{ color: "#eef1ff" }}>{csvProfileName}</b>
-          </div>
-        </div>
-
-        {/* Safety */}
-        <div style={{ ...card, borderColor: "rgba(255,204,102,0.5)", background: "rgba(255,204,102,0.08)" }}>
-          <b>Safety notice:</b> This is an analysis/simulation tool. Trimming can be dangerous and may invalidate certification.
-          Always follow manufacturer/check-center procedures and re-measure after any change.
-        </div>
-
-        {/* Workflow */}
-        <div style={card}>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ fontWeight: 900 }}>Workflow</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <StepButton current={step} num={1} setStep={setStep} enabled={true} label="1) Import" />
-              <StepButton current={step} num={2} setStep={setStep} enabled={hasCSV} label="2) Wing layout" />
-              <StepButton current={step} num={3} setStep={setStep} enabled={hasCSV} label="3) Loops setup" />
-              <StepButton current={step} num={4} setStep={setStep} enabled={hasCSV && allGroupNames.length > 0} label="4) Trim tables + graphs" />
-            </div>
-          </div>
-          <div style={{ ...muted, fontSize: 12, marginTop: 10 }}>
-            Tip: set Step 2–3 before trimming so “before” matches the real baseline.
-          </div>
-        </div>
-
-        {/* STEP 1 */}
-        {step === 1 ? (
-          <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 1 — Import measurement CSV / Excel</div>
-            <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
-              Upload your measurement file. CSV or XLSX is supported.
-              If the file contains a correction value (Korrektur), it is applied as:
-              <br />
-              <b>corrected = rawMeasured + correction</b> (e.g. 7220 + (-507) = 6713)
-            </div>
-
-            <div style={{ height: 10 }} />
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) {
-                  setSelectedFileName(f.name);
-                  onImportFile(f);
-                }
-                e.target.value = "";
-              }}
-            />
-
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <button style={btnWarn} onClick={() => fileInputRef.current?.click()}>
-                Choose file…
-              </button>
-
-              <div style={{ ...muted, fontSize: 12 }}>
-                {selectedFileName ? (
-                  <>
-                    Selected: <b style={{ color: "#eef1ff" }}>{selectedFileName}</b>
-                  </>
-                ) : (
-                  <>No file selected.</>
-                )}
-              </div>
-            </div>
-
-            <div style={{ height: 10 }} />
-            <div style={{ padding: 12, borderRadius: 14, border: "1px solid #2a2f3f", background: "#0b0c10" }}>
-              <div style={{ fontWeight: 850, marginBottom: 6 }}>Try the app with sample data</div>
-              <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5, marginBottom: 10 }}>
-                Loads a built-in CSV example so you can run Steps 2–4 without uploading a file.
-              </div>
-              <button onClick={loadSampleData} style={btnWarn}>
-                Load sample data
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        {/* STEP 2 */}
-        {step === 2 ? (
-          <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 2 — Wing layout (profile mapping)</div>
-            <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
-              Choose the wing profile mapping so the app understands your diagram groupings (AR1/BR2/etc).
-              Imported wing name will auto-create a profile if it doesn’t exist.
-            </div>
-
-            <div style={{ height: 10 }} />
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
-                <div style={{ fontWeight: 850, marginBottom: 10 }}>Select profile</div>
-
-                <label style={{ ...muted, fontSize: 12 }}>Profile</label>
-                <select
-                  value={profileKey}
-                  onChange={(e) => setProfileKey(e.target.value)}
-                  style={{ ...input, padding: "10px 10px", marginTop: 6 }}
-                >
-                  {Object.keys(profiles)
-                    .sort((a, b) => a.localeCompare(b))
-                    .map((k) => (
-                      <option key={k} value={k}>
-                        {k}
-                      </option>
-                    ))}
-                </select>
-
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-                  <button style={btnWarn} onClick={openProfileEditor}>Edit selected profile…</button>
-                  <button style={btn} onClick={newProfileFromCurrent}>New profile (copy)…</button>
-                  <button style={btnDanger} onClick={deleteSelectedProfile}>Delete selected</button>
-                </div>
-
-                <div style={{ height: 10 }} />
-                <div style={{ ...muted, fontSize: 12 }}>
-                  Groups detected: <b style={{ color: "#eef1ff" }}>{allGroupNames.length}</b>
-                </div>
-
-                <div style={{ height: 10 }} />
-                <div style={{ ...muted, fontSize: 12 }}>
-                  Built-in profiles: <b>src/wingProfiles.json</b>. Your edits/custom profiles are saved in this browser.
-                </div>
-              </div>
-
-              <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
-                <div style={{ fontWeight: 850, marginBottom: 8 }}>Profile library (backup & share)</div>
-
-                <input
-                  ref={profilesImportRef}
-                  type="file"
-                  accept="application/json,.json"
-                  style={{ display: "none" }}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) importProfilesFromFile(f);
-                    e.target.value = "";
-                  }}
-                />
-
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-                  <button onClick={exportAllProfiles} style={btn}>Export profiles</button>
-                  <button onClick={exportCurrentProfileOnly} style={btn}>Export selected</button>
-                  <button onClick={() => profilesImportRef.current?.click()} style={btnWarn}>Import profiles JSON…</button>
-                  <button onClick={resetProfilesToBuiltIn} style={btnDanger}>Reset to built-in</button>
-                </div>
-
-                <details>
-                  <summary style={{ cursor: "pointer", color: "#aab1c3", fontSize: 12 }}>
-                    Advanced: Raw profiles JSON (power users)
-                  </summary>
-                  <div style={{ height: 8 }} />
-                  <textarea
-                    value={profileJson}
-                    onChange={(e) => {
-                      setProfileJson(e.target.value);
-                      localStorage.setItem("wingProfilesJson", e.target.value);
-                    }}
-                    style={{
-                      width: "100%",
-                      minHeight: 220,
-                      borderRadius: 12,
-                      border: "1px solid #2a2f3f",
-                      background: "#0d0f16",
-                      color: "#eef1ff",
-                      padding: 10,
-                      fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                      fontSize: 12,
-                      outline: "none",
-                    }}
-                  />
-                </details>
-              </div>
-            </div>
-
-            <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button onClick={() => setStep(3)} style={btnWarn} disabled={!hasCSV}>
-                Continue to Step 3 (Loops)
-              </button>
-              <button onClick={() => setStep(1)} style={btn}>Back</button>
-            </div>
-          </div>
-        ) : null}
-
-        {/* STEP 3 */}
-        {step === 3 ? (
-          <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 3 — Maillon loop setup (baseline)</div>
-            <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
-              Set which loop type is installed on each <b>line group</b> maillon (Left/Right). Changing AR1 affects A1–A4 etc.
-            </div>
-
-            <div style={{ height: 10 }} />
-
-          {/* Loop types (editable) */}
-<div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
-  <div style={{ fontWeight: 850, marginBottom: 10 }}>Loop types (editable)</div>
-
-  <div
-    style={{
-      display: "grid",
-      gridTemplateColumns: "minmax(320px, 1fr) minmax(360px, 520px)",
-      gap: 12,
-      alignItems: "start",
-    }}
-  >
-    {/* Left: text */}
-    <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.55 }}>
-      Negative means the loop reduces line length.
-      <div style={{ height: 6 }} />
-      Baseline uses:
-      <div style={{ height: 6 }} />
-      <div style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace", color: "#eef1ff" }}>
-        baseline = (rawMeasured + correction) + loopDelta
-      </div>
-      <div style={{ height: 8 }} />
-      Tip: keep these numbers matching your real loop set. Only one loop type per group side.
-    </div>
-
-    {/* Right: compact 2-column editor */}
-<div
-  style={{
-    display: "grid",
-    gap: 8,
-    alignItems: "stretch",
-  }}
->
-  {(() => {
-    const entries = Object.entries(loopTypes);
-    const rows = [];
-    for (let i = 0; i < entries.length; i += 2) {
-      rows.push([entries[i], entries[i + 1] || null]);
+  const changes = useMemo(() => {
+    const base = defaultMappingSnapshot || {};
+    const cur = lineToGroup || {};
+    const keys = Object.keys(cur).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const out = [];
+    for (const k of keys) {
+      const from = base[k] || "";
+      const to = cur[k] || "";
+      if (from && to && from !== to) out.push({ lineId: k, from, to });
     }
+    return out;
+  }, [defaultMappingSnapshot, lineToGroup]);
 
-    const Cell = (entry) => {
-      if (!entry) return <div />;
-      const [name, mm] = entry;
+  function buildWingProfileJSON() {
+    return {
+      schema: "trim-tuning-wing-profile-v1",
+      exportedAt: new Date().toISOString(),
+      wing: { make: meta.make || "", model: meta.model || "" },
+      step2: {
+        prefixByLetter: deepClone(prefixByLetter),
+        groupCountByLetter: deepClone(groupCountByLetter),
+        rangesByLetter: deepClone(rangesByLetter),
+        lineToGroup: deepClone(lineToGroup),
+        defaultMappingSnapshot: deepClone(defaultMappingSnapshot),
+      },
+      diagram: { wingOutline: diagramWingOutline, compact: diagramCompact },
+    };
+  }
+  function exportWingProfileJSON() {
+    if (!loaded) return alert("Load a wing data file first.");
+    const name = String(profileName || "").trim() || `${meta.make || "Wing"}-${meta.model || "Profile"}`.replace(/\s+/g, "-");
+    downloadJSON(buildWingProfileJSON(), `${name}.json`);
+  }
+  async function importWingProfileJSON(file) {
+    if (!file) return;
+    if (!loaded) return alert("Import wing data first, then load a profile JSON.");
+    try {
+      const text = await readFileText(file);
+      const parsed = JSON.parse(text);
+      if (!parsed || parsed.schema !== "trim-tuning-wing-profile-v1") return alert("Not a valid wing profile JSON.");
 
-      return (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "max-content 86px",
-            gap: 8,
-            alignItems: "center",
-            minWidth: 0,
-          }}
-        >
-          <div style={{ fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" }}>{name}</div>
+      const s2 = parsed.step2 || {};
+      if (s2.prefixByLetter) setPrefixByLetter((p) => ({ ...p, ...s2.prefixByLetter }));
+      if (s2.groupCountByLetter) setGroupCountByLetter((p) => ({ ...p, ...s2.groupCountByLetter }));
+      if (s2.rangesByLetter) setRangesByLetter((p) => ({ ...p, ...s2.rangesByLetter }));
+      if (s2.lineToGroup) setLineToGroup((p) => ({ ...(p || {}), ...s2.lineToGroup }));
+      if (s2.defaultMappingSnapshot) setDefaultMappingSnapshot(s2.defaultMappingSnapshot);
+
+      if (parsed.diagram && typeof parsed.diagram === "object") {
+        if (typeof parsed.diagram.wingOutline === "boolean") setDiagramWingOutline(parsed.diagram.wingOutline);
+        if (typeof parsed.diagram.compact === "boolean") setDiagramCompact(parsed.diagram.compact);
+      }
+
+      setStep(2);
+      alert("Profile loaded.");
+    } catch (e) {
+      console.error(e);
+      alert("Failed to load profile JSON.");
+    }
+  }
+
+  function PrefixTile({ letter }) {
+    // Reduced overall bucket width + aligned left
+    return (
+      <div
+        style={{
+          padding: 8,
+          borderRadius: 12,
+          border: `1px solid ${theme.border}`,
+          background: "rgba(255,255,255,0.03)",
+          width: 160,
+        }}
+      >
+        <div style={{ fontWeight: 950, fontSize: 12 }}>
+          {letter} prefix <span style={{ opacity: 0.7, fontWeight: 850 }}>({(prefixByLetter[letter] || "") + "1L"} / {(prefixByLetter[letter] || "") + "1R"})</span>
+        </div>
+        <div style={{ marginTop: 6 }}>
           <input
-            value={mm}
-            onChange={(e) => {
-              const v = n(e.target.value);
-              const next = { ...loopTypes, [name]: Number.isFinite(v) ? v : 0 };
-              persistLoopTypes(next);
-            }}
+            value={prefixByLetter[letter] || ""}
+            onChange={(e) => setPrefixByLetter((p) => ({ ...p, [letter]: e.target.value.toUpperCase() }))}
             style={{
-              width: "100%",
-              minWidth: 0,
-              borderRadius: 10,
-              border: "1px solid #2a2f3f",
-              background: "#0b0c10",
-              color: "#eef1ff",
-              padding: "6px 8px",
+              width: 68,
+              padding: "7px 9px",
+              borderRadius: 12,
+              border: `1px solid ${theme.border}`,
+              background: "rgba(0,0,0,0.68)",
+              color: theme.text,
               outline: "none",
-              fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-              textAlign: "right",
-              fontSize: 12,
+              fontWeight: 950,
+              textTransform: "uppercase",
+              fontSize: 13,
             }}
-            inputMode="numeric"
-            aria-label={`${name} mm`}
           />
         </div>
-      );
-    };
-
-    return rows.map((pair, idx) => (
-      <div
-        key={`pairrow-${idx}`}
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr", // ✅ two loop-types per row
-          gap: 12,
-          alignItems: "center",
-        }}
-      >
-        {Cell(pair[0])}
-        {Cell(pair[1])}
-      </div>
-    ));
-  })()}
-</div>
-
-  </div>
-
-  <div style={{ height: 12 }} />
-
-  <div style={{ padding: 12, borderRadius: 14, border: "1px solid #2a2f3f", background: "#0b0c10" }}>
-    <div style={{ fontWeight: 850, marginBottom: 8 }}>Quick tools</div>
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-      <button onClick={applyAllSL} style={btn}>All SL</button>
-      <button onClick={mirrorLtoR} style={btn}>Mirror L → R</button>
-      <button onClick={mirrorRtoL} style={btn}>Mirror R → L</button>
-    </div>
-  </div>
-</div>
-
-
-
-
-            <div style={{ height: 12 }} />
-
-            <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
-              <div style={{ fontWeight: 850, marginBottom: 8 }}>Loops installed per line group</div>
-
-              {!allGroupNames.length ? (
-                <div style={{ ...muted, fontSize: 12 }}>No groups found. Check Step 2 mapping.</div>
-              ) : (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
-                    <thead>
-                      <tr style={{ color: "#aab1c3", fontSize: 12 }}>
-                        <th style={{ textAlign: "left", padding: "8px 8px" }}>Group</th>
-                        <th style={{ textAlign: "left", padding: "8px 8px" }}>Lines included</th>
-                        <th style={{ textAlign: "left", padding: "8px 8px" }}>Left loop</th>
-                        <th style={{ textAlign: "right", padding: "8px 8px" }}>Δ(mm)</th>
-                        <th style={{ textAlign: "left", padding: "8px 8px" }}>Right loop</th>
-                        <th style={{ textAlign: "right", padding: "8px 8px" }}>Δ(mm)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {allGroupNames.map((g) => {
-                        const kL = `${g}|L`;
-                        const kR = `${g}|R`;
-                        const tL = groupLoopSetup[kL] || "SL";
-                        const tR = groupLoopSetup[kR] || "SL";
-                        const dL = Number.isFinite(loopTypes?.[tL]) ? loopTypes[tL] : 0;
-                        const dR = Number.isFinite(loopTypes?.[tR]) ? loopTypes[tR] : 0;
-                        const lines = groupToLines.get(g) || [];
-
-                        return (
-                          <tr key={g} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
-                            <td style={{ padding: "8px 8px", fontWeight: 900 }}>{g}</td>
-                            <td style={{ padding: "8px 8px", color: "#aab1c3", fontSize: 12 }}>
-                              {lines.length ? lines.join(", ") : "—"}
-                            </td>
-                            <td style={{ padding: "8px 8px" }}>
-                              <select
-                                value={tL}
-                                onChange={(e) => persistGroupLoopSetup({ ...groupLoopSetup, [kL]: e.target.value })}
-                                style={{
-                                  width: 140,
-                                  borderRadius: 10,
-                                  border: "1px solid #2a2f3f",
-                                  background: "#0d0f16",
-                                  color: "#eef1ff",
-                                  padding: "8px 10px",
-                                  outline: "none",
-                                }}
-                              >
-                                {Object.keys(loopTypes).map((name) => (
-                                  <option key={name} value={name}>{name}</option>
-                                ))}
-                              </select>
-                            </td>
-                            <td style={{ padding: "8px 8px", textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace", color: "#aab1c3" }}>
-                              {dL > 0 ? `+${dL}` : `${dL}`}
-                            </td>
-                            <td style={{ padding: "8px 8px" }}>
-                              <select
-                                value={tR}
-                                onChange={(e) => persistGroupLoopSetup({ ...groupLoopSetup, [kR]: e.target.value })}
-                                style={{
-                                  width: 140,
-                                  borderRadius: 10,
-                                  border: "1px solid #2a2f3f",
-                                  background: "#0d0f16",
-                                  color: "#eef1ff",
-                                  padding: "8px 10px",
-                                  outline: "none",
-                                }}
-                              >
-                                {Object.keys(loopTypes).map((name) => (
-                                  <option key={name} value={name}>{name}</option>
-                                ))}
-                              </select>
-                            </td>
-                            <td style={{ padding: "8px 8px", textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace", color: "#aab1c3" }}>
-                              {dR > 0 ? `+${dR}` : `${dR}`}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button onClick={() => setStep(4)} style={btnWarn} disabled={!allGroupNames.length}>
-                Continue to Step 4 (Tables + Graphs)
-              </button>
-              <button onClick={() => setStep(2)} style={btn}>Back</button>
-            </div>
-          </div>
-        ) : null}
-
-        {/* STEP 4 */}
-        {step === 4 ? (
-          <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 8 }}>Step 4 — Tables + Graphs</div>
-
-            {/* Meta controls */}
-            <div style={{ ...card, background: "#0e1018" }}>
-              <div style={{ fontWeight: 850, marginBottom: 8 }}>Meta controls</div>
-              <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
-                Correction is applied to raw measured values (Ist):
-                <br />
-                <b>corrected = rawMeasured + correction</b> (e.g. 7220 + (-507) = 6713)
-              </div>
-
-              <div style={{ height: 10 }} />
-
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-                <div style={{ minWidth: 140 }}>
-                  <div style={{ ...muted, fontSize: 12, marginBottom: 6 }}>Tolerance (mm)</div>
-                  <input
-                    value={meta.tolerance ?? 0}
-                    onChange={(e) => setMeta((m) => ({ ...m, tolerance: n(e.target.value) ?? 0 }))}
-                    style={{ ...input, textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace", width: 110, fontSize: 16, color: "#ff4d4d" }}
-                    inputMode="numeric"
-                  />
-                </div>
-
-                <div style={{ minWidth: 140 }}>
-                  <div style={{ ...muted, fontSize: 12, marginBottom: 6 }}>Correction (mm)</div>
-                  <input
-                    value={meta.correction ?? 0}
-                    onChange={(e) => setMeta((m) => ({ ...m, correction: n(e.target.value) ?? 0 }))}
-                    style={{ ...input, textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace", width: 110, fontSize: 16, color: "#ff4d4d" }}
-                    inputMode="numeric"
-                  />
-                </div>
-
-                <label style={{ display: "flex", gap: 10, alignItems: "center", ...muted, fontSize: 12, paddingBottom: 8 }}>
-                  <input
-                    type="checkbox"
-                    checked={showCorrected}
-                    onChange={(e) => setShowCorrected(e.target.checked)}
-                  />
-                  Show corrected values (Ist + Korrektur)
-                </label>
-
-                <button onClick={resetAdjustments} style={btnDanger}>Reset all adjustments</button>
-              </div>
-
-              {/* Zeroing wizard */}
-              <div style={{ marginTop: 10, padding: 12, borderRadius: 14, border: "1px solid #2a2f3f", background: "#0b0c10" }}>
-                <div style={{ fontWeight: 850, marginBottom: 6 }}>Zeroing wizard (auto-suggest correction)</div>
-                <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5 }}>
-                  Suggests a correction using the <b>median</b> of (Soll − Ist) across all lines. This removes a consistent offset
-                  (e.g. ≈ -507mm).
-                </div>
-
-                <div style={{ height: 10 }} />
-
-                <button
-                  style={btnWarn}
-                  onClick={() => {
-                    const s = suggestCorrectionFromWideRows(wideRows);
-                    if (s == null) return alert("Not enough data to suggest a correction.");
-                    const ok = confirm(`Suggested correction: ${s}mm\n\nApply this to Correction now?`);
-                    if (!ok) return;
-                    setMeta((m) => ({ ...m, correction: s }));
-                  }}
-                >
-                  Suggest correction (median)
-                </button>
-              </div>
-            </div>
-
-            <div style={{ height: 12 }} />
-
-            {/* Filters (Rows + Groups) */}
-            <div style={{ ...card, background: "#0e1018" }}>
-              <div style={{ fontWeight: 900, marginBottom: 8 }}>Filters (used by Pitch trim + Δ chart)</div>
-              <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
-                Choose which <b>rows</b> (A/B/C/D) and <b>groups</b> (AR1, BR1, …) are included in calculations.
-              </div>
-
-              <div style={{ height: 10 }} />
-
-              {/* Row filters */}
-              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                <div style={{ fontWeight: 850, marginRight: 8 }}>Rows:</div>
-
-                {["A", "B", "C", "D"].map((L) => (
-                  <label key={L} style={{ display: "flex", gap: 8, alignItems: "center", ...muted, fontSize: 12 }}>
-                    <input
-                      type="checkbox"
-                      checked={!!includedRows?.[L]}
-                      onChange={(e) => setIncludedRows({ ...(includedRows || {}), [L]: e.target.checked })}
-                    />
-                    {L}
-                  </label>
-                ))}
-
-                <button
-                  style={btn}
-                  onClick={() => setIncludedRows({ A: true, B: true, C: true, D: true })}
-                  title="Include A, B, C, D"
-                >
-                  Select all rows
-                </button>
-                <button
-                  style={btn}
-                  onClick={() => setIncludedRows({ A: false, B: false, C: false, D: false })}
-                  title="Exclude A, B, C, D"
-                >
-                  Clear rows
-                </button>
-              </div>
-
-              <div style={{ height: 10 }} />
-
-              {/* Group filters */}
-              <div style={{ fontWeight: 850, marginBottom: 6 }}>Groups:</div>
-
-              <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
-                Tip: If no groups are explicitly selected, the app treats it as <b>all groups included</b>.
-              </div>
-
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-                <button
-                  style={btn}
-                  onClick={() => {
-                    const next = {};
-                    for (const g of allGroupNames || []) next[g] = true;
-                    setIncludedGroups(next);
-                  }}
-                >
-                  Select all groups
-                </button>
-
-                <button
-                  style={btn}
-                  onClick={() => setIncludedGroups({})}
-                  title="Empty = treat as all included (simple reset)"
-                >
-                  Reset groups (all)
-                </button>
-
-                <button
-                  style={btn}
-                  onClick={() => {
-                    const next = {};
-                    for (const g of allGroupNames || []) next[g] = false;
-                    setIncludedGroups(next);
-                  }}
-                >
-                  Clear groups
-                </button>
-              </div>
-
-              {!allGroupNames?.length ? (
-                <div style={{ ...muted, fontSize: 12 }}>No groups found yet. Import a file + mapping first.</div>
-              ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
-                  {allGroupNames.map((g) => {
-                    const keys = Object.keys(includedGroups || {});
-                    const checked = keys.length === 0 ? true : !!includedGroups[g]; // empty map => all included
-                    return (
-                      <label
-                        key={g}
-                        style={{
-                          display: "flex",
-                          gap: 8,
-                          alignItems: "center",
-                          padding: "8px 10px",
-                          borderRadius: 12,
-                          border: "1px solid #2a2f3f",
-                          background: "#0b0c10",
-                          cursor: "pointer",
-                          userSelect: "none",
-                          fontSize: 12,
-                          color: "#aab1c3",
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => {
-                            const next = { ...(includedGroups || {}) };
-                            // If map is empty, create explicit "all true" first so toggling one doesn't feel weird
-                            if (Object.keys(next).length === 0) {
-                              for (const gg of allGroupNames) next[gg] = true;
-                            }
-                            next[g] = e.target.checked;
-                            setIncludedGroups(next);
-                          }}
-                        />
-                        <span style={{ fontWeight: 900, color: "#eef1ff" }}>{g}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div style={{ height: 12 }} />
-
-
-
-{/* Adjustment UI */}
-            {/* Adjustment UI */}
-            <div style={{ ...card, background: "#0e1018" }}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 850, marginBottom: 6 }}>
-                    Trim adjustments per line group (mm)
-                  </div>
-                  <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
-                    These simulate changes you apply during trimming.
-                    <br />
-                    <b>Before</b> uses Step 3 baseline loops. <b>After</b> uses Step 4 loop changes + Adjust
-                    mm.
-                    <br />
-                    Positive = longer; negative = shorter.
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button onClick={clearAllLoopChanges} style={btn}>
-                    Clear all loop changes (Step 4)
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ height: 10 }} />
-
-              {!allGroupNames.length ? (
-                <div style={{ ...muted, fontSize: 12 }}>No groups found. Check Step 2 mapping.</div>
-              ) : (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1100 }}>
-                    <thead>
-                      <tr style={{ color: "#aab1c3", fontSize: 12 }}>
-                        <th style={{ textAlign: "left", padding: "6px 8px" }}>Group</th>
-
-                        <th style={{ textAlign: "left", padding: "6px 8px" }}>Loop change L</th>
-                        <th style={{ textAlign: "left", padding: "6px 8px" }}>Loop change R</th>
-
-                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust L (mm)</th>
-                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Adjust R (mm)</th>
-
-                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ before</th>
-                        <th style={{ textAlign: "right", padding: "6px 8px" }}>Avg Δ after</th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {allGroupNames.map((g) => {
-                        const kL = `${g}|L`;
-                        const kR = `${g}|R`;
-
-                        const aL = getAdjustment(adjustments, g, "L");
-                        const aR = getAdjustment(adjustments, g, "R");
-
-                        // Step 4 overrides (blank means "no change")
-                        const chL = (groupLoopChange && groupLoopChange[kL]) || "";
-                        const chR = (groupLoopChange && groupLoopChange[kR]) || "";
-
-                        // For label
-                        const effectiveL = getEffectiveLoopType(g, "L");
-                        const effectiveR = getEffectiveLoopType(g, "R");
-
-                        // Stats (already computed elsewhere)
-                        const statL = groupStats.find((s) => s.groupName === g && s.side === "L");
-                        const statR = groupStats.find((s) => s.groupName === g && s.side === "R");
-                        const beforeAvg = avg([statL?.before, statR?.before].filter((x) => Number.isFinite(x)));
-                        const afterAvg = avg([statL?.after, statR?.after].filter((x) => Number.isFinite(x)));
-
-                        const tol = meta.tolerance || 0;
-                        const sevAfter = severity(afterAvg, tol);
-
-                        return (
-                          <tr key={g} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
-                            <td style={{ padding: "6px 8px", fontWeight: 900 }}>{g}</td>
-
-                            {/* Loop change L */}
-                            <td style={{ padding: "6px 8px" }}>
-                              <select
-                                value={chL}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  const next = { ...(groupLoopChange || {}) };
-                                  if (!v) delete next[kL];
-                                  else next[kL] = v;
-                                  persistGroupLoopChange(next);
-                                }}
-                                style={{
-                                  width: 190,
-                                  borderRadius: 10,
-                                  border: "1px solid #2a2f3f",
-                                  background: "#0d0f16",
-                                  color: "#eef1ff",
-                                  padding: "6px 10px",
-                                  outline: "none",
-                                  fontSize: 12,
-                                }}
-                                title="Step 4 loop change (Left). Leave blank to keep Step 3 baseline."
-                              >
-                                <option value="">
-                                  — no change — (uses {getBaselineLoopType(g, "L")})
-                                </option>
-                                {Object.keys(loopTypes).map((name) => (
-                                  <option key={name} value={name}>
-                                    {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
-                                  </option>
-                                ))}
-                              </select>
-                              <div style={{ ...muted, fontSize: 11, marginTop: 4 }}>
-                                After uses: <b>{effectiveL}</b>
-                              </div>
-                            </td>
-
-                            {/* Loop change R */}
-                            <td style={{ padding: "6px 8px" }}>
-                              <select
-                                value={chR}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  const next = { ...(groupLoopChange || {}) };
-                                  if (!v) delete next[kR];
-                                  else next[kR] = v;
-                                  persistGroupLoopChange(next);
-                                }}
-                                style={{
-                                  width: 190,
-                                  borderRadius: 10,
-                                  border: "1px solid #2a2f3f",
-                                  background: "#0d0f16",
-                                  color: "#eef1ff",
-                                  padding: "6px 10px",
-                                  outline: "none",
-                                  fontSize: 12,
-                                }}
-                                title="Step 4 loop change (Right). Leave blank to keep Step 3 baseline."
-                              >
-                                <option value="">
-                                  — no change — (uses {getBaselineLoopType(g, "R")})
-                                </option>
-                                {Object.keys(loopTypes).map((name) => (
-                                  <option key={name} value={name}>
-                                    {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
-                                  </option>
-                                ))}
-                              </select>
-                              <div style={{ ...muted, fontSize: 11, marginTop: 4 }}>
-                                After uses: <b>{effectiveR}</b>
-                              </div>
-                            </td>
-
-                            {/* Adjust L (dropdown + input) */}
-                            <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: 8,
-                                  justifyContent: "flex-end",
-                                  alignItems: "center",
-                                  flexWrap: "wrap",
-                                }}
-                              >
-                                <select
-                                  value={loopTypeFromAdjustment(aL)}
-                                  onChange={(e) => {
-                                    const t = e.target.value;
-                                    if (!t) return; // Custom
-
-                                    // baseline loop is Step 3 installed loop for this group side
-                                    const installedType = getBaselineLoopType(g, "L") || "SL";
-                                    const chosen = Number(loopTypes?.[t] ?? 0);
-                                    const installed = Number(loopTypes?.[installedType] ?? 0);
-
-                                    // adjustment = chosen - installed (relative to baseline loop)
-                                    const adj = Number.isFinite(chosen - installed) ? chosen - installed : 0;
-                                    persistAdjustments({ ...adjustments, [kL]: adj });
-                                  }}
-                                  style={{
-                                    borderRadius: 10,
-                                    border: "1px solid #2a2f3f",
-                                    background: "#0d0f16",
-                                    color: "#eef1ff",
-                                    padding: "6px 8px",
-                                    outline: "none",
-                                    fontSize: 12,
-                                  }}
-                                  title="Pick a loop type to auto-fill Adjust L (relative to Step 3 baseline)"
-                                >
-                                  <option value="">Custom</option>
-                                  {Object.keys(loopTypes).map((name) => (
-                                    <option key={name} value={name}>
-                                      {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
-                                    </option>
-                                  ))}
-                                </select>
-
-                                <input
-                                  value={aL}
-                                  onChange={(e) => persistAdjustments({ ...adjustments, [kL]: n(e.target.value) ?? 0 })}
-                                  style={{
-                                    ...input,
-                                    width: 110,
-                                    padding: "6px 8px",
-                                    textAlign: "right",
-                                    fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                                  }}
-                                  inputMode="numeric"
-                                  title="Manual override (mm)"
-                                />
-                              </div>
-                            </td>
-
-                            {/* Adjust R (dropdown + input) */}
-                            <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: 8,
-                                  justifyContent: "flex-end",
-                                  alignItems: "center",
-                                  flexWrap: "wrap",
-                                }}
-                              >
-                                <select
-                                  value={loopTypeFromAdjustment(aR)}
-                                  onChange={(e) => {
-                                    const t = e.target.value;
-                                    if (!t) return; // Custom
-
-                                    const installedType = getBaselineLoopType(g, "R") || "SL";
-                                    const chosen = Number(loopTypes?.[t] ?? 0);
-                                    const installed = Number(loopTypes?.[installedType] ?? 0);
-
-                                    const adj = Number.isFinite(chosen - installed) ? chosen - installed : 0;
-                                    persistAdjustments({ ...adjustments, [kR]: adj });
-                                  }}
-                                  style={{
-                                    borderRadius: 10,
-                                    border: "1px solid #2a2f3f",
-                                    background: "#0d0f16",
-                                    color: "#eef1ff",
-                                    padding: "6px 8px",
-                                    outline: "none",
-                                    fontSize: 12,
-                                  }}
-                                  title="Pick a loop type to auto-fill Adjust R (relative to Step 3 baseline)"
-                                >
-                                  <option value="">Custom</option>
-                                  {Object.keys(loopTypes).map((name) => (
-                                    <option key={name} value={name}>
-                                      {name} ({loopTypes[name] > 0 ? `+${loopTypes[name]}` : `${loopTypes[name]}`}mm)
-                                    </option>
-                                  ))}
-                                </select>
-
-                                <input
-                                  value={aR}
-                                  onChange={(e) => persistAdjustments({ ...adjustments, [kR]: n(e.target.value) ?? 0 })}
-                                  style={{
-                                    ...input,
-                                    width: 110,
-                                    padding: "6px 8px",
-                                    textAlign: "right",
-                                    fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                                  }}
-                                  inputMode="numeric"
-                                  title="Manual override (mm)"
-                                />
-                              </div>
-                            </td>
-
-                            <td
-                              style={{
-                                padding: "6px 8px",
-                                textAlign: "right",
-                                color: "#aab1c3",
-                                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                              }}
-                            >
-                              {Number.isFinite(beforeAvg) ? Math.round(beforeAvg) : "—"}
-                            </td>
-
-                            <td
-                              style={{
-                                padding: "6px 8px",
-                                textAlign: "right",
-                                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                                ...(sevAfter === "red" ? redCell : sevAfter === "yellow" ? yellowCell : null),
-                              }}
-                            >
-                              {Number.isFinite(afterAvg) ? Math.round(afterAvg) : "—"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            <div style={{ height: 12 }} />
-
-
-            {/* Pitch Trim (A − D) */}
-            <div style={{ ...card, background: "#0e1018" }}>
-              <div style={{ fontWeight: 900, marginBottom: 8 }}>Pitch trim (A − D)</div>
-              <div style={{ ...muted, fontSize: 12, lineHeight: 1.5 }}>
-                We compute the average <b>AFTER Δ</b> per row (A/B/C/D), then <b>Pitch = A − D</b>.
-                <br />
-                <i>AFTER Δ = (Ist {typeof showCorrected === "undefined" || showCorrected ? "+ Korrektur " : ""}+ loop + adjustment − Soll)</i>
-              </div>
-
-              <div style={{ height: 10 }} />
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-                  gap: 10,
-                  alignItems: "stretch",
-                }}
-              >
-                {/* A */}
-                <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0b0c10" }}>
-                  <div style={{ ...muted, fontSize: 12, marginBottom: 6 }}>Row A avg Δ</div>
-                  <div
-                    style={{
-                      fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                      fontSize: 18,
-                      fontWeight: 900,
-                      ...(severity(pitchTrim.A, meta.tolerance) === "red"
-                        ? { color: "#ff6b6b" }
-                        : severity(pitchTrim.A, meta.tolerance) === "yellow"
-                        ? { color: "#ffd166" }
-                        : { color: "#cde6a1" }),
-                    }}
-                  >
-                    {Number.isFinite(pitchTrim.A) ? Math.round(pitchTrim.A) + " mm" : "—"}
-                  </div>
-                  <div style={{ ...muted, fontSize: 11 }}>{pitchTrim.count.A} lines</div>
-                </div>
-
-                {/* B */}
-                <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0b0c10" }}>
-                  <div style={{ ...muted, fontSize: 12, marginBottom: 6 }}>Row B avg Δ</div>
-                  <div
-                    style={{
-                      fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                      fontSize: 18,
-                      fontWeight: 900,
-                      ...(severity(pitchTrim.B, meta.tolerance) === "red"
-                        ? { color: "#ff6b6b" }
-                        : severity(pitchTrim.B, meta.tolerance) === "yellow"
-                        ? { color: "#ffd166" }
-                        : { color: "#cde6a1" }),
-                    }}
-                  >
-                    {Number.isFinite(pitchTrim.B) ? Math.round(pitchTrim.B) + " mm" : "—"}
-                  </div>
-                  <div style={{ ...muted, fontSize: 11 }}>{pitchTrim.count.B} lines</div>
-                </div>
-
-                {/* C */}
-                <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0b0c10" }}>
-                  <div style={{ ...muted, fontSize: 12, marginBottom: 6 }}>Row C avg Δ</div>
-                  <div
-                    style={{
-                      fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                      fontSize: 18,
-                      fontWeight: 900,
-                      ...(severity(pitchTrim.C, meta.tolerance) === "red"
-                        ? { color: "#ff6b6b" }
-                        : severity(pitchTrim.C, meta.tolerance) === "yellow"
-                        ? { color: "#ffd166" }
-                        : { color: "#cde6a1" }),
-                    }}
-                  >
-                    {Number.isFinite(pitchTrim.C) ? Math.round(pitchTrim.C) + " mm" : "—"}
-                  </div>
-                  <div style={{ ...muted, fontSize: 11 }}>{pitchTrim.count.C} lines</div>
-                </div>
-
-                {/* D */}
-                <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0b0c10" }}>
-                  <div style={{ ...muted, fontSize: 12, marginBottom: 6 }}>Row D avg Δ</div>
-                  <div
-                    style={{
-                      fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                      fontSize: 18,
-                      fontWeight: 900,
-                      ...(severity(pitchTrim.D, meta.tolerance) === "red"
-                        ? { color: "#ff6b6b" }
-                        : severity(pitchTrim.D, meta.tolerance) === "yellow"
-                        ? { color: "#ffd166" }
-                        : { color: "#cde6a1" }),
-                    }}
-                  >
-                    {Number.isFinite(pitchTrim.D) ? Math.round(pitchTrim.D) + " mm" : "—"}
-                  </div>
-                  <div style={{ ...muted, fontSize: 11 }}>{pitchTrim.count.D} lines</div>
-                </div>
-
-                {/* Pitch = A − D */}
-                <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0b0c10" }}>
-                  <div style={{ ...muted, fontSize: 12, marginBottom: 6 }}>Pitch (A − D)</div>
-                  <div
-                    style={{
-                      fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                      fontSize: 18,
-                      fontWeight: 900,
-                      textAlign: "left",
-                      ...(severity(pitchTrim.pitch, meta.tolerance) === "red"
-                        ? { color: "#ff6b6b" }
-                        : severity(pitchTrim.pitch, meta.tolerance) === "yellow"
-                        ? { color: "#ffd166" }
-                        : { color: "#cde6a1" }),
-                    }}
-                  >
-                    {Number.isFinite(pitchTrim.pitch) ? Math.round(pitchTrim.pitch) + " mm" : "—"}
-                  </div>
-                  <div style={{ ...muted, fontSize: 11 }}>
-                    {Number.isFinite(pitchTrim.pitch)
-                      ? pitchTrim.pitch > 0
-                        ? "Nose up (A longer than D)"
-                        : pitchTrim.pitch < 0
-                        ? "Nose down (A shorter than D)"
-                        : "Neutral"
-                      : "—"}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ height: 12 }} />
-
-
-            {/* Graph controls */}
-            <div style={{ ...card, background: "#0e1018" }}>
-              <div style={{ fontWeight: 850, marginBottom: 8 }}>Graphs</div>
-              <div style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
-                Before vs After overlay uses Δ = (after - nominal). Target is 0mm (factory trim).
-              </div>
-
-              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                {["A", "B", "C", "D"].map((L) => (
-                  <label key={L} style={{ display: "flex", gap: 8, alignItems: "center", ...muted, fontSize: 12 }}>
-                    <input
-                      type="checkbox"
-                      checked={!!chartLetters[L]}
-                      onChange={(e) => setChartLetters({ ...chartLetters, [L]: e.target.checked })}
-                    />
-                    {L}
-                  </label>
-                ))}
-              </div>
-
-              <div style={{ height: 10 }} />
-
-              <DeltaLineChart
-                title="Δ Line chart (Before vs After) — hover points"
-                points={chartPoints}
-                tolerance={meta.tolerance || 0}
-              />
-
-              <div style={{ height: 12 }} />
-
-              <WingProfileChart
-                title="Wing profile (Group average Δ)"
-                groupStats={groupStats}
-                tolerance={meta.tolerance || 0}
-              />
-
-              <div style={{ height: 12 }} />
-
-              <RearViewWingChart
-                wideRows={wideRows}
-                activeProfile={activeProfile}
-                tolerance={meta.tolerance || 0}
-                showCorrected={showCorrected}
-                correction={meta.correction || 0}
-                adjustments={adjustments}
-                loopTypes={loopTypes}
-                groupLoopSetup={groupLoopSetup}
-              />
-            </div>
-
-            <div style={{ height: 12 }} />
-
-            {/* Tables */}
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
-              <BlockTable
-                title="A"
-                rows={compactBlocks.A}
-                meta={meta}
-                activeProfile={activeProfile}
-                adjustments={adjustments}
-                loopDeltaFor={loopDeltaFor}
-                input={input}
-                redCell={redCell}
-                yellowCell={yellowCell}
-                setCell={setCell}
-                blockKey="A"
-                showCorrected={showCorrected}
-              />
-              <BlockTable
-                title="B"
-                rows={compactBlocks.B}
-                meta={meta}
-                activeProfile={activeProfile}
-                adjustments={adjustments}
-                loopDeltaFor={loopDeltaFor}
-                input={input}
-                redCell={redCell}
-                yellowCell={yellowCell}
-                setCell={setCell}
-                blockKey="B"
-                showCorrected={showCorrected}
-              />
-              <BlockTable
-                title="C"
-                rows={compactBlocks.C}
-                meta={meta}
-                activeProfile={activeProfile}
-                adjustments={adjustments}
-                loopDeltaFor={loopDeltaFor}
-                input={input}
-                redCell={redCell}
-                yellowCell={yellowCell}
-                setCell={setCell}
-                blockKey="C"
-                showCorrected={showCorrected}
-              />
-              <BlockTable
-                title="D"
-                rows={compactBlocks.D}
-                meta={meta}
-                activeProfile={activeProfile}
-                adjustments={adjustments}
-                loopDeltaFor={loopDeltaFor}
-                input={input}
-                redCell={redCell}
-                yellowCell={yellowCell}
-                setCell={setCell}
-                blockKey="D"
-                showCorrected={showCorrected}
-              />
-            </div>
-
-            <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button onClick={() => setStep(3)} style={btn}>Back to Step 3</button>
-              <button onClick={() => setStep(2)} style={btn}>Back to Step 2</button>
-            </div>
-          </div>
-        ) : null}
-
-        {/* Guided Profile Editor Modal */}
-        {isProfileEditorOpen ? (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,0.6)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 16,
-              zIndex: 9999,
-            }}
-            onMouseDown={(e) => {
-              if (e.target === e.currentTarget) setIsProfileEditorOpen(false);
-            }}
-          >
-            <div
-              style={{
-                width: "min(1100px, 100%)",
-                maxHeight: "92vh",
-                overflow: "auto",
-                borderRadius: 16,
-                border: "1px solid #2a2f3f",
-                background: "#11131a",
-                padding: 12,
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-                <div style={{ fontWeight: 950, fontSize: 16 }}>Wing Profile Editor</div>
-                <button style={btn} onClick={() => setIsProfileEditorOpen(false)}>Close</button>
-              </div>
-
-              <div style={{ height: 10 }} />
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
-                  <div style={{ fontWeight: 850, marginBottom: 8 }}>Profile basics</div>
-
-                  <label style={{ color: "#aab1c3", fontSize: 12 }}>Profile name</label>
-                  <input
-                    value={draftProfileKey}
-                    onChange={(e) => setDraftProfileKey(e.target.value)}
-                    style={{ ...input, marginTop: 6 }}
-                  />
-
-                  <div style={{ height: 10 }} />
-
-                  <label style={{ color: "#aab1c3", fontSize: 12 }}>mm per loop (step size)</label>
-                  <input
-                    value={draftProfile?.mmPerLoop ?? 10}
-                    onChange={(e) => setDraftProfile({ ...draftProfile, mmPerLoop: n(e.target.value) ?? 10 })}
-                    style={{ ...input, marginTop: 6 }}
-                    inputMode="numeric"
-                  />
-
-                  <div style={{ height: 10 }} />
-                  <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5 }}>
-                    Hints:
-                    <ul style={{ margin: "8px 0 0 18px" }}>
-                      <li>Ranges should match your rigging diagram groupings.</li>
-                      <li>Example: A1–A4 → AR1 means changes on AR1 affect all A1..A4 lines.</li>
-                      <li>Keep ranges non-overlapping for best results.</li>
-                    </ul>
-                  </div>
-
-                  <div style={{ height: 12 }} />
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button style={btnWarn} onClick={saveDraftProfile}>Save profile</button>
-                    <button style={btn} onClick={() => setIsProfileEditorOpen(false)}>Cancel</button>
-                  </div>
-                </div>
-
-                <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                    <div style={{ fontWeight: 850 }}>Advanced (JSON)</div>
-                    <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#aab1c3", fontSize: 12 }}>
-                      <input
-                        type="checkbox"
-                        checked={showAdvancedJson}
-                        onChange={(e) => setShowAdvancedJson(e.target.checked)}
-                      />
-                      Show JSON
-                    </label>
-                  </div>
-
-                  {showAdvancedJson ? (
-                    <textarea
-                      value={JSON.stringify(draftProfile || {}, null, 2)}
-                      onChange={(e) => {
-                        try {
-                          const obj = JSON.parse(e.target.value);
-                          setDraftProfile(obj);
-                        } catch {
-                          // ignore while typing invalid JSON
-                        }
-                      }}
-                      style={{
-                        width: "100%",
-                        minHeight: 240,
-                        borderRadius: 12,
-                        border: "1px solid #2a2f3f",
-                        background: "#0d0f16",
-                        color: "#eef1ff",
-                        padding: 10,
-                        fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                        fontSize: 12,
-                        outline: "none",
-                        marginTop: 10,
-                      }}
-                    />
-                  ) : (
-                    <div style={{ color: "#aab1c3", fontSize: 12, marginTop: 10 }}>
-                      Use the guided table editor. Enable JSON only for edge cases.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div style={{ height: 12 }} />
-              <MappingEditor draftProfile={draftProfile} setDraftProfile={setDraftProfile} btn={btn} />
-            </div>
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-
-
-/* ------------------------- Guided Mapping Editor ------------------------- */
-
-function MappingEditor({ draftProfile, setDraftProfile, btn }) {
-  const mapping = draftProfile.mapping || { A: [], B: [], C: [], D: [] };
-  const letters = ["A", "B", "C", "D"];
-
-  function setRows(letter, rows) {
-    const next = { ...draftProfile, mapping: { ...mapping, [letter]: rows } };
-    setDraftProfile(next);
-  }
-
-  function addRow(letter) {
-    const rows = (mapping[letter] || []).slice();
-    rows.push([1, 1, `${letter}R1`]);
-    setRows(letter, rows);
-  }
-
-  function updateCell(letter, idx, col, value) {
-    const rows = (mapping[letter] || []).slice();
-    const r = rows[idx] ? rows[idx].slice() : [1, 1, `${letter}R1`];
-
-    if (col === 0 || col === 1) {
-      const v = parseInt(String(value || "0"), 10);
-      r[col] = Number.isFinite(v) ? v : r[col];
-    } else {
-      r[col] = String(value || "");
-    }
-
-    rows[idx] = r;
-    setRows(letter, rows);
-  }
-
-  function removeRow(letter, idx) {
-    const rows = (mapping[letter] || []).slice();
-    rows.splice(idx, 1);
-    setRows(letter, rows);
-  }
-
-  function sortRows(letter) {
-    const rows = (mapping[letter] || []).slice().sort((a, b) => (a?.[0] ?? 0) - (b?.[0] ?? 0));
-    setRows(letter, rows);
-  }
-
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
-      {letters.map((L) => (
-        <div
-          key={L}
-          style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-            <div style={{ fontWeight: 900 }}>{L} mapping</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button style={btn} onClick={() => addRow(L)}>Add row</button>
-              <button style={btn} onClick={() => sortRows(L)}>Sort</button>
-            </div>
-          </div>
-
-          <div style={{ height: 10 }} />
-
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 420 }}>
-              <thead>
-                <tr style={{ color: "#aab1c3", fontSize: 12 }}>
-                  <th style={{ textAlign: "right", padding: "6px 8px" }}>From</th>
-                  <th style={{ textAlign: "right", padding: "6px 8px" }}>To</th>
-                  <th style={{ textAlign: "left", padding: "6px 8px" }}>Group</th>
-                  <th style={{ padding: "6px 8px" }} />
-                </tr>
-              </thead>
-
-              <tbody>
-                {(mapping[L] || []).map((row, idx) => (
-                  <tr key={idx} style={{ borderTop: "1px solid rgba(42,47,63,0.9)" }}>
-                    <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                      <input
-                        value={row?.[0] ?? ""}
-                        onChange={(e) => updateCell(L, idx, 0, e.target.value)}
-                        style={{
-                          width: 70,
-                          padding: "6px 8px",
-                          borderRadius: 10,
-                          border: "1px solid #2a2f3f",
-                          background: "#0d0f16",
-                          color: "#eef1ff",
-                          textAlign: "right",
-                        }}
-                        inputMode="numeric"
-                      />
-                    </td>
-
-                    <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                      <input
-                        value={row?.[1] ?? ""}
-                        onChange={(e) => updateCell(L, idx, 1, e.target.value)}
-                        style={{
-                          width: 70,
-                          padding: "6px 8px",
-                          borderRadius: 10,
-                          border: "1px solid #2a2f3f",
-                          background: "#0d0f16",
-                          color: "#eef1ff",
-                          textAlign: "right",
-                        }}
-                        inputMode="numeric"
-                      />
-                    </td>
-
-                    <td style={{ padding: "6px 8px" }}>
-                      <input
-                        value={row?.[2] ?? ""}
-                        onChange={(e) => updateCell(L, idx, 2, e.target.value)}
-                        style={{
-                          width: "100%",
-                          padding: "6px 8px",
-                          borderRadius: 10,
-                          border: "1px solid #2a2f3f",
-                          background: "#0d0f16",
-                          color: "#eef1ff",
-                        }}
-                      />
-                    </td>
-
-                    <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                      <button style={btn} onClick={() => removeRow(L, idx)}>Delete</button>
-                    </td>
-                  </tr>
-                ))}
-
-                {!mapping[L] || mapping[L].length === 0 ? (
-                  <tr>
-                    <td colSpan={4} style={{ padding: "8px 8px", color: "#aab1c3", fontSize: 12 }}>
-                      No ranges yet. Click “Add row”.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-
-          <div style={{ color: "#aab1c3", fontSize: 12, marginTop: 10 }}>
-            Tip: If your diagram says AR1 controls A1–A4, set A: 1 → 4 = AR1.
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ------------------------- Charts ------------------------- */
-
-
-function DeltaLineChart({ title, points, tolerance }) {
-  const width = 1100;
-  const height = 250;
-  const pad = 26;
-
-  const [hover, setHover] = useState(null); // {x,y, p}
-
-  const series = useMemo(() => {
-    const bySide = { L: [], R: [] };
-    for (const p of points) {
-      if (!Number.isFinite(p.before) && !Number.isFinite(p.after)) continue;
-      bySide[p.side].push(p);
-    }
-    bySide.L.sort((a, b) => a.xIndex - b.xIndex);
-    bySide.R.sort((a, b) => a.xIndex - b.xIndex);
-    return bySide;
-  }, [points]);
-
-  const allValues = useMemo(() => {
-    const v = [];
-    for (const p of points) {
-      if (Number.isFinite(p.before)) v.push(p.before);
-      if (Number.isFinite(p.after)) v.push(p.after);
-    }
-    v.push(0);
-    if ((tolerance || 0) > 0) v.push(tolerance, -tolerance);
-    return v;
-  }, [points, tolerance]);
-
-  const { minY, maxY } = useMemo(() => {
-    if (!allValues.length) return { minY: -10, maxY: 10 };
-    let mn = Math.min(...allValues);
-    let mx = Math.max(...allValues);
-    if (mn === mx) {
-      mn -= 1;
-      mx += 1;
-    }
-    const span = mx - mn;
-    return { minY: mn - span * 0.12, maxY: mx + span * 0.12 };
-  }, [allValues]);
-
-  const maxX = useMemo(() => {
-    const mx = Math.max(0, ...points.map((p) => p.xIndex));
-    return mx <= 0 ? 1 : mx;
-  }, [points]);
-
-  function xScale(x) {
-    return pad + (x / maxX) * (width - pad * 2);
-  }
-  function yScale(y) {
-    return pad + ((maxY - y) / (maxY - minY)) * (height - pad * 2);
-  }
-
-  function polyPath(ps, field) {
-    const pts = ps
-      .filter((p) => Number.isFinite(p[field]))
-      .map((p) => `${xScale(p.xIndex)},${yScale(p[field])}`);
-    if (!pts.length) return "";
-    return `M ${pts[0]} ` + pts.slice(1).map((s) => `L ${s}`).join(" ");
-  }
-
-  const tol = tolerance || 0;
-  const y0 = yScale(0);
-  const yTolP = tol > 0 ? yScale(tol) : null;
-  const yTolN = tol > 0 ? yScale(-tol) : null;
-  const yWarnP = tol > 3 ? yScale(Math.max(0, tol - 3)) : null;
-  const yWarnN = tol > 3 ? yScale(-Math.max(0, tol - 3)) : null;
-
-  function sevColor(sev) {
-    if (sev === "red") return "rgba(255,107,107,1)";
-    if (sev === "yellow") return "rgba(255,214,102,1)";
-    return "rgba(170,177,195,0.9)";
-  }
-
-  return (
-    <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0d0f16" }}>
-      <div style={{ fontWeight: 850, marginBottom: 8 }}>{title}</div>
-
-      {!points.length ? (
-        <div style={{ color: "#aab1c3", fontSize: 12 }}>No chart data yet.</div>
-      ) : (
-        <div style={{ position: "relative" }}>
-          <svg
-            width="100%"
-            viewBox={`0 0 ${width} ${height}`}
-            style={{ display: "block" }}
-            onMouseLeave={() => setHover(null)}
-          >
-            {/* Target line */}
-            <line x1={pad} x2={width - pad} y1={y0} y2={y0} stroke="rgba(170,177,195,0.35)" strokeWidth="2" />
-
-            {/* Tolerance / Warning bands */}
-            {tol > 0 ? (
-              <>
-                <line x1={pad} x2={width - pad} y1={yTolP} y2={yTolP} stroke="rgba(255,107,107,0.45)" strokeWidth="2" />
-                <line x1={pad} x2={width - pad} y1={yTolN} y2={yTolN} stroke="rgba(255,107,107,0.45)" strokeWidth="2" />
-              </>
-            ) : null}
-            {tol > 3 ? (
-              <>
-                <line x1={pad} x2={width - pad} y1={yWarnP} y2={yWarnP} stroke="rgba(255,214,102,0.55)" strokeWidth="2" />
-                <line x1={pad} x2={width - pad} y1={yWarnN} y2={yWarnN} stroke="rgba(255,214,102,0.55)" strokeWidth="2" />
-              </>
-            ) : null}
-
-            {/* Before (dashed) */}
-            <path d={polyPath(series.L, "before")} fill="none" stroke="rgba(176,132,255,0.75)" strokeWidth="2" strokeDasharray="6 6" />
-            <path d={polyPath(series.R, "before")} fill="none" stroke="rgba(102,204,255,0.75)" strokeWidth="2" strokeDasharray="6 6" />
-
-            {/* After (solid) */}
-            <path d={polyPath(series.L, "after")} fill="none" stroke="rgba(176,132,255,1)" strokeWidth="3" />
-            <path d={polyPath(series.R, "after")} fill="none" stroke="rgba(102,204,255,1)" strokeWidth="3" />
-
-            {/* Points (After) */}
-            {points.map((p) => {
-              if (!Number.isFinite(p.after)) return null;
-              const cx = xScale(p.xIndex);
-              const cy = yScale(p.after);
-              return (
-                <circle
-                  key={`pt-${p.id}`}
-                  cx={cx}
-                  cy={cy}
-                  r={4.2}
-                  fill={sevColor(p.sevAfter)}
-                  stroke="rgba(0,0,0,0.35)"
-                  strokeWidth="1"
-                  onMouseEnter={() => setHover({ x: cx, y: cy, p })}
-                  onMouseMove={() => setHover({ x: cx, y: cy, p })}
-                />
-              );
-            })}
-          </svg>
-
-          {/* Tooltip */}
-          {hover ? (
-            <div
-              style={{
-                position: "absolute",
-                left: `${(hover.x / width) * 100}%`,
-                top: `${(hover.y / height) * 100}%`,
-                transform: "translate(12px, -12px)",
-                pointerEvents: "none",
-                background: "#0b0c10",
-                border: "1px solid #2a2f3f",
-                borderRadius: 12,
-                padding: 10,
-                minWidth: 220,
-                boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-                color: "#eef1ff",
-                fontSize: 12,
-              }}
-            >
-              <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                {hover.p.line} ({hover.p.side})
-              </div>
-              <div style={{ color: "#aab1c3", fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                Δ before:{" "}
-                {Number.isFinite(hover.p.before)
-                  ? `${hover.p.before > 0 ? "+" : ""}${Math.round(hover.p.before)}mm`
-                  : "—"}
-                <br />
-                Δ after:{" "}
-                {Number.isFinite(hover.p.after)
-                  ? `${hover.p.after > 0 ? "+" : ""}${Math.round(hover.p.after)}mm`
-                  : "—"}
-                <br />
-                Severity: <b>{hover.p.sevAfter}</b>
-              </div>
-            </div>
-          ) : null}
-        </div>
-      )}
-
-      <div style={{ color: "#aab1c3", fontSize: 12, marginTop: 8, display: "flex", gap: 14, flexWrap: "wrap" }}>
-        <span>Solid = After</span>
-        <span>Dashed = Before</span>
-        <span>Points = After (hover)</span>
-        <span>Target = 0mm</span>
-      </div>
-    </div>
-  );
-}
-
-
-
-function WingProfileChart({ title, groupStats, tolerance }) {
-  const width = 1100;
-  const height = 260;
-  const pad = 24;
-
-  const tol = tolerance || 0;
-
-  const rows = useMemo(() => {
-    const byGroup = new Map();
-    for (const s of groupStats) {
-      if (!byGroup.has(s.groupName)) byGroup.set(s.groupName, { group: s.groupName });
-      const obj = byGroup.get(s.groupName);
-      obj[s.side] = s;
-    }
-    const out = Array.from(byGroup.values());
-    out.sort((a, b) => groupSortKey(a.group).localeCompare(groupSortKey(b.group)));
-    return out;
-  }, [groupStats]);
-
-  const values = useMemo(() => {
-    const v = [0];
-    for (const r of rows) {
-      if (Number.isFinite(r.L?.after)) v.push(r.L.after);
-      if (Number.isFinite(r.R?.after)) v.push(r.R.after);
-      if (Number.isFinite(r.L?.before)) v.push(r.L.before);
-      if (Number.isFinite(r.R?.before)) v.push(r.R.before);
-    }
-    if (tol > 0) v.push(tol, -tol);
-    return v;
-  }, [rows, tol]);
-
-  const { minY, maxY } = useMemo(() => {
-    if (!values.length) return { minY: -10, maxY: 10 };
-    let mn = Math.min(...values);
-    let mx = Math.max(...values);
-    if (mn === mx) {
-      mn -= 1;
-      mx += 1;
-    }
-    const span = mx - mn;
-    return { minY: mn - span * 0.12, maxY: mx + span * 0.12 };
-  }, [values]);
-
-  function yScale(y) {
-    return pad + ((maxY - y) / (maxY - minY)) * (height - pad * 2);
-  }
-
-  const xCount = Math.max(1, rows.length);
-  function xScale(i) {
-    return pad + (i / (xCount - 1 || 1)) * (width - pad * 2);
-  }
-
-  const y0 = yScale(0);
-  const yTolP = tol > 0 ? yScale(tol) : null;
-  const yTolN = tol > 0 ? yScale(-tol) : null;
-
-  const barW = Math.max(10, Math.min(18, (width - pad * 2) / (rows.length * 4)));
-
-  return (
-    <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0d0f16" }}>
-      <div style={{ fontWeight: 850, marginBottom: 8 }}>{title}</div>
-      {!rows.length ? (
-        <div style={{ color: "#aab1c3", fontSize: 12 }}>No group data yet.</div>
-      ) : (
-        <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>
-          <line x1={pad} x2={width - pad} y1={y0} y2={y0} stroke="rgba(170,177,195,0.35)" strokeWidth="2" />
-          {tol > 0 ? (
-            <>
-              <line x1={pad} x2={width - pad} y1={yTolP} y2={yTolP} stroke="rgba(255,107,107,0.45)" strokeWidth="2" />
-              <line x1={pad} x2={width - pad} y1={yTolN} y2={yTolN} stroke="rgba(255,107,107,0.45)" strokeWidth="2" />
-            </>
-          ) : null}
-
-          {rows.map((r, i) => {
-            const x = xScale(i);
-
-            const L_after = r.L?.after;
-            const R_after = r.R?.after;
-            const L_before = r.L?.before;
-            const R_before = r.R?.before;
-
-            const yL = Number.isFinite(L_after) ? yScale(L_after) : null;
-            const yR = Number.isFinite(R_after) ? yScale(R_after) : null;
-
-            const yLb = Number.isFinite(L_before) ? yScale(L_before) : null;
-            const yRb = Number.isFinite(R_before) ? yScale(R_before) : null;
-
-            return (
-              <g key={r.group}>
-                {yL != null ? (
-                  <rect
-                    x={x - barW - 3}
-                    y={Math.min(y0, yL)}
-                    width={barW}
-                    height={Math.abs(y0 - yL)}
-                    fill="rgba(176,132,255,0.9)"
-                  />
-                ) : null}
-                {yR != null ? (
-                  <rect
-                    x={x + 3}
-                    y={Math.min(y0, yR)}
-                    width={barW}
-                    height={Math.abs(y0 - yR)}
-                    fill="rgba(102,204,255,0.9)"
-                  />
-                ) : null}
-
-                {yLb != null ? (
-                  <line x1={x - barW - 6} x2={x - 2} y1={yLb} y2={yLb} stroke="rgba(176,132,255,0.6)" strokeWidth="3" />
-                ) : null}
-                {yRb != null ? (
-                  <line x1={x + 2} x2={x + barW + 6} y1={yRb} y2={yRb} stroke="rgba(102,204,255,0.6)" strokeWidth="3" />
-                ) : null}
-
-                {rows.length <= 18 || i % 2 === 0 ? (
-                  <text x={x} y={height - 8} textAnchor="middle" fontSize="10" fill="rgba(170,177,195,0.9)">
-                    {r.group}
-                  </text>
-                ) : null}
-              </g>
-            );
-          })}
-        </svg>
-      )}
-
-      <div style={{ color: "#aab1c3", fontSize: 12, marginTop: 8, display: "flex", gap: 14, flexWrap: "wrap" }}>
-        <span>Purple = Left (after)</span>
-        <span>Cyan = Right (after)</span>
-        <span>Small tick = Before</span>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------- Compact measurement table ------------------------- */
-
-function BlockTable({
-  title,
-  rows,
-  meta,
-  activeProfile,
-  adjustments,
-  loopDeltaFor,
-  input,
-  redCell,
-  yellowCell,
-  setCell,
-  blockKey,
-  showCorrected,
-}) {
-  const corr = meta.correction || 0;
-  const tol = meta.tolerance || 0;
-
-  const styleFor = (sev) => (sev === "red" ? redCell : sev === "yellow" ? yellowCell : null);
-
-  return (
-    <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, overflow: "hidden", background: "#0e1018" }}>
-      <div style={{ padding: 10, borderBottom: "1px solid #2a2f3f", fontWeight: 900 }}>
-        {title} lines{" "}
-        <span style={{ color: "#aab1c3", fontSize: 12, fontWeight: 700 }}>
-          ({showCorrected ? "showing corrected" : "showing raw"})
-        </span>
-      </div>
-
-      <div style={{ overflowX: "auto" }}>
-	  // changed from 720 to 420
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 380 }}>
-          <thead>
-            <tr style={{ color: "#aab1c3", fontSize: 12 }}>
-              <th style={{ textAlign: "left", padding: "6px 8px" }}>Line</th>
-              <th style={{ textAlign: "left", padding: "6px 8px" }}>Group</th>
-              <th style={{ textAlign: "right", padding: "6px 8px" }}>Soll</th>
-              <th style={{ textAlign: "right", padding: "6px 8px" }}>{showCorrected ? "Ist L (corr)" : "Ist L (raw)"}</th>
-              <th style={{ textAlign: "right", padding: "6px 8px" }}>{showCorrected ? "Ist R (corr)" : "Ist R (raw)"}</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {!rows.length ? (
-              <tr>
-                <td colSpan={5} style={{ padding: "6px 8px", color: "#aab1c3" }}>
-                  No {title} rows found.
-                </td>
-              </tr>
-            ) : (
-              rows.map((b, idx) => {
-                const groupName = groupForLine(activeProfile, b.line) || `${title}?`;
-
-                const loopL_before = loopDeltaFor(b.line, "L", "before");
-            const loopL_after = loopDeltaFor(b.line, "L", "after");
-                const loopR_before = loopDeltaFor(b.line, "R", "before");
-            const loopR_after = loopDeltaFor(b.line, "R", "after");
-
-                const adjL = getAdjustment(adjustments, groupName, "L");
-                const adjR = getAdjustment(adjustments, groupName, "R");
-
-                const correctedL = b.measL == null ? null : b.measL + corr;
-                const correctedR = b.measR == null ? null : b.measR + corr;
-
-                const baseL_before = correctedL == null ? null : correctedL + loopL_before;
-const baseR_before = correctedR == null ? null : correctedR + loopR_before;
-
-const baseL_after = correctedL == null ? null : correctedL + loopL_after;
-const baseR_after = correctedR == null ? null : correctedR + loopR_after;
-
-const afterL = baseL_after == null ? null : baseL_after + adjL;
-const afterR = baseR_after == null ? null : baseR_after + adjR;
-
-const dL_before = baseL_before == null || b.nominal == null ? null : baseL_before - b.nominal;
-const dR_before = baseR_before == null || b.nominal == null ? null : baseR_before - b.nominal;
-
-const dL_after = afterL == null || b.nominal == null ? null : afterL - b.nominal;
-const dR_after = afterR == null || b.nominal == null ? null : afterR - b.nominal;
-
-const sevL = severity(dL_after, tol);
-                const sevR = severity(dR_after, tol);
-
-                const displayL = showCorrected ? correctedL : b.measL;
-                const displayR = showCorrected ? correctedR : b.measR;
-
-                return (
-                  <tr key={`${b.line}-${idx}`} style={{ borderTop: "1px solid #2a2f3f" }}>
-                    <td style={{ padding: "6px 8px" }}>
-                      <b>{b.line}</b>
-                    </td>
-                    <td style={{ padding: "6px 8px", color: "#aab1c3", fontSize: 12 }}>{groupName}</td>
-                    <td style={{ padding: "6px 8px", textAlign: "right", fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                      {b.nominal ?? ""}
-                    </td>
-
-                    <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                      <input
-                        value={b.measL ?? ""}
-                        onChange={(e) => setCell(b.rowIndex, blockKey, "measL", e.target.value)}
-                        style={{
-                          ...input,
-                          ...(styleFor(sevL) || null),
-                          width: 86,
-                          padding: "6px 8px",
-                          textAlign: "right",
-                          fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                        }}
-                        inputMode="numeric"
-                        title="Edit raw measured (Ist). Correction/loops/adjustments are applied automatically."
-                      />
-                      <div style={{ color: "#aab1c3", fontSize: 10, marginTop: 4, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                        show {displayL == null ? "—" : Math.round(displayL)} | loop {loopL_after > 0 ? `+${loopL_after}` : `${loopL_after}`} | adj{" "}
-                        {adjL > 0 ? `+${adjL}` : `${adjL}`}
-                      </div>
-                      <div style={{ color: "#aab1c3", fontSize: 10, marginTop: 2, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                        Δ(before){" "}
-                        {Number.isFinite(dL_before) ? `${dL_before > 0 ? "+" : ""}${Math.round(dL_before)}mm` : "–"} → Δ(after){" "}
-                        {Number.isFinite(dL_after) ? `${dL_after > 0 ? "+" : ""}${Math.round(dL_after)}mm` : "–"}
-                      </div>
-                    </td>
-
-                    <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                      <input
-                        value={b.measR ?? ""}
-                        onChange={(e) => setCell(b.rowIndex, blockKey, "measR", e.target.value)}
-                        style={{
-                          ...input,
-                          ...(styleFor(sevR) || null),
-                          width: 86,
-                          padding: "6px 8px",
-                          textAlign: "right",
-                          fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-                        }}
-                        inputMode="numeric"
-                        title="Edit raw measured (Ist). Correction/loops/adjustments are applied automatically."
-                      />
-                      <div style={{ color: "#aab1c3", fontSize: 10, marginTop: 4, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                        show {displayR == null ? "—" : Math.round(displayR)} | loop {loopR_after > 0 ? `+${loopR_after}` : `${loopR_after}`} | adj{" "}
-                        {adjR > 0 ? `+${adjR}` : `${adjR}`}
-                      </div>
-                      <div style={{ color: "#aab1c3", fontSize: 10, marginTop: 2, fontFamily: "ui-monospace, Menlo, Consolas, monospace" }}>
-                        Δ(before){" "}
-                        {Number.isFinite(dR_before) ? `${dR_before > 0 ? "+" : ""}${Math.round(dR_before)}mm` : "–"} → Δ(after){" "}
-                        {Number.isFinite(dR_after) ? `${dR_after > 0 ? "+" : ""}${Math.round(dR_after)}mm` : "–"}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <div style={{ padding: 10, color: "#aab1c3", fontSize: 12 }}>
-        Yellow: within 3mm of tolerance. Red: at/over tolerance. Target is 0mm (factory trim).
-      </div>
-    </div>
-  );
-}
-
-function RearViewWingChart({
-  wideRows,
-  activeProfile,
-  tolerance,
-  showCorrected,
-  correction,
-  adjustments,
-  loopTypes,
-  groupLoopSetup,
-}) {
-  const width = 1100;
-  const height = 460;
-  const pad = 24;
-  const tol = Number.isFinite(tolerance) ? tolerance : 0;
-
-  const [hover, setHover] = React.useState(null);
-  const [spanMode, setSpanMode] = React.useState("real"); // "linear" | "real"
-  const [showGroupCuts, setShowGroupCuts] = React.useState(true);
-  const [showBeforePoints, setShowBeforePoints] = React.useState(false);
-
-  const data = React.useMemo(() => {
-    if (!wideRows?.length) return null;
-
-    const points = [];
-    for (const r of wideRows) {
-      for (const letter of ["A", "B", "C", "D"]) {
-        const b = r?.[letter];
-        if (!b?.line) continue;
-
-        const lineId = b.line;
-        const groupName = groupForLine(activeProfile, lineId) || "—";
-
-        const kL = `${groupName}|L`;
-        const kR = `${groupName}|R`;
-
-        const loopNameL = groupLoopSetup?.[kL] || "SL";
-        const loopNameR = groupLoopSetup?.[kR] || "SL";
-
-        const loopDeltaL = Number.isFinite(loopTypes?.[loopNameL]) ? loopTypes[loopNameL] : 0;
-        const loopDeltaR = Number.isFinite(loopTypes?.[loopNameR]) ? loopTypes[loopNameR] : 0;
-
-        const corr = showCorrected ? (Number.isFinite(correction) ? correction : 0) : 0;
-
-        const beforeL = deltaMm({
-          nominal: b.nominal,
-          measured: b.measL,
-          correction: corr,
-          adjustment: loopDeltaL,
-        });
-        const beforeR = deltaMm({
-          nominal: b.nominal,
-          measured: b.measR,
-          correction: corr,
-          adjustment: loopDeltaR,
-        });
-
-        const adjL = getAdjustment(adjustments || {}, groupName, "L");
-        const adjR = getAdjustment(adjustments || {}, groupName, "R");
-
-        const afterL = deltaMm({
-          nominal: b.nominal,
-          measured: b.measL,
-          correction: corr,
-          adjustment: loopDeltaL + adjL,
-        });
-        const afterR = deltaMm({
-          nominal: b.nominal,
-          measured: b.measR,
-          correction: corr,
-          adjustment: loopDeltaR + adjR,
-        });
-
-        points.push({ letter, lineId, groupName, beforeL, beforeR, afterL, afterR });
-      }
-    }
-
-    const byLetter = { A: [], B: [], C: [], D: [] };
-    for (const p of points) byLetter[p.letter].push(p);
-
-    for (const L of ["A", "B", "C", "D"]) {
-      byLetter[L].sort((p1, p2) => {
-        const a = parseLineId(p1.lineId);
-        const b = parseLineId(p2.lineId);
-        return (a?.num ?? 0) - (b?.num ?? 0);
-      });
-    }
-
-    return byLetter;
-  }, [wideRows, activeProfile, showCorrected, correction, adjustments, loopTypes, groupLoopSetup]);
-
-  if (!data) {
-    return (
-      <div
-        style={{
-          padding: 12,
-          border: "1px solid #2a2f3f",
-          borderRadius: 14,
-          background: "#0e1018",
-          color: "#aab1c3",
-          fontSize: 12,
-        }}
-      >
-        Rear view chart will appear after importing a file.
       </div>
     );
   }
 
-  const bands = {
-    A: { y0: pad + 74, y1: pad + 74 + 85 },
-    B: { y0: pad + 74 + 95, y1: pad + 74 + 180 },
-    C: { y0: pad + 74 + 190, y1: pad + 74 + 275 },
-    D: { y0: pad + 74 + 285, y1: pad + 74 + 370 },
-  };
+  function RangeEditor({ L }) {
+    const count = Number(groupCountByLetter[L] || 3);
+    const r = rangesByLetter[L] || makeDefaultRanges(maxByLetter[L] || 1, count);
 
-  function sevColor(sev) {
-    if (sev === "red") return "rgba(255,90,90,1)";
-    if (sev === "yellow") return "rgba(255,215,90,1)";
-    return "rgba(140,255,190,1)";
-  }
-
-  function bandY(letter, v) {
-    const b = bands[letter];
-    const range = Math.max(30, tol > 0 ? tol * 2.2 : 50);
-    const mid = (b.y0 + b.y1) / 2;
-    const pxPerMm = (b.y1 - b.y0) / (range * 2);
-    return mid - v * pxPerMm;
-  }
-
-  function spanScale(t) {
-    if (spanMode === "linear") return t;
-    const gamma = 0.75; // <1 expands inner, compresses tips
-    return Math.pow(t, gamma);
-  }
-
-  function xFor(side, i, count) {
-    const center = width / 2;
-    const halfSpan = (width - pad * 2) / 2 - 40;
-    const centerGap = 18;
-
-    const t = count <= 1 ? 0 : i / (count - 1);
-    const ts = spanScale(t);
-    const dx = ts * halfSpan + centerGap;
-
-    return side === "L" ? center - dx : center + dx;
-  }
-
-  function groupCuts(letter) {
-    if (!showGroupCuts) return [];
-    const arr = data[letter] || [];
-    const out = [];
-    let last = null;
-    for (let i = 0; i < arr.length; i++) {
-      const g = arr[i]?.groupName || "";
-      if (i === 0) {
-        last = g;
-        continue;
-      }
-      if (g !== last) {
-        out.push({ idx: i - 0.5, from: last, to: g });
-        last = g;
-      }
-    }
-    return out;
-  }
-
-  return (
-    <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div>
-          <div style={{ fontWeight: 900, marginBottom: 6 }}>Rear view wing shape (A/B/C/D rows)</div>
-          <div style={{ color: "#aab1c3", fontSize: 12, lineHeight: 1.5 }}>
-            Symmetric about the centreline. Points are <b>After</b> (severity color). Dashed = Before.
+    return (
+      <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 10, background: "rgba(0,0,0,0.38)" }}>
+        <div style={{ display: "flex", justifyContent: "flex-start", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontWeight: 950, fontSize: 14 }}>
+            {L} ranges <span style={{ opacity: 0.7, fontWeight: 850 }}>(max {maxByLetter[L] || 0})</span>
           </div>
+          <Select
+            value={String(count)}
+            onChange={(v) => {
+              const nextCount = Number(v) === 4 ? 4 : 3;
+              setGroupCountByLetter((p) => ({ ...p, [L]: nextCount }));
+              setRangesByLetter((prev) => ({ ...prev, [L]: makeDefaultRanges(maxByLetter[L] || 1, nextCount) }));
+            }}
+            options={[
+              { value: "3", label: "3 groups" },
+              { value: "4", label: "4 groups" },
+            ]}
+            width={120}
+          />
         </div>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <label style={{ color: "#aab1c3", fontSize: 12, display: "flex", gap: 8, alignItems: "center" }}>
-            Span spacing
-            <select
-              value={spanMode}
-              onChange={(e) => setSpanMode(e.target.value)}
+        <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
+          {Array.from({ length: count }, (_, i) => i + 1).map((bucket) => {
+            const col = groupColor(L, bucket);
+            const prefix = (prefixByLetter[L] || `${L}R`) + bucket;
+            return (
+              <div
+                key={`${L}-${bucket}`}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "86px 110px 110px",
+                  justifyContent: "start",
+                  gap: 8,
+                  alignItems: "center",
+                  padding: 8,
+                  borderRadius: 12,
+                  border: `1px solid ${theme.border}`,
+                  background: "rgba(255,255,255,0.03)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8, justifySelf: "start" }}>
+                  <span style={{ width: 9, height: 9, borderRadius: 999, background: col }} />
+                  <span style={{ fontWeight: 950, color: col, fontSize: 13 }}>{prefix}</span>
+                </div>
+
+                <div style={{ display: "flex", gap: 8, alignItems: "center", justifySelf: "start" }}>
+                  <span style={{ opacity: 0.72, fontWeight: 850, fontSize: 12 }}>S</span>
+                  <NumInput value={r[bucket]?.start ?? 1} min={1} max={maxByLetter[L]} onChange={(vv) => setRange(L, bucket, "start", clamp(vv, 1, maxByLetter[L] || 1))} width={62} />
+                </div>
+
+                <div style={{ display: "flex", gap: 8, alignItems: "center", justifySelf: "start" }}>
+                  <span style={{ opacity: 0.72, fontWeight: 850, fontSize: 12 }}>E</span>
+                  <NumInput value={r[bucket]?.end ?? maxByLetter[L]} min={1} max={maxByLetter[L]} onChange={(vv) => setRange(L, bucket, "end", clamp(vv, 1, maxByLetter[L] || 1))} width={62} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ marginTop: 8, opacity: 0.76, fontSize: 12, fontWeight: 850 }}>
+          After changing ranges, click <b>Apply ranges</b>.
+        </div>
+      </div>
+    );
+  }
+
+  function ColoredRangeTabs() {
+    const tabs = ["A", "B", "C", "D"].map((L) => ({ L, color: PALETTE[L].base }));
+    return (
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-start" }}>
+        {tabs.map((t) => {
+          const active = rangeTab === t.L;
+          return (
+            <button
+              key={t.L}
+              onClick={() => setRangeTab(t.L)}
               style={{
-                borderRadius: 10,
-                border: "1px solid #2a2f3f",
-                background: "#0d0f16",
-                color: "#eef1ff",
-                padding: "6px 10px",
-                outline: "none",
-                fontSize: 12,
+                padding: "8px 12px",
+                borderRadius: 999,
+                border: `1px solid ${theme.border}`,
+                background: active ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.30)",
+                color: theme.text,
+                cursor: "pointer",
+                fontWeight: 950,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                whiteSpace: "nowrap",
               }}
             >
-              <option value="real">Realistic</option>
-              <option value="linear">Linear</option>
-            </select>
-          </label>
+              <span style={{ width: 10, height: 10, borderRadius: 999, background: t.color }} />
+              {t.L} ranges
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
 
-          <label style={{ color: "#aab1c3", fontSize: 12, display: "flex", gap: 8, alignItems: "center" }}>
-            <input type="checkbox" checked={showGroupCuts} onChange={(e) => setShowGroupCuts(e.target.checked)} />
-            Group boundaries
-          </label>
-
-          <label style={{ color: "#aab1c3", fontSize: 12, display: "flex", gap: 8, alignItems: "center" }}>
-            <input type="checkbox" checked={showBeforePoints} onChange={(e) => setShowBeforePoints(e.target.checked)} />
-            Before points
-          </label>
+  function DiagramScrollBox({ height, width }) {
+    // Fixed height + fixed width + obvious scrollbars
+    return (
+      <div
+        ref={diagramBoxRef}
+        className="diagramScrollBox"
+        style={{
+          border: `2px solid rgba(255,255,255,0.18)`,
+          borderRadius: 18,
+          overflow: "scroll",
+          height: height || 640,
+          width: width || 980,
+          maxWidth: "100%",
+          background: "rgba(0,0,0,0.34)",
+          boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.10)",
+        }}
+      >
+        <div
+        style={{
+          width: Math.max(DIAGRAM_W * diagramZoom, (width || 980) + 260),
+          height: Math.max(DIAGRAM_H * diagramZoom, (height || 640) + 140),
+        }}
+      >
+        <div
+          style={{
+            width: DIAGRAM_W,
+            height: DIAGRAM_H,
+            transform: `scale(${diagramZoom})`,
+            transformOrigin: "top left",
+          }}
+        >
+          <DiagramPreview
+            lineToGroup={lineToGroup}
+            prefixByLetter={prefixByLetter}
+            groupCountByLetter={groupCountByLetter}
+            showWingOutline={diagramWingOutline}
+            compactLayout={diagramCompact}
+            setLineToGroupFromDrag={setLineToGroupFromDrag}
+          />
         </div>
       </div>
-
-      <div style={{ height: 10 }} />
-
-      <div style={{ overflowX: "auto" }}>
-        <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>
-          {/* Top labels */}
-          <text x={pad} y={pad + 16} fill="rgba(170,177,195,0.9)" fontSize="12" fontFamily="ui-monospace, Menlo, Consolas, monospace">
-            LEFT
-          </text>
-          <text
-            x={width - pad}
-            y={pad + 16}
-            textAnchor="end"
-            fill="rgba(170,177,195,0.9)"
-            fontSize="12"
-            fontFamily="ui-monospace, Menlo, Consolas, monospace"
-          >
-            RIGHT
-          </text>
-          <text
-            x={width / 2}
-            y={pad + 16}
-            textAnchor="middle"
-            fill="rgba(170,177,195,0.9)"
-            fontSize="12"
-            fontFamily="ui-monospace, Menlo, Consolas, monospace"
-          >
-            CENTRE
-          </text>
-
-          {/* Centreline */}
-          <line x1={width / 2} y1={pad + 24} x2={width / 2} y2={height - pad} stroke="rgba(42,47,63,0.85)" strokeDasharray="6 6" />
-
-          {/* Span ticks + MID→TIP labels */}
-          {(() => {
-            const y = pad + 30;
-            const center = width / 2;
-            const halfSpan = (width - pad * 2) / 2 - 40;
-            const centerGap = 18;
-            const ticks = [
-              { t: 0.0, label: "MID" },
-              { t: 0.25, label: "25%" },
-              { t: 0.5, label: "50%" },
-              { t: 0.75, label: "75%" },
-              { t: 1.0, label: "TIP" },
-            ];
-            const scaleT = (t) => (spanMode === "linear" ? t : Math.pow(t, 0.75));
-
-            return (
-              <g>
-                {ticks.map((tk) => {
-                  const dx = scaleT(tk.t) * halfSpan + centerGap;
-                  const xL = center - dx;
-                  const xR = center + dx;
-                  return (
-                    <g key={`ticks-${tk.t}`}>
-                      <line x1={xL} y1={y} x2={xL} y2={y + 8} stroke="rgba(255,255,255,0.10)" />
-                      <line x1={xR} y1={y} x2={xR} y2={y + 8} stroke="rgba(255,255,255,0.10)" />
-                      <text x={xL} y={y + 22} textAnchor="middle" fill="rgba(170,177,195,0.85)" fontSize="11" fontFamily="ui-monospace, Menlo, Consolas, monospace">
-                        {tk.label}
-                      </text>
-                      <text x={xR} y={y + 22} textAnchor="middle" fill="rgba(170,177,195,0.85)" fontSize="11" fontFamily="ui-monospace, Menlo, Consolas, monospace">
-                        {tk.label}
-                      </text>
-                    </g>
-                  );
-                })}
-              </g>
-            );
-          })()}
-
-          {/* Subtle wing outline arc (background) */}
-          {(() => {
-            const left = pad + 20;
-            const right = width - pad - 20;
-            const top = pad + 66;
-            const bottom = height - pad - 18;
-            const midX = width / 2;
-            const ctrlY = top - 26;
-
-            const d = `
-              M ${midX} ${top}
-              C ${midX - 180} ${ctrlY}, ${left + 60} ${ctrlY + 10}, ${left} ${top + 18}
-              L ${left} ${bottom}
-              L ${right} ${bottom}
-              L ${right} ${top + 18}
-              C ${right - 60} ${ctrlY + 10}, ${midX + 180} ${ctrlY}, ${midX} ${top}
-              Z
-            `;
-
-            return <path d={d} fill="rgba(255,255,255,0.015)" stroke="rgba(255,255,255,0.06)" strokeWidth="2" />;
-          })()}
-
-          {/* Bands + 0mm guides + riser labels */}
-          {["A", "B", "C", "D"].map((L) => {
-            const b = bands[L];
-            const yMid = (b.y0 + b.y1) / 2;
-
-            return (
-              <g key={`band-${L}`}>
-                <rect x={pad} y={b.y0} width={width - pad * 2} height={b.y1 - b.y0} fill="rgba(255,255,255,0.02)" />
-                <line x1={pad} y1={b.y0} x2={width - pad} y2={b.y0} stroke="rgba(42,47,63,0.85)" />
-                <line x1={pad} y1={b.y1} x2={width - pad} y2={b.y1} stroke="rgba(42,47,63,0.85)" />
-
-                {/* 0mm guide (target) */}
-                <line x1={pad} y1={yMid} x2={width - pad} y2={yMid} stroke="rgba(255,255,255,0.10)" strokeDasharray="4 6" />
-
-                {/* Row label */}
-                <text x={pad + 8} y={b.y0 + 18} fill="rgba(170,177,195,0.85)" fontSize="12" fontFamily="ui-monospace, Menlo, Consolas, monospace">
-                  {L}-row
-                </text>
-
-                {/* Riser label at centreline */}
-                <text
-                  x={width / 2}
-                  y={b.y0 + 18}
-                  textAnchor="middle"
-                  fill="rgba(238,241,255,0.85)"
-                  fontSize="12"
-                  fontFamily="ui-monospace, Menlo, Consolas, monospace"
-                >
-                  {L}
-                </text>
-              </g>
-            );
-          })}
-
-          {/* Plots */}
-          {["A", "B", "C", "D"].map((L) => {
-            const arr = data[L] || [];
-            const count = arr.length || 1;
-
-            const buildPath = (side, which) => {
-              let d = "";
-              for (let i = 0; i < arr.length; i++) {
-                const p = arr[i];
-                const v =
-                  side === "L"
-                    ? which === "before"
-                      ? p.beforeL
-                      : p.afterL
-                    : which === "before"
-                    ? p.beforeR
-                    : p.afterR;
-
-                if (!Number.isFinite(v)) continue;
-                const x = xFor(side, i, count);
-                const y = bandY(L, v);
-                d += d ? ` L ${x} ${y}` : `M ${x} ${y}`;
-              }
-              return d;
-            };
-
-            const cuts = groupCuts(L);
-
-            return (
-              <g key={`plot-${L}`}>
-                {/* group boundary lines (both sides) */}
-                {cuts.map((c, idx) => {
-                  const b = bands[L];
-                  const xL = xFor("L", c.idx, count);
-                  const xR = xFor("R", c.idx, count);
-                  return (
-                    <g key={`cut-${L}-${idx}`}>
-                      <line x1={xL} y1={b.y0 + 2} x2={xL} y2={b.y1 - 2} stroke="rgba(255,255,255,0.08)" />
-                      <line x1={xR} y1={b.y0 + 2} x2={xR} y2={b.y1 - 2} stroke="rgba(255,255,255,0.08)" />
-                    </g>
-                  );
-                })}
-
-                {/* Before dashed paths */}
-                <path d={buildPath("L", "before")} fill="none" stroke="rgba(176,132,255,0.65)" strokeWidth="2" strokeDasharray="6 6" />
-                <path d={buildPath("R", "before")} fill="none" stroke="rgba(102,204,255,0.65)" strokeWidth="2" strokeDasharray="6 6" />
-
-                {/* After solid paths */}
-                <path d={buildPath("L", "after")} fill="none" stroke="rgba(176,132,255,1)" strokeWidth="3" />
-                <path d={buildPath("R", "after")} fill="none" stroke="rgba(102,204,255,1)" strokeWidth="3" />
-
-                {/* Points */}
-                {arr.map((p, i) => {
-                  const pts = [
-                    { side: "L", before: p.beforeL, after: p.afterL },
-                    { side: "R", before: p.beforeR, after: p.afterR },
-                  ];
-
-                  return pts.map((it) => {
-                    const x = xFor(it.side, i, count);
-
-                    // BEFORE points (small hollow circles)
-                    const beforeNode =
-                      showBeforePoints && Number.isFinite(it.before) ? (
-                        <circle
-                          key={`${p.lineId}-${it.side}-before`}
-                          cx={x}
-                          cy={bandY(L, it.before)}
-                          r={4}
-                          fill="transparent"
-                          stroke="rgba(255,255,255,0.30)"
-                          strokeWidth="2"
-                        />
-                      ) : null;
-
-                    // AFTER points (colored)
-                    const afterNode = Number.isFinite(it.after) ? (
-                      <circle
-                        key={`${p.lineId}-${it.side}-after`}
-                        cx={x}
-                        cy={bandY(L, it.after)}
-                        r={5}
-                        fill={sevColor(severity(it.after, tol))}
-                        stroke="rgba(10,12,16,0.9)"
-                        strokeWidth="2"
-                        onMouseEnter={() =>
-                          setHover({
-                            letter: L,
-                            lineId: p.lineId,
-                            groupName: p.groupName,
-                            side: it.side,
-                            before: it.before,
-                            after: it.after,
-                            sev: severity(it.after, tol),
-                            x,
-                            y: bandY(L, it.after),
-                          })
-                        }
-                        onMouseLeave={() => setHover(null)}
-                      />
-                    ) : null;
-
-                    return (
-                      <g key={`${p.lineId}-${it.side}`}>
-                        {beforeNode}
-                        {afterNode}
-                      </g>
-                    );
-                  });
-                })}
-              </g>
-            );
-          })}
-
-          {/* Tooltip */}
-          {hover ? (
-            <g>
-              <rect
-                x={Math.min(width - 330, Math.max(10, hover.x + 12))}
-                y={Math.max(10, hover.y - 80)}
-                width={320}
-                height={70}
-                rx={10}
-                ry={10}
-                fill="rgba(12,14,22,0.95)"
-                stroke="rgba(42,47,63,1)"
-              />
-              <text
-                x={Math.min(width - 312, Math.max(20, hover.x + 22))}
-                y={Math.max(28, hover.y - 52)}
-                fill="#eef1ff"
-                fontSize="12"
-                fontFamily="ui-monospace, Menlo, Consolas, monospace"
-              >
-                {`${hover.lineId} (${hover.side})  group: ${hover.groupName}`}
-              </text>
-              <text
-                x={Math.min(width - 312, Math.max(20, hover.x + 22))}
-                y={Math.max(48, hover.y - 32)}
-                fill="rgba(170,177,195,0.95)"
-                fontSize="12"
-                fontFamily="ui-monospace, Menlo, Consolas, monospace"
-              >
-                {`Before: ${Number.isFinite(hover.before) ? Math.round(hover.before) : "—"}mm   After: ${
-                  Number.isFinite(hover.after) ? Math.round(hover.after) : "—"
-                }mm   Sev: ${hover.sev}`}
-              </text>
-            </g>
-          ) : null}
-        </svg>
       </div>
+    );
+  }
 
-      <div style={{ color: "#aab1c3", fontSize: 12, marginTop: 8, display: "flex", gap: 14, flexWrap: "wrap" }}>
-        <span>Solid = After</span>
-        <span>Dashed = Before</span>
-        <span>Target (0mm) = dotted line</span>
-        {tol > 0 ? (
-          <>
-            <span>Yellow = within 3mm of tolerance</span>
-            <span>Red = outside tolerance</span>
-          </>
+  const stepTabs = [
+    { value: 1, label: "Step 1" },
+    { value: 2, label: "Step 2" },
+    { value: 3, label: "Step 3 (Diagram)" },
+  ];
+
+  return (
+    <div style={{ minHeight: "100vh", background: theme.bg, color: theme.text, padding: 16, fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial' }}>
+      {/* scrollbars styling */}
+      <style>{`
+        .diagramScrollBox { scrollbar-width: auto; scrollbar-color: rgba(255,255,255,0.55) rgba(0,0,0,0.35); }
+        .diagramScrollBox::-webkit-scrollbar { height: 16px; width: 16px; }
+        .diagramScrollBox::-webkit-scrollbar-track { background: rgba(0,0,0,0.35); }
+        .diagramScrollBox::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.35); border: 3px solid rgba(0,0,0,0.35); border-radius: 999px; }
+        .diagramScrollBox::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.55); }
+      `}</style>
+
+      {/* reduced overall width to match overrides panel */}
+      <div style={{ maxWidth: 980, margin: "0 auto", display: "grid", gap: 10 }}>
+        {/* Header */}
+        <div style={{ border: `1px solid ${theme.border}`, borderRadius: 22, padding: 14, background: "linear-gradient(180deg, rgba(59,130,246,0.16), rgba(255,255,255,0.03))" }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 36, fontWeight: 950, letterSpacing: -0.9 }}>Paraglider Trim Tuning</div>
+              <div style={{ marginTop: 6, opacity: 0.86, fontSize: 14, fontWeight: 900 }}>
+                {SITE_VERSION} <span style={{ opacity: 0.7, fontWeight: 850 }}>• Step 1–3</span>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <ImportStatusRadio loaded={loaded} />
+              {stepTabs.map((t) => {
+                const disabled = t.value !== 1 && !loaded;
+                return (
+                  <button
+                    key={t.value}
+                    style={{
+                      ...topBtn,
+                      ...(step === t.value ? topBtnActive : {}),
+                      opacity: disabled ? 0.55 : 1,
+                      cursor: disabled ? "not-allowed" : "pointer",
+                    }}
+                    onClick={() => !disabled && setStep(t.value)}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
+              <button style={{ ...topBtn, background: "rgba(239,68,68,0.16)" }} onClick={resetAll}>
+                Reset all
+              </button>
+            </div>
+          </div>
+
+          {!loaded ? (
+            <div style={{ marginTop: 10 }}>
+              <WarningBanner title="No file loaded yet">
+                Import a CSV/XLSX in the Speedster-style wide format. Or use <b>Test data</b> to load the embedded file.
+              </WarningBanner>
+            </div>
+          ) : null}
+        </div>
+
+        {/* Step 1 */}
+        {step === 1 ? (
+          <Panel
+            tint
+            title={tab === "import" ? "Step 1 — Import CSV/XLSX" : "Step 1 — Test data (attached)"}
+            right={<SegTabs value={tab} onChange={setTab} tabs={[{ value: "import", label: "Import" }, { value: "testdata", label: "Test data" }]} />}
+          >
+            <div style={{ display: "grid", gap: 10 }}>
+              {tab === "import" ? (
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                  <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" onChange={(e) => handleFile(e.target.files?.[0])} style={{ display: "none" }} />
+                  <button style={chooseBtn} onClick={() => fileInputRef.current?.click()}>
+                    Choose file…
+                  </button>
+
+                  <div style={{ opacity: 0.85, fontWeight: 900 }}>
+                    Imported rows: <b>{wideRows.length}</b> • Lines total (L+R): <b>{summary.totalLines}</b>
+                  </div>
+
+                  {importStatus.ok ? (
+                    <div style={{ opacity: 0.90, fontWeight: 900 }}>
+                      File: <b>{importStatus.name}</b>
+                    </div>
+                  ) : importStatus.err ? (
+                    <div style={{ color: theme.bad, fontWeight: 950 }}>{importStatus.err}</div>
+                  ) : null}
+
+                  {loaded ? (
+                    <div style={{ marginLeft: "auto" }}>
+                      <button style={topBtn} onClick={() => setStep(2)}>
+                        Go to Step 2 →
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                  <button style={chooseBtn} onClick={loadAttachedTestData}>
+                    Load attached test data
+                  </button>
+                  <div style={{ opacity: 0.86, fontWeight: 900 }}>
+                    Uses embedded <b>Speedster3 ML.csv</b>.
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+                <div style={card}>
+                  <div style={cardLabel}>Make</div>
+                  <div style={cardValue}>{meta.make || "—"}</div>
+                </div>
+                <div style={card}>
+                  <div style={cardLabel}>Model</div>
+                  <div style={cardValue}>{meta.model || "—"}</div>
+                </div>
+                <div style={card}>
+                  <div style={cardLabel}>Tolerance (mm)</div>
+                  <div style={{ marginTop: 8 }}>
+                    <NumInput value={meta.tolerance} onChange={(v) => setMeta((m) => ({ ...m, tolerance: clamp(v, 0, 999) }))} width={110} />
+                  </div>
+                </div>
+                <div style={card}>
+                  <div style={cardLabel}>Correction</div>
+                  <div style={{ marginTop: 8 }}>
+                    <NumInput value={meta.correction} onChange={(v) => setMeta((m) => ({ ...m, correction: Number(v || 0) }))} width={110} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Panel>
+        ) : null}
+
+        {/* Step 2 */}
+        {step === 2 ? (
+          <Panel
+            tint
+            title="Step 2 — Map lines to maillon groups (setup)"
+            right={
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <button style={topBtn} onClick={() => setStep(1)}>
+                  ← Back
+                </button>
+                <button style={{ ...topBtn, background: "rgba(59,130,246,0.20)" }} onClick={() => rebuildMappingFromRanges(false)} disabled={!loaded}>
+                  Apply ranges
+                </button>
+                <button style={{ ...topBtn, background: "rgba(239,68,68,0.12)" }} onClick={() => rebuildMappingFromRanges(true)} disabled={!loaded}>
+                  Reset to ranges
+                </button>
+                <button style={{ ...topBtn, background: "rgba(59,130,246,0.22)" }} onClick={() => setStep(3)} disabled={!loaded}>
+                  Open diagram page →
+                </button>
+              </div>
+            }
+          >
+            {!loaded ? (
+              <WarningBanner title="No file loaded">Go back to Step 1 and import a file (or load test data) before using Step 2.</WarningBanner>
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10 }}>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+                    <div>
+                      <div style={{ fontWeight: 950 }}>Wing profile — Export / Import (JSON)</div>
+                      <div style={{ opacity: 0.76, fontSize: 13, marginTop: 4 }}>Export saves Step 2 mapping. Import applies it to the current file’s lines.</div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                      <input
+                        value={profileName}
+                        onChange={(e) => setProfileName(e.target.value)}
+                        placeholder="Profile file name…"
+                        style={{ width: 240, padding: "7px 10px", borderRadius: 12, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.68)", color: theme.text, outline: "none", fontWeight: 900, fontSize: 14 }}
+                      />
+                      <button style={{ ...topBtn, background: "rgba(59,130,246,0.20)" }} onClick={exportWingProfileJSON}>
+                        Export JSON
+                      </button>
+
+                      <input ref={profileImportRef} type="file" accept=".json,application/json" style={{ display: "none" }} onChange={(e) => importWingProfileJSON(e.target.files?.[0])} />
+                      <button style={topBtn} onClick={() => profileImportRef.current?.click()}>
+                        Import JSON
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10 }}>
+                  <div style={{ fontWeight: 950 }}>Defaults</div>
+
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontWeight: 950, marginBottom: 8 }}>Prefixes</div>
+                    {/* Reduced bucket widths + moved left */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 160px)", gap: 8, justifyContent: "start", alignItems: "start" }}>
+                      <PrefixTile letter="A" />
+                      <PrefixTile letter="B" />
+                      <PrefixTile letter="C" />
+                      <PrefixTile letter="D" />
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 10, flexWrap: "wrap" }}>
+                      <div style={{ fontWeight: 950 }}>Ranges</div>
+                      <ColoredRangeTabs />
+                    </div>
+                    <div style={{ marginTop: 10 }}>
+                      <RangeEditor L={rangeTab} />
+                    </div>
+
+                    <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-start" }}>
+                      <button style={topBtn} onClick={() => setShowOverrides((v) => !v)}>
+                        {showOverrides ? "Hide line grouping overrides" : "Show line grouping overrides"}
+                      </button>
+                      <div style={{ opacity: 0.78, fontWeight: 900, fontSize: 13 }}>Overrides = per-line dropdown assignments.</div>
+                    </div>
+                  </div>
+                </div>
+
+                {showOverrides ? (
+                  <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10 }}>
+                    <div style={{ fontWeight: 950 }}>Line grouping overrides</div>
+
+                    <div style={{ marginTop: 10, maxHeight: "60vh", overflow: "auto", border: `1px solid ${theme.border}`, borderRadius: 14 }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr style={{ background: "rgba(255,255,255,0.05)" }}>
+                            <th style={th}>Cascade</th>
+                            <th style={th}>Line L</th>
+                            <th style={th}>Group L</th>
+                            <th style={th}>Line R</th>
+                            <th style={th}>Group R</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {letterIdxRows.map(({ letter, idx }) => {
+                            const lineL = `${letter}${idx}L`;
+                            const lineR = `${letter}${idx}R`;
+                            const col = chipColorFromLineId(lineL);
+
+                            return (
+                              <tr key={`${letter}-${idx}`} style={{ borderTop: `1px solid ${theme.border}` }}>
+                                <td style={{ ...td, fontWeight: 950, color: col }}>
+                                  {letter}
+                                  {idx}
+                                </td>
+                                <td style={td}>{lineL}</td>
+                                <td style={td}>
+                                  <Select value={lineToGroup[lineL] || ""} onChange={(v) => setLineToGroup((p) => ({ ...(p || {}), [lineL]: v }))} options={groupOptionsForSelect} width={160} />
+                                </td>
+                                <td style={td}>{lineR}</td>
+                                <td style={td}>
+                                  <Select value={lineToGroup[lineR] || ""} onChange={(v) => setLineToGroup((p) => ({ ...(p || {}), [lineR]: v }))} options={groupOptionsForSelect} width={160} />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </Panel>
+        ) : null}
+
+        {/* Step 3 */}
+        {step === 3 ? (
+          <Panel
+            tint
+            title="Step 3 — Diagram + changes summary"
+            right={
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <button style={topBtn} onClick={() => setStep(2)}>
+                  ← Back to Step 2
+                </button>
+                <button style={topBtn} onClick={fitDiagramToScreen}>
+                  Fit to screen
+                </button>
+                <button style={{ ...topBtn, background: "rgba(59,130,246,0.20)" }} onClick={() => rebuildMappingFromRanges(false)}>
+                  Apply ranges
+                </button>
+                <button style={{ ...topBtn, background: "rgba(239,68,68,0.12)" }} onClick={() => rebuildMappingFromRanges(true)}>
+                  Reset to ranges
+                </button>
+                <Toggle value={diagramWingOutline} onChange={setDiagramWingOutline} label="Wing outline" />
+                <Toggle value={diagramCompact} onChange={setDiagramCompact} label="Compact" />
+                <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 10px", border: `1px solid ${theme.border}`, borderRadius: 14, background: "rgba(0,0,0,0.35)" }}>
+                  <button style={miniBtn} onClick={() => setDiagramZoom((z) => clamp(Number((z - 0.1).toFixed(2)), 0.4, 2.0))}>
+                    −
+                  </button>
+                  <input type="range" min={0.4} max={2.0} step={0.01} value={diagramZoom} onChange={(e) => setDiagramZoom(Number(e.target.value))} style={{ width: 180 }} />
+                  <button style={miniBtn} onClick={() => setDiagramZoom((z) => clamp(Number((z + 0.1).toFixed(2)), 0.4, 2.0))}>
+                    +
+                  </button>
+                  <span style={{ opacity: 0.82, fontWeight: 900, fontSize: 13, minWidth: 54, textAlign: "right" }}>{(diagramZoom * 100).toFixed(0)}%</span>
+                </div>
+              </div>
+            }
+          >
+            {!loaded ? (
+              <WarningBanner title="No file loaded">Go back to Step 1 and import a file (or load test data).</WarningBanner>
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                {/* Step 3 includes Apply/Reset buttons (same as Step 2) */}
+                <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 950 }}>Map lines to maillon groups (setup)</div>
+                      <div style={{ opacity: 0.78, fontSize: 13, marginTop: 4 }}>Apply/Reset ranges here without leaving the diagram.</div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                      <button style={{ ...topBtn, background: "rgba(59,130,246,0.20)" }} onClick={() => rebuildMappingFromRanges(false)}>
+                        Apply ranges
+                      </button>
+                      <button style={{ ...topBtn, background: "rgba(239,68,68,0.12)" }} onClick={() => rebuildMappingFromRanges(true)}>
+                        Reset to ranges
+                      </button>
+                      <button style={topBtn} onClick={() => setStep(2)}>
+                        Edit ranges →
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 950, marginBottom: 8 }}>Live grouping diagram (drag chips to move)</div>
+                    {/* Fixed size + scrollbars */}
+                    <DiagramScrollBox height={640} width={980} />
+                    <div style={{ marginTop: 8, opacity: 0.78, fontSize: 13 }}>
+                      Drag any line chip into another group bucket. Scrollbars are always visible (bottom + right).
+                    </div>
+                  </div>
+
+                  <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10 }}>
+                    <div style={{ fontWeight: 950 }}>Changes summary</div>
+                    <div style={{ opacity: 0.78, fontSize: 13, marginTop: 4 }}>
+                      Shows lines moved compared to the <b>default mapping</b> created when you imported the file (or clicked “Reset to ranges”).
+                    </div>
+
+                    <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                      <div style={{ opacity: 0.86, fontWeight: 900 }}>
+                        Changed lines: <b>{changes.length}</b>
+                      </div>
+                      <button
+                        style={{ ...topBtn, background: "rgba(59,130,246,0.20)" }}
+                        onClick={() => {
+                          const payload = { schema: "trim-tuning-step2-changes-v1", exportedAt: new Date().toISOString(), wing: { make: meta.make || "", model: meta.model || "" }, changes };
+                          const name = `${meta.make || "Wing"}-${meta.model || "Changes"}`.replace(/\s+/g, "-");
+                          downloadJSON(payload, `${name}-mapping-changes.json`);
+                        }}
+                        disabled={changes.length === 0}
+                      >
+                        Export changes JSON
+                      </button>
+                    </div>
+
+                    <div style={{ marginTop: 10, maxHeight: 320, overflow: "auto", border: `1px solid ${theme.border}`, borderRadius: 14 }}>
+                      {changes.length === 0 ? (
+                        <div style={{ padding: 10, opacity: 0.78, fontWeight: 900 }}>No overrides yet. Drag a line into a new bucket or use dropdowns in Step 2.</div>
+                      ) : (
+                        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                          <thead>
+                            <tr style={{ background: "rgba(255,255,255,0.05)" }}>
+                              <th style={th}>Line</th>
+                              <th style={th}>From</th>
+                              <th style={th}>To</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {changes.map((c) => (
+                              <tr key={c.lineId} style={{ borderTop: `1px solid ${theme.border}` }}>
+                                <td style={{ ...td, color: chipColorFromLineId(c.lineId), fontWeight: 950 }}>{c.lineId}</td>
+                                <td style={td}>{c.from}</td>
+                                <td style={td}>{c.to}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+
+                    <div style={{ marginTop: 10 }}>
+                      <WarningBanner title="Workflow tip">Once this diagram looks correct, we’ll plug mapping into loops + trimming next.</WarningBanner>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </Panel>
         ) : null}
       </div>
     </div>
   );
 }
 
+// ---------------- Styles ----------------
+const th = { textAlign: "left", padding: "8px 8px", fontSize: 12, fontWeight: 950, color: "rgba(255,255,255,0.82)", whiteSpace: "nowrap" };
+const td = { padding: "8px 8px", fontSize: 12, fontWeight: 850, color: "rgba(255,255,255,0.90)", whiteSpace: "nowrap" };
+
+const card = { border: `1px solid ${theme.border}`, borderRadius: 16, background: "linear-gradient(180deg, rgba(0,0,0,0.38), rgba(255,255,255,0.03))", padding: 10 };
+const cardLabel = { opacity: 0.78, fontWeight: 900, fontSize: 13 };
+const cardValue = { marginTop: 4, fontWeight: 950, fontSize: 14 };
+
+const topBtn = {
+  padding: "9px 12px",
+  borderRadius: 12,
+  border: `1px solid ${theme.border}`,
+  background: "rgba(255,255,255,0.08)",
+  color: theme.text,
+  cursor: "pointer",
+  fontWeight: 950,
+  fontSize: 14,
+};
+const topBtnActive = { background: "rgba(59,130,246,0.25)" };
+const chooseBtn = {
+  padding: "10px 14px",
+  borderRadius: 12,
+  border: `1px solid ${theme.border}`,
+  background: "rgba(59,130,246,0.20)",
+  color: theme.text,
+  cursor: "pointer",
+  fontWeight: 950,
+  fontSize: 14,
+};
+const miniBtn = {
+  width: 36,
+  height: 34,
+  borderRadius: 10,
+  border: `1px solid ${theme.border}`,
+  background: "rgba(255,255,255,0.08)",
+  color: theme.text,
+  cursor: "pointer",
+  fontWeight: 950,
+};
