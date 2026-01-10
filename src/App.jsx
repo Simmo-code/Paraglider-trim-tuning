@@ -3,6 +3,20 @@ import * as XLSX from "xlsx";
 
 const SITE_VERSION = "Trim Tuning • Step1–3 Sandbox • v1.4.3";
 
+
+// Step 3 – Loop sizes (mm) are wing-specific and must be set before baseline loops
+const DEFAULT_LOOP_SIZES = {
+  SL: 0,
+  DL: 7,
+  TL: 10,
+  AS: 12,
+  "AS+": 16,
+  "AS++": 20,
+  CUSTOM: 0,
+};
+const LOOP_TYPES = Object.keys(DEFAULT_LOOP_SIZES);
+
+
 const ATTACHED_TEST_CSV = `Make ,Model,tolerance ,Korrektur,,,,,,,,,,,,
 Ozone,Speedster3,10,-507,,,,,,,,,,,,
 A,Soll,Ist L,Ist R,B,Soll,L,R,C,Soll,Ist L,Ist R,D,Soll,L,R
@@ -27,9 +41,12 @@ const theme = {
   bg: "#0f1115",
   panel: "rgba(255,255,255,0.05)",
   panel2: "rgba(0,0,0,0.35)",
+  // Shared dark pill background used by StatPill / ControlPill / TogglePill
+  bg2: "rgba(0,0,0,0.35)",
   border: "rgba(255,255,255,0.14)",
   text: "rgba(255,255,255,0.92)",
-  good: "rgba(34,197,94,0.95)",
+  green: "rgba(34,197,94,0.95)",
+  good: "rgba(59,130,246,0.90)",
   bad: "rgba(239,68,68,0.95)",
   warnBg: "rgba(245,158,11,0.10)",
   warnStroke: "rgba(245,158,11,0.55)",
@@ -51,6 +68,15 @@ function safeNum(v) {
   const n = Number(String(v ?? "").trim().replace(",", "."));
   return Number.isFinite(n) ? n : null;
 }
+
+function median(values) {
+  const nums = (values || []).filter((x) => typeof x === "number" && Number.isFinite(x));
+  if (nums.length === 0) return null;
+  nums.sort((a, b) => a - b);
+  const mid = Math.floor(nums.length / 2);
+  return nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+}
+
 function deepClone(obj) {
   try {
     return JSON.parse(JSON.stringify(obj));
@@ -224,7 +250,7 @@ const DIAGRAM_BASE_H = 980;
 const DIAGRAM_W = Math.round(DIAGRAM_BASE_W * DIAGRAM_SCALE);
 const DIAGRAM_H = Math.round(DIAGRAM_BASE_H * DIAGRAM_SCALE);
 
-function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showWingOutline, compactLayout, setLineToGroupFromDrag }) {
+function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showWingOutline, compactLayout, setLineToGroupFromDrag, changedLineIds }) {
   const W = DIAGRAM_W;
   const H = DIAGRAM_H;
   const cx = W / 2;
@@ -417,11 +443,13 @@ function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showW
       const yy = innerY + rr * (chip.h + chip.gapY);
 
       const chipStroke = chipColorFromLineId(lineId);
+      const moved = !!changedLineIds?.has?.(lineId);
+      const chipText = moved ? theme.bad : "rgba(255,255,255,0.93)";
 
       items.push(
         <g key={`chip-${b.groupId}-${lineId}`}>
           <rect x={x} y={yy} width={chip.w} height={chip.h} rx={12} ry={12} fill="rgba(255,255,255,0.10)" stroke={chipStroke} strokeOpacity={0.60} />
-          <text x={x + chip.w / 2} y={yy + chip.h * 0.74} textAnchor="middle" fill="rgba(255,255,255,0.93)" fontSize={18} fontWeight={950}>
+          <text x={x + chip.w / 2} y={yy + chip.h * 0.74} textAnchor="middle" fill={chipText} fontSize={18} fontWeight={950}>
             {lineId}
           </text>
           <rect x={x} y={yy} width={chip.w} height={chip.h} rx={12} ry={12} fill="transparent" style={{ cursor: "grab" }} onPointerDown={(e) => onPointerDownChip(e, { lineId, color: chipStroke })} />
@@ -563,6 +591,112 @@ function WarningBanner({ title, children }) {
     </div>
   );
 }
+
+function StatPill({ label, value, n }) {
+  const v = Number.isFinite(value) ? Math.round(value) : null;
+  return (
+    <div
+      style={{
+        border: `1px solid ${theme.border}`,
+        background: theme.bg2,
+        borderRadius: 999,
+        padding: "8px 10px",
+        display: "flex",
+        gap: 8,
+        alignItems: "baseline",
+      }}
+    >
+      <span style={{ fontSize: 12, opacity: 0.8 }}>{label}</span>
+      <span style={{ fontWeight: 900 }}>{v == null ? "—" : `${v} mm`}</span>
+      <span style={{ fontSize: 12, opacity: 0.6 }}>{typeof n === "number" ? `n=${n}` : ""}</span>
+    </div>
+  );
+}
+
+
+
+function ControlPill({ label, value, onChange, suffix = "mm", width = 90, step = 1, min, max }) {
+  return (
+    <div
+      style={{
+        border: `1px solid ${theme.border}`,
+        background: theme.bg2,
+        borderRadius: 999,
+        padding: "8px 10px",
+        display: "flex",
+        gap: 8,
+        alignItems: "baseline",
+      }}
+    >
+      <span style={{ fontSize: 12, opacity: 0.8 }}>{label}</span>
+      <input
+        type="number"
+        value={Number.isFinite(value) ? value : 0}
+        step={step}
+        min={min}
+        max={max}
+        onChange={(e) => onChange(Number(e.target.value || 0))}
+        style={{
+          width,
+          background: "transparent",
+          color: theme.text,
+          border: `1px solid ${theme.border}`,
+          borderRadius: 12,
+          padding: "6px 8px",
+          fontWeight: 900,
+          outline: "none",
+        }}
+      />
+      <span style={{ fontSize: 12, opacity: 0.75 }}>{suffix}</span>
+    </div>
+  );
+}
+
+function TogglePill({ label, checked, onChange }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      style={{
+        border: `1px solid ${theme.border}`,
+        background: theme.bg2,
+        borderRadius: 999,
+        padding: "8px 10px",
+        display: "flex",
+        gap: 10,
+        alignItems: "center",
+        cursor: "pointer",
+        color: theme.text,
+      }}
+      title={label}
+    >
+      <span style={{ fontSize: 12, opacity: 0.8 }}>{label}</span>
+      <span
+        style={{
+          width: 36,
+          height: 20,
+          borderRadius: 999,
+          border: `1px solid ${theme.border}`,
+          background: checked ? "rgba(34,197,94,0.35)" : "rgba(148,163,184,0.18)",
+          position: "relative",
+        }}
+      >
+        <span
+          style={{
+            position: "absolute",
+            top: 2,
+            left: checked ? 18 : 2,
+            width: 16,
+            height: 16,
+            borderRadius: 999,
+            background: checked ? "rgba(34,197,94,0.95)" : "rgba(148,163,184,0.65)",
+            transition: "left 120ms ease",
+          }}
+        />
+      </span>
+    </button>
+  );
+}
 function SegTabs({ value, onChange, tabs }) {
   return (
     <div style={{ display: "inline-flex", border: `1px solid ${theme.border}`, borderRadius: 14, overflow: "hidden", background: "rgba(0,0,0,0.35)", flexWrap: "wrap" }}>
@@ -610,6 +744,25 @@ async function readFileText(file) {
 
 export default function App() {
   const [step, setStep] = useState(1);
+
+  // Step 3 sub-page view (keeps Step 3 from getting too busy)
+  const [step3View, setStep3View] = useState("diagram");
+
+  // Step 3 baseline loops (installed on maillon groups)
+  const [loopSizes, setLoopSizes] = useState(() => deepClone(DEFAULT_LOOP_SIZES));
+  const [groupLoopSetup, setGroupLoopSetup] = useState({});
+
+  // Step 4 (trim) — frozen snapshot of Step 3 baseline loops (set ONCE when entering Step 4)
+  const [groupLoopBaseline, setGroupLoopBaseline] = useState(null); // Record<groupId, loopType> | null
+
+  // Step 4 editable state (must NOT affect Step 3 baseline)
+  const [groupLoopChange, setGroupLoopChange] = useState({}); // optional override: Record<groupId, loopType>
+  const [groupAdjustments, setGroupAdjustments] = useState({}); // mm adjust: Record<groupId, number>
+
+  // Step 4 view options
+  const [showCorrected, setShowCorrected] = useState(true);
+  const [step4LetterFilter, setStep4LetterFilter] = useState({ A: true, B: true, C: true, D: true });
+
 
   // Step 1
   const [meta, setMeta] = useState({ make: "", model: "", tolerance: 10, correction: 0 });
@@ -661,6 +814,14 @@ export default function App() {
       D: makeDefaultRanges(1, 3),
     });
     setLineToGroup({});
+    setStep3View("diagram");
+    setLoopSizes(deepClone(DEFAULT_LOOP_SIZES));
+    setGroupLoopSetup({});
+    setGroupLoopBaseline(null);
+    setGroupLoopChange({});
+    setGroupAdjustments({});
+    setShowCorrected(true);
+    setStep4LetterFilter({ A: true, B: true, C: true, D: true });
     setRangeTab("A");
     setShowOverrides(true);
 
@@ -756,10 +917,71 @@ export default function App() {
     return { max, totalLines };
   }, [wideRows]);
 
+  const groupsInUse = useMemo(() => {
+    const vals = Object.values(lineToGroup || {}).filter(Boolean);
+    const uniq = Array.from(new Set(vals));
+    const parse = (s) => {
+      const m = String(s || "").match(/^([A-Z]+)(\d+)([LR])$/i);
+      if (!m) return { p: String(s || ""), n: 0, side: "" };
+      return { p: m[1].toUpperCase(), n: Number(m[2] || 0), side: m[3].toUpperCase() };
+    };
+    uniq.sort((a, b) => {
+      const A = parse(a);
+      const B = parse(b);
+      if (A.p !== B.p) return A.p.localeCompare(B.p);
+      if (A.n !== B.n) return A.n - B.n;
+      return (A.side || "").localeCompare(B.side || "");
+    });
+    return uniq;
+  }, [lineToGroup]);
+
+  const zeroingStats = useMemo(() => {
+    const all = [];
+    const left = [];
+    const right = [];
+    for (const r of wideRows || []) {
+      const nominal = typeof r.nominal === "number" ? r.nominal : safeNum(r.nominal);
+      const ml = typeof r.measuredL === "number" ? r.measuredL : safeNum(r.measuredL);
+      const mr = typeof r.measuredR === "number" ? r.measuredR : safeNum(r.measuredR);
+      if (Number.isFinite(nominal) && Number.isFinite(ml)) {
+        const d = nominal - ml;
+        all.push(d);
+        left.push(d);
+      }
+      if (Number.isFinite(nominal) && Number.isFinite(mr)) {
+        const d = nominal - mr;
+        all.push(d);
+        right.push(d);
+      }
+    }
+    const wholeMedian = median(all);
+    const leftMedian = median(left);
+    const rightMedian = median(right);
+    return {
+      wholeMedian,
+      leftMedian,
+      rightMedian,
+      nAll: all.length,
+      nLeft: left.length,
+      nRight: right.length,
+    };
+  }, [wideRows]);
+
+
   const groupOptionsForSelect = useMemo(() => {
     const opts = getGroupOptions(prefixByLetter, groupCountByLetter);
     return opts.map((g) => ({ value: g, label: g }));
   }, [prefixByLetter, groupCountByLetter]);
+
+  const loopTypeOptions = useMemo(() => LOOP_TYPES.map((t) => ({ value: t, label: t })), []);
+
+  // Step 4 baseline freeze: take a snapshot of Step 3 loops ONCE when Step 4 is first entered.
+  useEffect(() => {
+    if (step !== 4) return;
+    if (groupLoopBaseline !== null) return;
+    // Freeze exactly once per reset/import session.
+    setGroupLoopBaseline(deepClone(groupLoopSetup || {}));
+  }, [step, groupLoopBaseline, groupLoopSetup]);
 
   const letterIdxRows = useMemo(() => {
     const out = [];
@@ -769,6 +991,95 @@ export default function App() {
     }
     return out;
   }, [maxByLetter]);
+
+
+  const step4LineRows = useMemo(() => {
+    // Build per-line rows for the whole wing. Each side is a separate entity (A1L, A1R, ...).
+    if (!Array.isArray(wideRows) || wideRows.length === 0) return [];
+    const out = [];
+    const tol = Number(meta?.tolerance ?? 0);
+    const corr = Number(meta?.correction ?? 0);
+
+    const loopMm = (t) => Number(loopSizes?.[t] ?? 0);
+
+    for (const r of wideRows) {
+      const letter = String(r?.letter || "").toUpperCase();
+      if (!step4LetterFilter?.[letter]) continue;
+
+      const idx = Number(r?.idx);
+      if (!Number.isFinite(idx)) continue;
+
+      const base = `${letter}${idx}`;
+      const nominal = Number.isFinite(Number(r?.nominal)) ? Number(r.nominal) : null;
+
+      for (const side of ["L", "R"]) {
+        const lineId = `${base}${side}`;
+        const measured = side === "L" ? r?.measuredL : r?.measuredR;
+        const raw = Number.isFinite(Number(measured)) ? Number(measured) : null;
+
+        const groupId = String(lineToGroup?.[lineId] || "");
+
+        const baseLoop = groupLoopBaseline?.[groupId] || "SL";
+        const override = groupLoopChange?.[groupId] || "";
+        const afterLoop = override || baseLoop;
+
+        const adj = Number(groupAdjustments?.[groupId] ?? 0);
+
+        const corrected = raw == null ? null : raw + (showCorrected ? corr : 0);
+        const before = corrected == null ? null : corrected + loopMm(baseLoop);
+        const afterVal = corrected == null ? null : corrected + loopMm(afterLoop) + adj;
+
+        const delta = nominal == null || afterVal == null ? null : afterVal - nominal;
+
+        let sev = "na";
+        if (delta != null) {
+          const ad = Math.abs(delta);
+          if (ad >= tol) sev = "bad";
+          else if (ad <= 4) sev = "green";
+          else if (ad >= Math.max(0, tol - 3)) sev = "warn";
+          else sev = "good";
+        }
+
+        out.push({
+          lineId,
+          letter,
+          idx,
+          side,
+          groupId,
+          nominal,
+          raw,
+          corrected,
+          baseLoop,
+          afterLoop,
+          adj,
+          before,
+          after: afterVal,
+          delta,
+          sev,
+        });
+      }
+    }
+
+    // Sort: A..D, then idx ascending, then L before R
+    out.sort((a, b) => {
+      if (a.letter !== b.letter) return a.letter.localeCompare(b.letter);
+      if (a.idx !== b.idx) return a.idx - b.idx;
+      return a.side.localeCompare(b.side);
+    });
+    return out;
+  }, [
+    wideRows,
+    lineToGroup,
+    groupLoopBaseline,
+    groupLoopChange,
+    groupAdjustments,
+    loopSizes,
+    meta?.tolerance,
+    meta?.correction,
+    showCorrected,
+    step4LetterFilter,
+  ]);
+
 
   function setRange(letter, bucket, field, value) {
     setRangesByLetter((prev) => {
@@ -842,6 +1153,8 @@ export default function App() {
     return out;
   }, [defaultMappingSnapshot, lineToGroup]);
 
+  const changedLineIdSet = useMemo(() => new Set((changes || []).map((c) => c.lineId)), [changes]);
+
   function buildWingProfileJSON() {
     return {
       schema: "trim-tuning-wing-profile-v1",
@@ -899,7 +1212,9 @@ export default function App() {
           borderRadius: 12,
           border: `1px solid ${theme.border}`,
           background: "rgba(255,255,255,0.03)",
-          width: 160,
+          // snug: avoid fixed widths that can overlap on smaller screens
+          width: "fit-content",
+          minWidth: 140,
         }}
       >
         <div style={{ fontWeight: 950, fontSize: 12 }}>
@@ -1068,6 +1383,7 @@ export default function App() {
             showWingOutline={diagramWingOutline}
             compactLayout={diagramCompact}
             setLineToGroupFromDrag={setLineToGroupFromDrag}
+            changedLineIds={changedLineIdSet}
           />
         </div>
       </div>
@@ -1078,7 +1394,8 @@ export default function App() {
   const stepTabs = [
     { value: 1, label: "Step 1" },
     { value: 2, label: "Step 2" },
-    { value: 3, label: "Step 3 (Diagram)" },
+    { value: 3, label: "Step 3" },
+    { value: 4, label: "Step 4 (Trim)" },
   ];
 
   return (
@@ -1100,7 +1417,7 @@ export default function App() {
             <div>
               <div style={{ fontSize: 36, fontWeight: 950, letterSpacing: -0.9 }}>Paraglider Trim Tuning</div>
               <div style={{ marginTop: 6, opacity: 0.86, fontSize: 14, fontWeight: 900 }}>
-                {SITE_VERSION} <span style={{ opacity: 0.7, fontWeight: 850 }}>• Step 1–3</span>
+                {SITE_VERSION} <span style={{ opacity: 0.7, fontWeight: 850 }}>• Step 1–4</span>
               </div>
             </div>
 
@@ -1268,7 +1585,7 @@ export default function App() {
                   <div style={{ marginTop: 10 }}>
                     <div style={{ fontWeight: 950, marginBottom: 8 }}>Prefixes</div>
                     {/* Reduced bucket widths + moved left */}
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 160px)", gap: 8, justifyContent: "start", alignItems: "start" }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-start", alignItems: "flex-start" }}>
                       <PrefixTile letter="A" />
                       <PrefixTile letter="B" />
                       <PrefixTile letter="C" />
@@ -1346,11 +1663,23 @@ export default function App() {
         {step === 3 ? (
           <Panel
             tint
-            title="Step 3 — Diagram + changes summary"
+            title="Step 3 — Mapping + baseline loops"
             right={
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 8, padding: "6px 8px", borderRadius: 14, border: `1px solid ${theme.border}`, background: theme.panel2 }}>
+                  <button style={{ ...topBtn, ...(step3View === "diagram" ? { background: "rgba(59,130,246,0.25)" } : null) }} onClick={() => setStep3View("diagram")}>
+                    Diagram
+                  </button>
+                  <button style={{ ...topBtn, ...(step3View === "baseline" ? { background: "rgba(59,130,246,0.25)" } : null) }} onClick={() => setStep3View("baseline")}>
+                    Baseline loops
+                  </button>
+                </div>
+
                 <button style={topBtn} onClick={() => setStep(2)}>
                   ← Back to Step 2
+                </button>
+                <button style={{ ...topBtn, background: "rgba(34,197,94,0.18)" }} onClick={() => setStep(4)}>
+                  Go to Step 4 →
                 </button>
                 <button style={topBtn} onClick={fitDiagramToScreen}>
                   Fit to screen
@@ -1380,7 +1709,66 @@ export default function App() {
               <WarningBanner title="No file loaded">Go back to Step 1 and import a file (or load test data).</WarningBanner>
             ) : (
               <div style={{ display: "grid", gap: 10 }}>
-                {/* Step 3 includes Apply/Reset buttons (same as Step 2) */}
+                {step3View === "baseline" ? (
+                  <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                      <div>
+                        <div style={{ fontWeight: 950 }}>Installed loops per maillon group (baseline)</div>
+                        <div style={{ opacity: 0.78, fontSize: 13, marginTop: 4 }}>Set loop sizes (mm), then select what is currently installed on the wing. Step 4 will freeze this baseline.</div>
+                      </div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: 10, marginTop: 10 }}>
+                      <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: theme.panel, padding: 10 }}>
+                        <div style={{ fontWeight: 900, marginBottom: 8 }}>Loop sizes (mm)</div>
+                        <div style={{ display: "grid", gap: 8 }}>
+                          {LOOP_TYPES.map((lt) => (
+                            <div key={lt} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                              <div style={{ fontWeight: 900 }}>{lt}</div>
+                              <input type="number" value={Number(loopSizes?.[lt] ?? 0)} onChange={(e) => setLoopSizes((prev) => ({ ...(prev || {}), [lt]: Number(e.target.value || 0) }))} style={{ width: 90, padding: "8px 10px", borderRadius: 10, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.45)", color: theme.text, fontWeight: 900 }} />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: theme.panel, padding: 10, minWidth: 0 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                          <div style={{ fontWeight: 900 }}>Baseline installed loop by group</div>
+                          <div style={{ opacity: 0.75, fontSize: 12 }}>Groups shown: <b>{groupsInUse.length}</b></div>
+                        </div>
+                        {groupsInUse.length === 0 ? (
+                          <div style={{ marginTop: 10, opacity: 0.75 }}>No groups detected yet. Complete Step 2 mapping first (Apply ranges or drag chips).</div>
+                        ) : (
+                          <div style={{ marginTop: 10, maxHeight: 520, overflow: "auto", border: `1px solid ${theme.border}`, borderRadius: 12 }}>
+                            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                              <thead>
+                                <tr>
+                                  <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>Group</th>
+                                  <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>Installed loop</th>
+                                  <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>mm</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {groupsInUse.map((g) => {
+                                  const lt = groupLoopSetup?.[g] || "SL";
+                                  const mm = Number(loopSizes?.[lt] ?? 0);
+                                  return (
+                                    <tr key={g} style={{ borderTop: `1px solid ${theme.border}` }}>
+                                      <td style={td}><div style={{ fontWeight: 950 }}>{g}</div></td>
+                                      <td style={td}><Select value={lt} onChange={(v) => setGroupLoopSetup((prev) => ({ ...(prev || {}), [g]: v || "SL" }))} options={loopTypeOptions} width={150} /></td>
+                                      <td style={{ ...td, fontWeight: 950, opacity: 0.9 }}>{mm}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                        <div style={{ marginTop: 10, opacity: 0.75, fontSize: 12 }}>Tip: Use <b>CUSTOM</b> for wings with non-standard loop lengths.</div>
+                      </div>
+                    </div>
+                  </div>
+				) : (
+				  <>
+				  {/* Step 3 includes Apply/Reset buttons (same as Step 2) */}
                 <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                     <div>
@@ -1464,11 +1852,300 @@ export default function App() {
                       <WarningBanner title="Workflow tip">Once this diagram looks correct, we’ll plug mapping into loops + trimming next.</WarningBanner>
                     </div>
                   </div>
-                </div>
+				</div>
+				  </>
+				)}
               </div>
             )}
           </Panel>
         ) : null}
+        {/* Step 4 */}
+        {step === 4 ? (
+          <Panel
+            tint
+            title="Step 4 — Trim (frozen baseline)"
+            right={
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <button style={topBtn} onClick={() => setStep(3)}>
+                  ← Back to Step 3
+                </button>
+                <button
+                  style={{ ...topBtn, background: "rgba(239,68,68,0.12)" }}
+                  onClick={() => {
+                    setGroupLoopChange({});
+                    setGroupAdjustments({});
+                  }}
+                >
+                  Reset Step 4 adjustments
+                </button>
+              </div>
+            }
+          >
+            {!loaded ? (
+              <WarningBanner title="No file loaded">Go back to Step 1 and import a file (or load test data).</WarningBanner>
+            ) : groupLoopBaseline === null ? (
+              <WarningBanner title="Baseline not frozen yet">
+                Step 4 must freeze a snapshot of Step 3 <b>exactly once</b>. Click “Freeze baseline now” to continue.
+                <div style={{ marginTop: 10 }}>
+                  <button
+                    style={{ ...topBtn, background: "rgba(34,197,94,0.18)" }}
+                    onClick={() => setGroupLoopBaseline(deepClone(groupLoopSetup || {}))}
+                  >
+                    Freeze baseline now
+                  </button>
+                </div>
+              </WarningBanner>
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+                    <div>
+                      <div style={{ fontWeight: 950 }}>Meta controls</div>
+                      <div style={{ opacity: 0.78, fontSize: 13, marginTop: 4 }}>
+                        Adjust tolerance and correction used for all Step 4 tables. (Does not change Step 3 baseline.)
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-start" }}>
+                      <ControlPill
+                        label="Tolerance"
+                        value={meta.tolerance ?? 6}
+                        onChange={(v) => setMeta((p) => ({ ...p, tolerance: v }))}
+                        suffix="mm"
+                        width={90}
+                        min={0}
+                      />
+                      <ControlPill
+                        label="Correction"
+                        value={meta.correction ?? 0}
+                        onChange={(v) => setMeta((p) => ({ ...p, correction: v }))}
+                        suffix="mm"
+                        width={110}
+                      />
+                      <TogglePill label="Show corrected" checked={!!showCorrected} onChange={setShowCorrected} />
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${theme.border}` }}>
+                    <div style={{ fontWeight: 850, marginBottom: 6 }}>Zeroing wizard (auto-suggest correction)</div>
+                    <div style={{ fontSize: 13, opacity: 0.82 }}>
+                      Suggested correction uses the <b>median</b> of <b>(Soll − Ist)</b> across all valid measurements.
+                    </div>
+
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
+                      <StatPill label="Whole wing median" value={zeroingStats.wholeMedian} n={zeroingStats.nAll} />
+                      <StatPill label="Left median" value={zeroingStats.leftMedian} n={zeroingStats.nLeft} />
+                      <StatPill label="Right median" value={zeroingStats.rightMedian} n={zeroingStats.nRight} />
+
+                      <button
+                        style={{ ...topBtn, background: "rgba(99,102,241,0.20)" }}
+                        disabled={!Number.isFinite(zeroingStats.wholeMedian)}
+                        onClick={() => {
+                          const v = zeroingStats.wholeMedian;
+                          if (!Number.isFinite(v)) return;
+                          setMeta((p) => ({ ...p, correction: Math.round(v) }));
+                        }}
+                        title="Apply whole wing median as correction"
+                      >
+                        Apply suggested correction
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+
+                <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10 }}>
+                  <div style={{ fontWeight: 950 }}>Trim adjustments per maillon group (mm)</div>
+                  <div style={{ opacity: 0.78, fontSize: 13, marginTop: 4 }}>
+                    Uses <b>frozen baseline</b> from Step 3. Step 3 edits will not affect this page until you Reset all.
+                  </div>
+
+                  {groupsInUse.length === 0 ? (
+                    <div style={{ marginTop: 10, opacity: 0.75 }}>No groups detected. Complete Step 2 mapping first.</div>
+                  ) : (
+                    <div style={{ marginTop: 10, overflow: "auto", border: `1px solid ${theme.border}`, borderRadius: 12 }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 860 }}>
+                        <thead>
+                          <tr>
+                            <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>Group</th>
+                            <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>Baseline loop</th>
+                            <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>Override loop</th>
+                            <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>Loop Δ (mm)</th>
+                            <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>Adjust (mm)</th>
+                            <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>Total Δ (mm)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {groupsInUse.map((g) => {
+                            const baseLoop = groupLoopBaseline?.[g] || "SL";
+                            const override = groupLoopChange?.[g] || "";
+                            const afterLoop = override || baseLoop;
+
+                            const baseMm = Number(loopSizes?.[baseLoop] ?? 0);
+                            const afterMm = Number(loopSizes?.[afterLoop] ?? 0);
+                            const loopDelta = afterMm - baseMm;
+
+                            const adj = Number(groupAdjustments?.[g] ?? 0);
+                            const total = loopDelta + adj;
+
+                            const totalColor =
+                              Math.abs(total) >= Number(meta?.tolerance ?? 0) ? theme.bad : Math.abs(total) >= Math.max(0, Number(meta?.tolerance ?? 0) - 3) ? theme.warn : theme.good;
+
+                            return (
+                              <tr key={g} style={{ borderTop: `1px solid ${theme.border}` }}>
+                                <td style={td}>
+                                  <div style={{ fontWeight: 950 }}>{g}</div>
+                                </td>
+                                <td style={td}>
+                                  <div style={{ fontWeight: 950, opacity: 0.9 }}>{baseLoop}</div>
+                                </td>
+                                <td style={td}>
+                                  <Select
+                                    value={override}
+                                    onChange={(v) =>
+                                      setGroupLoopChange((prev) => {
+                                        const next = { ...(prev || {}) };
+                                        if (!v) delete next[g];
+                                        else next[g] = v;
+                                        return next;
+                                      })
+                                    }
+                                    options={[{ value: "", label: "(same as baseline)" }, ...loopTypeOptions]}
+                                    width={190}
+                                  />
+                                </td>
+                                <td style={{ ...td, fontWeight: 950, opacity: 0.9 }}>{loopDelta}</td>
+                                <td style={td}>
+                                  <input
+                                    type="number"
+                                    value={Number.isFinite(adj) ? adj : 0}
+                                    onChange={(e) =>
+                                      setGroupAdjustments((prev) => ({ ...(prev || {}), [g]: Number(e.target.value || 0) }))
+                                    }
+                                    style={{ width: 120, padding: "8px 10px", borderRadius: 10, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.45)", color: theme.text, fontWeight: 900 }}
+                                  />
+                                </td>
+                                <td style={{ ...td, fontWeight: 950, color: totalColor }}>{total}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+
+                <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontWeight: 950 }}>Whole wing — per line lengths</div>
+                      <div style={{ opacity: 0.78, fontSize: 13, marginTop: 4 }}>
+                        Each line side (L/R) is treated as a separate entity. Values use the <b>frozen baseline</b> + Step 4 overrides/adjustments.
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      <button
+                        style={{ ...topBtn, ...(showCorrected ? topBtnActive : null) }}
+                        onClick={() => setShowCorrected((v) => !v)}
+                        title="Toggle whether correction is applied to measured values"
+                      >
+                        {showCorrected ? "Corrected: ON" : "Corrected: OFF"}
+                      </button>
+
+                      {["A", "B", "C", "D"].map((L) => (
+                        <button
+                          key={L}
+                          style={{
+                            ...topBtn,
+                            background: step4LetterFilter?.[L] ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
+                            borderColor: step4LetterFilter?.[L] ? "rgba(255,255,255,0.22)" : theme.border,
+                            color: step4LetterFilter?.[L] ? theme.text : "rgba(255,255,255,0.65)",
+                          }}
+                          onClick={() => setStep4LetterFilter((p) => ({ ...(p || {}), [L]: !p?.[L] }))}
+                        >
+                          {L}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {step4LineRows.length === 0 ? (
+                    <div style={{ marginTop: 10, opacity: 0.75 }}>No per-line data available yet. Import data in Step 1 and map lines in Step 2.</div>
+                  ) : (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        overflow: "auto",
+                        border: `1px solid ${theme.border}`,
+                        borderRadius: 12,
+                        maxHeight: 520,
+                      }}
+                    >
+                      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1200 }}>
+                        <thead>
+                          <tr>
+                            {[
+                              "Line",
+                              "Group",
+                              "Nominal",
+                              "Raw",
+                              "Corrected",
+                              "Baseline loop",
+                              "After loop",
+                              "Adj (mm)",
+                              "Before",
+                              "After",
+                              "Δ vs nominal",
+                            ].map((h) => (
+                              <th key={h} style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {step4LineRows.map((r) => {
+                            const sevColor = r.sev === "bad" ? theme.bad : r.sev === "warn" ? theme.warn : r.sev === "green" ? theme.green : r.sev === "good" ? theme.good : "rgba(255,255,255,0.65)";
+                            const rowBg =
+                              r.sev === "bad" ? "rgba(239,68,68,0.08)" : r.sev === "warn" ? "rgba(245,158,11,0.08)" : "transparent";
+
+                            const fmt = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Math.round(Number(n)));
+
+                            return (
+                              <tr key={r.lineId} style={{ borderTop: `1px solid ${theme.border}`, background: rowBg }}>
+                                <td style={{ ...td, fontWeight: 950, color: chipColorFromLineId(r.lineId) }}>{r.lineId}</td>
+                                <td style={td}>{r.groupId || "—"}</td>
+                                <td style={td}>{fmt(r.nominal)}</td>
+                                <td style={td}>{fmt(r.raw)}</td>
+                                <td style={td}>{showCorrected ? fmt(r.corrected) : "—"}</td>
+                                <td style={td}>{r.baseLoop}</td>
+                                <td style={td}>{r.afterLoop}</td>
+                                <td style={td}>{fmt(r.adj)}</td>
+                                <td style={td}>{fmt(r.before)}</td>
+                                <td style={td}>{fmt(r.after)}</td>
+                                <td style={{ ...td, fontWeight: 950, color: sevColor }}>{r.delta == null ? "—" : fmt(r.delta)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: 10, opacity: 0.78, fontSize: 13 }}>
+                    Tolerance: <b>{Number(meta?.tolerance ?? 0)}mm</b> • Yellow within <b>3mm</b> of tolerance • Red at/over tolerance
+                  </div>
+                </div>
+
+                <WarningBanner title="Next">
+                  Once this table is correct and stable (no Step 3 bleed), we’ll re-introduce charts (rear view + pitch trim) using only Step 4 sources.
+                </WarningBanner>
+              </div>
+            )}
+          </Panel>
+        ) : null}
+
       </div>
     </div>
   );
