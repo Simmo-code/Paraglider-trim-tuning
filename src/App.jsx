@@ -1,17 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 
-const SITE_VERSION = "Trim Tuning • Step1–3 Sandbox • v1.4.3";
+const SITE_VERSION = "Trim Tuning v1.4";
 
 
 // Step 3 – Loop sizes (mm) are wing-specific and must be set before baseline loops
 const DEFAULT_LOOP_SIZES = {
   SL: 0,
-  DL: 7,
-  TL: 10,
-  AS: 12,
-  "AS+": 16,
-  "AS++": 20,
+  DL: -7,
+  TL: -10,
+  AS: -12,
+  "AS+": -16,
+  "AS++": -20,
   CUSTOM: 0,
 };
 const LOOP_TYPES = Object.keys(DEFAULT_LOOP_SIZES);
