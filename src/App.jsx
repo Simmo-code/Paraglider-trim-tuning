@@ -1955,7 +1955,7 @@ function setRange(letter, bucket, field, value) {
 `}</style>
 
       {/* reduced overall width to match overrides panel */}
-      <div style={{ width: "100%", paddingLeft: 12, paddingRight: 12, display: "grid", gap: 10 }}>
+      <div style={step !== 4 ? { width: "100%", maxWidth: 1100, margin: "0 auto", paddingLeft: 12, paddingRight: 12, display: "grid", gap: 10 } : { width: "100%", paddingLeft: 12, paddingRight: 12, display: "grid", gap: 10 }}>
         {/* Header */}
         <div style={{ border: `1px solid ${theme.border}`, borderRadius: 22, padding: 14, background: "linear-gradient(180deg, rgba(59,130,246,0.16), rgba(255,255,255,0.03))" }}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -2000,6 +2000,8 @@ function setRange(letter, bucket, field, value) {
           ) : null}
         </div>
 
+        {step !== 4 ? (
+          <div style={step123Wrap}>
         {/* Step 1 */}
         {step === 1 ? (
           <Panel
@@ -2404,6 +2406,9 @@ function setRange(letter, bucket, field, value) {
             )}
           </Panel>
         ) : null}
+          </div>
+        ) : null}
+
         {/* Step 4 */}
         {step === 4 ? (
           <div style={{ display: "flex", justifyContent: "center", width: "100%" }}>
@@ -3301,6 +3306,13 @@ const miniInput = {
   color: theme.text,
   fontSize: 12,
   textAlign: "center",
+};
+
+
+const step123Wrap = {
+  width: "100%",
+  maxWidth: 1100,
+  margin: "0 auto",
 };
 
 
