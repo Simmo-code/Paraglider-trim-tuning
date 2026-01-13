@@ -1,17 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 
-const SITE_VERSION = "Trim Tuning v1";
+const SITE_VERSION = "Trim Tuning • Step1–3 Sandbox • v1.4.3";
 
 
 // Step 3 – Loop sizes (mm) are wing-specific and must be set before baseline loops
 const DEFAULT_LOOP_SIZES = {
   SL: 0,
-  DL: -7,
-  TL: -10,
-  AS: -12,
-  "AS+": -16,
-  "AS++": -20,
+  DL: 7,
+  TL: 10,
+  AS: 12,
+  "AS+": 16,
+  "AS++": 20,
   CUSTOM: 0,
 };
 const LOOP_TYPES = Object.keys(DEFAULT_LOOP_SIZES);
@@ -1955,7 +1955,7 @@ function setRange(letter, bucket, field, value) {
 `}</style>
 
       {/* reduced overall width to match overrides panel */}
-      <div style={{ maxWidth: 980, margin: "0 auto", display: "grid", gap: 10 }}>
+      <div style={{ width: "100%", paddingLeft: 12, paddingRight: 12, display: "grid", gap: 10 }}>
         {/* Header */}
         <div style={{ border: `1px solid ${theme.border}`, borderRadius: 22, padding: 14, background: "linear-gradient(180deg, rgba(59,130,246,0.16), rgba(255,255,255,0.03))" }}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -2407,7 +2407,7 @@ function setRange(letter, bucket, field, value) {
         {/* Step 4 */}
         {step === 4 ? (
           <div style={{ display: "flex", justifyContent: "center", width: "100%" }}>
-            <div style={{ width: "100%", maxWidth: 1600, paddingLeft: 12, paddingRight: 12 }}>
+            <div style={{ width: "100%", maxWidth: 1600 }}>
               <Panel
             tint
             title="Step 4 — Trim (frozen baseline)"
@@ -2470,7 +2470,7 @@ function setRange(letter, bucket, field, value) {
                         width={110}
                       />
                       <TogglePill label="Show corrected" checked={!!showCorrected} onChange={setShowCorrected} />
-                      <TogglePill label="View Brakes" checked={!!includeBrakeBlock} onChange={setIncludeBrakeBlock} />
+                      <TogglePill label="Brake" checked={!!includeBrakeBlock} onChange={setIncludeBrakeBlock} />
                     </div>
                   </div>
 
@@ -2764,7 +2764,7 @@ function setRange(letter, bucket, field, value) {
                                   <td style={td}>
                                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                                       <select
-                                        style={{ ...miniInput, width: 86, padding: "4px 8px", background: theme.panel2, color: "#2563eb" }}
+                                        style={{ ...miniInput, width: 86, padding: "4px 8px", background: theme.panel2, color: theme.text }}
                                         disabled={!row.L}
                                         value={(row.L && groupLoopChange && groupLoopChange[row.L]) ? groupLoopChange[row.L] : ""}
                                         onChange={(e) => {
@@ -2781,9 +2781,9 @@ function setRange(letter, bucket, field, value) {
                                           }
                                         }}
                                       >
-                                        <option value="" style={{ background: theme.panel2, color: \"#2563eb\" }}>(baseline)</option>
+                                        <option value="" style={{ background: theme.panel2, color: theme.text }}>(baseline)</option>
                                         {LOOP_TYPES.map((lt) => (
-                                          <option key={`L-opt-${lt}`} value={lt} style={{ background: theme.panel2, color: \"#2563eb\" }}>{lt}</option>
+                                          <option key={`L-opt-${lt}`} value={lt} style={{ background: theme.panel2, color: theme.text }}>{lt}</option>
                                         ))}
                                       </select>
                                       <button
@@ -2824,19 +2824,15 @@ function setRange(letter, bucket, field, value) {
                                         setGroupAdjustments((p) => ({ ...p, [row.L]: Number.isFinite(v) ? v : 0 }));
                                       }}
                                     />
-                                  
-<td style={{ ...td, textAlign: "center", fontWeight: 950, background: L.totalColor, border: "1px solid " + theme.border, borderRadius: 999, padding: "4px 10px" }}>
-  {isFinite(L.total) ? Math.round(Number(L.total)) : ""}
-</td>
-
-
+                                  </td>
+                                  <td style={{ ...td, textAlign: "center" }}><div style={{ display: "inline-block", minWidth: 46, padding: "4px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: L.totalColor, fontWeight: 950, lineHeight: 1 }}>{Number.isFinite(L.total) ? Math.round(L.total) : ""}</div></td>
 
                                   {/* Right */}
                                   <td style={td}>{R.baseLoop}</td>
                                   <td style={td}>
                                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                                       <select
-                                        style={{ ...miniInput, width: 86, padding: "4px 8px", background: theme.panel2, color: "#2563eb" }}
+                                        style={{ ...miniInput, width: 86, padding: "4px 8px", background: theme.panel2, color: theme.text }}
                                         disabled={!row.R}
                                         value={(row.R && groupLoopChange && groupLoopChange[row.R]) ? groupLoopChange[row.R] : ""}
                                         onChange={(e) => {
@@ -2853,9 +2849,9 @@ function setRange(letter, bucket, field, value) {
                                           }
                                         }}
                                       >
-                                        <option value="" style={{ background: theme.panel2, color: \"#2563eb\" }}>(baseline)</option>
+                                        <option value="" style={{ background: theme.panel2, color: theme.text }}>(baseline)</option>
                                         {LOOP_TYPES.map((lt) => (
-                                          <option key={`R-opt-${lt}`} value={lt} style={{ background: theme.panel2, color: \"#2563eb\" }}>{lt}</option>
+                                          <option key={`R-opt-${lt}`} value={lt} style={{ background: theme.panel2, color: theme.text }}>{lt}</option>
                                         ))}
                                       </select>
                                       <button
@@ -2897,16 +2893,7 @@ function setRange(letter, bucket, field, value) {
                                       }}
                                     />
                                   </td>
-                                 
-  <div style={{ display: "inline-block", minWidth: 46, padding: "4px 10px", borderRadius: 999, border: "1px solid " + theme.border, background: L.totalColor, fontWeight: 950, lineHeight: 1 }}>
-    {isFinite(L.total) ? Math.round(Number(L.total)) : ""}
-  </div>
-</td>
-  <div style={{ display: "inline-block", minWidth: 46, padding: "4px 10px", borderRadius: 999, border: "1px solid " + theme.border, background: L.totalColor, fontWeight: 950, lineHeight: 1 }}>
-    {isFinite(L.total) ? Math.round(Number(L.total)) : ""}
-  </div>
-</td>
-
+                                  <td style={{ ...td, textAlign: "center" }}><div style={{ display: "inline-block", minWidth: 46, padding: "4px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: R.totalColor, fontWeight: 950, lineHeight: 1 }}>{Number.isFinite(R.total) ? Math.round(R.total) : ""}</div></td>
                                 </tr>
                               );
                             });
