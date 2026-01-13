@@ -1,17 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 
-const SITE_VERSION = "Trim Tuning v1.4";
+const SITE_VERSION = "Trim Tuning • Step1–3 Sandbox • v1.4.3";
 
 
 // Step 3 – Loop sizes (mm) are wing-specific and must be set before baseline loops
 const DEFAULT_LOOP_SIZES = {
   SL: 0,
-  DL: -7,
-  TL: -10,
-  AS: -12,
-  "AS+": -16,
-  "AS++": -20,
+  DL: 7,
+  TL: 10,
+  AS: 12,
+  "AS+": 16,
+  "AS++": 20,
   CUSTOM: 0,
 };
 const LOOP_TYPES = Object.keys(DEFAULT_LOOP_SIZES);
@@ -1955,7 +1955,7 @@ function setRange(letter, bucket, field, value) {
 `}</style>
 
       {/* reduced overall width to match overrides panel */}
-      <div style={{ maxWidth: 980, margin: "0 auto", display: "grid", gap: 10 }}>
+      <div style={{ width: "100%", paddingLeft: 12, paddingRight: 12, display: "grid", gap: 10 }}>
         {/* Header */}
         <div style={{ border: `1px solid ${theme.border}`, borderRadius: 22, padding: 14, background: "linear-gradient(180deg, rgba(59,130,246,0.16), rgba(255,255,255,0.03))" }}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -2406,7 +2406,9 @@ function setRange(letter, bucket, field, value) {
         ) : null}
         {/* Step 4 */}
         {step === 4 ? (
-          <Panel
+          <div style={{ display: "flex", justifyContent: "center", width: "100%" }}>
+            <div style={{ width: "100%", maxWidth: 1600 }}>
+              <Panel
             tint
             title="Step 4 — Trim (frozen baseline)"
             right={
@@ -3240,6 +3242,8 @@ function setRange(letter, bucket, field, value) {
 
             )}
           </Panel>
+            </div>
+          </div>
         ) : null}
 
       </div>
