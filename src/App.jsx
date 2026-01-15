@@ -1,17 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 
-const SITE_VERSION = "Trim Tuning • Step1–3 Sandbox • v1.4.3";
+const SITE_VERSION = "Trim Tuning v2";
 
 
 // Step 3 – Loop sizes (mm) are wing-specific and must be set before baseline loops
 const DEFAULT_LOOP_SIZES = {
   SL: 0,
-  DL: 7,
-  TL: 10,
-  AS: 12,
-  "AS+": 16,
-  "AS++": 20,
+  DL: -7,
+  TL: -10,
+  AS: -12,
+  "AS+": -16,
+  "AS++": -20,
   CUSTOM: 0,
 };
 const LOOP_TYPES = Object.keys(DEFAULT_LOOP_SIZES);
@@ -259,20 +259,63 @@ function parseWideTableFromRows(rows) {
 
 // ---------------- Step 2 grouping ----------------
 function makeDefaultRanges(maxIdx, groupCount) {
-  const m = Math.max(1, maxIdx);
-  if (groupCount === 4) {
-    return {
-      1: { start: 1, end: Math.min(3, m) },
-      2: { start: Math.min(4, m), end: Math.min(6, m) },
-      3: { start: Math.min(7, m), end: Math.min(9, m) },
-      4: { start: Math.min(10, m), end: m },
-    };
+  var m = Math.max(1, Number(maxIdx || 1));
+  var n = Math.max(1, Number(groupCount || 3));
+
+  // Default paragliding convention:
+  // - 3 groups: AR1=4 lines, AR2=4 lines, AR3=rest
+  // - 4 groups: AR1=4 lines, AR2=4 lines, AR3=4 lines, AR4=rest
+  // Fallback: if m is small, ranges are clamped and remain contiguous.
+  var out = {};
+
+  function setBucket(b, s, e) {
+    var ss = Math.max(1, Math.min(m, s));
+    var ee = Math.max(1, Math.min(m, e));
+    if (ee < ss) ee = ss;
+    out[b] = { start: ss, end: ee };
   }
-  return {
-    1: { start: 1, end: Math.min(4, m) },
-    2: { start: Math.min(5, m), end: Math.min(8, m) },
-    3: { start: Math.min(9, m), end: m },
-  };
+
+  if (n === 3 || n === 4) {
+    var s1 = 1;
+    var e1 = Math.min(m, 4);
+    setBucket(1, s1, e1);
+
+    var s2 = e1 + 1;
+    if (s2 > m) s2 = m;
+    var e2 = Math.min(m, s2 + 4 - 1);
+    setBucket(2, s2, e2);
+
+    if (n === 3) {
+      var s3 = e2 + 1;
+      if (s3 > m) s3 = m;
+      setBucket(3, s3, m);
+      return out;
+    }
+
+    // n === 4
+    var s3 = e2 + 1;
+    if (s3 > m) s3 = m;
+    var e3 = Math.min(m, s3 + 4 - 1);
+    setBucket(3, s3, e3);
+
+    var s4 = e3 + 1;
+    if (s4 > m) s4 = m;
+    setBucket(4, s4, m);
+    return out;
+  }
+
+  // Fallback: evenly split 1..m into n contiguous buckets.
+  var step = Math.ceil(m / n);
+  var start = 1;
+  for (var b = 1; b <= n; b++) {
+    var s = start;
+    if (s > m) s = m;
+    var e = (b === n) ? m : Math.min(m, s + step - 1);
+    if (e < s) e = s;
+    out[b] = { start: s, end: e };
+    start = e + 1;
+  }
+  return out;
 }
 function buildInitialLineToGroup({ maxByLetter, groupCountByLetter, prefixByLetter, rangesByLetter }) {
   const mapping = {};
@@ -313,7 +356,7 @@ function getGroupOptions(prefixByLetter, groupCountByLetter) {
 }
 
 // ---------------- Diagram ----------------
-const DIAGRAM_SCALE = 0.85;
+const DIAGRAM_SCALE = 0.9;
 const DIAGRAM_BASE_W = 2400;
 const DIAGRAM_BASE_H = 980;
 const DIAGRAM_W = Math.round(DIAGRAM_BASE_W * DIAGRAM_SCALE);
@@ -353,7 +396,8 @@ function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showW
     const innerH = rows * chip.h + (rows - 1) * chip.gapY;
     const padW = compactLayout ? Math.round(28 * DIAGRAM_SCALE) : Math.round(32 * DIAGRAM_SCALE);
     const padH = compactLayout ? Math.round(46 * DIAGRAM_SCALE) : Math.round(50 * DIAGRAM_SCALE);
-    return { bw: innerW + padW, bh: innerH + padH, cols };
+    var minBw = Math.round((compactLayout ? 240 : 280) * DIAGRAM_SCALE);
+    return { bw: Math.max(innerW + padW, minBw), bh: innerH + padH, cols };
   }
 
   const layout = useMemo(() => {
@@ -540,6 +584,9 @@ function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showW
       >
         {items}
       </svg>
+
+        {null}
+
     </div>
   );
 }
@@ -582,7 +629,8 @@ function BlockTable({ title, rows, theme, th, td, showCorrected, tolerance = 10,
         </div>
       </div>
 
-      <div style={{ marginTop: 10, overflow: "auto", width: "100%", maxWidth: "100%", border: `1px solid ${theme.border}`, borderRadius: 12 }}>
+      <div style={{ marginTop: 10, overflow: "auto", width: "100%", maxWidth: "100%",
+          minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 12 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
           <thead>
             <tr>
@@ -1623,11 +1671,56 @@ const abcSuggestions = useMemo(() => {
 function setRange(letter, bucket, field, value) {
     setRangesByLetter((prev) => {
       const next = { ...(prev || {}) };
+      const maxIdx = Math.max(1, Number(maxByLetter[letter] || 1));
       const count = Number(groupCountByLetter[letter] || 3);
-      const cur = next[letter] || makeDefaultRanges(maxByLetter[letter] || 1, count);
-      const b = { ...(cur[bucket] || {}) };
-      b[field] = Number.isFinite(Number(value)) ? Number(value) : b[field];
-      next[letter] = { ...cur, [bucket]: b };
+      const cur = next[letter] || makeDefaultRanges(maxIdx, count);
+
+      const b = Number(bucket);
+      const v = Number(value);
+      if (!Number.isFinite(v)) return prev;
+
+      // Always enforce contiguous ranges:
+      // - Bucket 1 always starts at 1
+      // - Bucket b>1 always starts at prev.end + 1
+      // - Last bucket always ends at maxIdx
+      const out = { ...cur };
+
+      // Helper to read bucket values with sane defaults
+      const getS = (bb) => clamp(Number((out[bb] && out[bb].start) != null ? out[bb].start : 1), 1, maxIdx);
+      const getE = (bb) => clamp(Number((out[bb] && out[bb].end) != null ? out[bb].end : maxIdx), 1, maxIdx);
+
+      // Ensure bucket 1 start fixed
+      if (!out[1]) out[1] = { start: 1, end: Math.min(maxIdx, 4) };
+      out[1] = { ...out[1], start: 1 };
+
+      // Apply user edit: only allow editing END for any bucket except last,
+      // and allow editing END for last only if you want, but we clamp it to maxIdx anyway.
+      if (field === "end") {
+        const s = (b === 1) ? 1 : (getE(b - 1) + 1);
+        let e = clamp(v, 1, maxIdx);
+        if (e < s) e = s;
+        out[b] = { start: s, end: e };
+      } else {
+        // If they try to edit "start", we just re-enforce the rule.
+        const s = (b === 1) ? 1 : (getE(b - 1) + 1);
+        const e = getE(b);
+        out[b] = { start: s, end: Math.max(s, e) };
+      }
+
+      // Now reflow all buckets to keep them contiguous
+      for (let bb = 2; bb <= count; bb++) {
+        const prevEnd = getE(bb - 1);
+        const s = clamp(prevEnd + 1, 1, maxIdx);
+        let e = getE(bb);
+
+        // Last bucket always ends at maxIdx (rest)
+        if (bb === count) e = maxIdx;
+
+        if (e < s) e = s;
+        out[bb] = { start: s, end: e };
+      }
+
+      next[letter] = out;
       return next;
     });
   }
@@ -1640,25 +1733,33 @@ function setRange(letter, bucket, field, value) {
       rangesByLetter,
     });
 
+    // "Reset to ranges" overwrites everything and sets the new baseline snapshot.
     if (resetOverridesToRanges) {
       setLineToGroup(initMap);
       setDefaultMappingSnapshot(deepClone(initMap));
       return;
     }
 
+    // "Apply ranges" updates lines that are currently empty OR still equal to the previous baseline.
+    // This keeps any manual overrides you already made, but makes Step 3 + overrides reflect your new ranges.
     setLineToGroup((prev) => {
-      const next = { ...(prev || {}) };
-      for (const L of ["A", "B", "C", "D"]) {
-        const m = Number(maxByLetter[L] || 0);
-        for (let i = 1; i <= m; i++) {
-          const l = `${L}${i}L`;
-          const r = `${L}${i}R`;
-          if (!next[l]) next[l] = initMap[l] || "";
-          if (!next[r]) next[r] = initMap[r] || "";
+      const cur = prev || {};
+      const base = defaultMappingSnapshot || {};
+      const next = { ...cur };
+
+      Object.keys(initMap).forEach((k) => {
+        const curV = cur[k];
+        const baseV = base[k];
+        if (!curV || curV === "" || (baseV && curV === baseV)) {
+          next[k] = initMap[k] || "";
         }
-      }
+      });
+
       return next;
     });
+
+    // Update the baseline snapshot to the new ranges layout.
+    setDefaultMappingSnapshot(deepClone(initMap));
   }
 
   function setLineToGroupFromDrag(lineId, newGroupId) {
@@ -1806,7 +1907,14 @@ function setRange(letter, bucket, field, value) {
           />
         </div>
 
+        {count === 4 && (
+          <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 14, border: `1px solid ${theme.border}`, background: "rgba(250,204,21,0.14)", color: "rgba(255,255,255,0.92)", fontWeight: 900, fontSize: 12 }}>
+            Remember to <b>Apply ranges</b> before moving to <b>Step 3</b>.
+          </div>
+        )}
+
         <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
+
           {Array.from({ length: count }, (_, i) => i + 1).map((bucket) => {
             const col = groupColor(L, bucket);
             const prefix = (prefixByLetter[L] || `${L}R`) + bucket;
@@ -1832,12 +1940,12 @@ function setRange(letter, bucket, field, value) {
 
                 <div style={{ display: "flex", gap: 8, alignItems: "center", justifySelf: "start" }}>
                   <span style={{ opacity: 0.72, fontWeight: 850, fontSize: 12 }}>S</span>
-                  <NumInput value={r[bucket]?.start ?? 1} min={1} max={maxByLetter[L]} onChange={(vv) => setRange(L, bucket, "start", clamp(vv, 1, maxByLetter[L] || 1))} width={62} />
+                  <NumInput value={bucket === 1 ? 1 : (Number(r[bucket - 1]?.end ?? 0) + 1)} min={1} max={maxByLetter[L]} disabled={bucket !== 1} onChange={(vv) => setRange(L, bucket, "start", vv)} width={62} />
                 </div>
 
                 <div style={{ display: "flex", gap: 8, alignItems: "center", justifySelf: "start" }}>
                   <span style={{ opacity: 0.72, fontWeight: 850, fontSize: 12 }}>E</span>
-                  <NumInput value={r[bucket]?.end ?? maxByLetter[L]} min={1} max={maxByLetter[L]} onChange={(vv) => setRange(L, bucket, "end", clamp(vv, 1, maxByLetter[L] || 1))} width={62} />
+                  <NumInput value={bucket === count ? (maxByLetter[L] || 1) : (r[bucket]?.end ?? (maxByLetter[L] || 1))} min={1} max={maxByLetter[L]} disabled={bucket === count} onChange={(vv) => setRange(L, bucket, "end", vv)} width={62} />
                 </div>
               </div>
             );
@@ -1885,7 +1993,7 @@ function setRange(letter, bucket, field, value) {
   }
 
   function DiagramScrollBox({ height, width }) {
-    // Fixed height + fixed width + obvious scrollbars
+    // Fixed height + responsive width + obvious scrollbars
     return (
       <div
         ref={diagramBoxRef}
@@ -1894,9 +2002,10 @@ function setRange(letter, bucket, field, value) {
           border: `2px solid rgba(255,255,255,0.18)`,
           borderRadius: 18,
           overflow: "scroll",
-          height: height || 640,
-          width: width || 980,
+          height: height || 720,
+          width: width || "100%",
           maxWidth: "100%",
+          minWidth: 0,
           background: "rgba(0,0,0,0.34)",
           boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.10)",
         }}
@@ -2084,13 +2193,7 @@ function setRange(letter, bucket, field, value) {
                 <button style={topBtn} onClick={() => setStep(1)}>
                   ← Back
                 </button>
-                <button style={{ ...topBtn, background: "rgba(59,130,246,0.20)" }} onClick={() => rebuildMappingFromRanges(false)} disabled={!loaded}>
-                  Apply ranges
-                </button>
-                <button style={{ ...topBtn, background: "rgba(239,68,68,0.12)" }} onClick={() => rebuildMappingFromRanges(true)} disabled={!loaded}>
-                  Reset to ranges
-                </button>
-                <button style={{ ...topBtn, background: "rgba(59,130,246,0.22)" }} onClick={() => setStep(3)} disabled={!loaded}>
+<button style={{ ...topBtn, background: "rgba(59,130,246,0.22)" }} onClick={() => setStep(3)} disabled={!loaded}>
                   Open diagram page →
                 </button>
               </div>
@@ -2144,6 +2247,14 @@ function setRange(letter, bucket, field, value) {
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 10, flexWrap: "wrap" }}>
                       <div style={{ fontWeight: 950 }}>Ranges</div>
                       <ColoredRangeTabs />
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <button style={{ ...topBtn, background: "rgba(59,130,246,0.22)" }} onClick={() => rebuildMappingFromRanges(false)} disabled={!loaded}>
+                          Apply ranges
+                        </button>
+                        <button style={{ ...topBtn, background: "rgba(239,68,68,0.12)" }} onClick={() => rebuildMappingFromRanges(true)} disabled={!loaded}>
+                          Reset ranges
+                        </button>
+                      </div>
                     </div>
                     <div style={{ marginTop: 10 }}>
                       <RangeEditor L={rangeTab} />
@@ -2162,7 +2273,8 @@ function setRange(letter, bucket, field, value) {
                   <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10 }}>
                     <div style={{ fontWeight: 950 }}>Line grouping overrides</div>
 
-                    <div style={{ marginTop: 10, maxHeight: "60vh", overflow: "auto", width: "100%", maxWidth: "100%", border: `1px solid ${theme.border}`, borderRadius: 14 }}>
+                    <div style={{ marginTop: 10, maxHeight: "60vh", overflow: "auto", width: "100%", maxWidth: "100%",
+          minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 14 }}>
                       <table style={{ width: "100%", borderCollapse: "collapse" }}>
                         <thead>
                           <tr style={{ background: "rgba(255,255,255,0.05)" }}>
@@ -2231,13 +2343,7 @@ function setRange(letter, bucket, field, value) {
                 <button style={topBtn} onClick={fitDiagramToScreen}>
                   Fit to screen
                 </button>
-                <button style={{ ...topBtn, background: "rgba(59,130,246,0.20)" }} onClick={() => rebuildMappingFromRanges(false)}>
-                  Apply ranges
-                </button>
-                <button style={{ ...topBtn, background: "rgba(239,68,68,0.12)" }} onClick={() => rebuildMappingFromRanges(true)}>
-                  Reset to ranges
-                </button>
-                <Toggle value={diagramWingOutline} onChange={setDiagramWingOutline} label="Wing outline" />
+<Toggle value={diagramWingOutline} onChange={setDiagramWingOutline} label="Wing outline" />
                 <Toggle value={diagramCompact} onChange={setDiagramCompact} label="Compact" />
                 <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 10px", border: `1px solid ${theme.border}`, borderRadius: 14, background: "rgba(0,0,0,0.35)" }}>
                   <button style={miniBtn} onClick={() => setDiagramZoom((z) => clamp(Number((z - 0.1).toFixed(2)), 0.4, 2.0))}>
@@ -2284,7 +2390,8 @@ function setRange(letter, bucket, field, value) {
                         {groupsInUse.length === 0 ? (
                           <div style={{ marginTop: 10, opacity: 0.75 }}>No groups detected yet. Complete Step 2 mapping first (Apply ranges or drag chips).</div>
                         ) : (
-                          <div style={{ marginTop: 10, maxHeight: 520, overflow: "auto", width: "100%", maxWidth: "100%", border: `1px solid ${theme.border}`, borderRadius: 12 }}>
+                          <div style={{ marginTop: 10, maxHeight: 520, overflow: "auto", width: "100%", maxWidth: "100%",
+          minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 12 }}>
                             <table style={{ width: "100%", borderCollapse: "collapse" }}>
                               <thead>
                                 <tr>
@@ -2324,13 +2431,7 @@ function setRange(letter, bucket, field, value) {
                     </div>
 
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                      <button style={{ ...topBtn, background: "rgba(59,130,246,0.20)" }} onClick={() => rebuildMappingFromRanges(false)}>
-                        Apply ranges
-                      </button>
-                      <button style={{ ...topBtn, background: "rgba(239,68,68,0.12)" }} onClick={() => rebuildMappingFromRanges(true)}>
-                        Reset to ranges
-                      </button>
-                      <button style={topBtn} onClick={() => setStep(2)}>
+<button style={topBtn} onClick={() => setStep(2)}>
                         Edit ranges →
                       </button>
                     </div>
@@ -2370,7 +2471,8 @@ function setRange(letter, bucket, field, value) {
                       </button>
                     </div>
 
-                    <div style={{ marginTop: 10, maxHeight: 320, overflow: "auto", width: "100%", maxWidth: "100%", border: `1px solid ${theme.border}`, borderRadius: 14 }}>
+                    <div style={{ marginTop: 10, maxHeight: 320, overflow: "auto", width: "100%", maxWidth: "100%",
+          minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 14 }}>
                       {changes.length === 0 ? (
                         <div style={{ padding: 10, opacity: 0.78, fontWeight: 900 }}>No overrides yet. Drag a line into a new bucket or use dropdowns in Step 2.</div>
                       ) : (
@@ -2505,8 +2607,118 @@ function setRange(letter, bucket, field, value) {
                     </div>
                   </div>
                 </div>
-                <div style={{ marginTop: 10 }}>
-                  <RearViewChart rows={step4LineRows} tolerance={Number(meta?.tolerance ?? 0)} height={460} />
+                <div style={{ marginTop: 10, display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+                  <div style={{ flex: "1 1 720px", minWidth: 0 }}>
+                    <RearViewChart
+                      rows={step4LineRows}
+                      tolerance={Number(meta && meta.tolerance != null ? meta.tolerance : 0)}
+                      height={520}
+                      loopTypes={LOOP_TYPES}
+                      groupLoopChange={groupLoopChange}
+                      setGroupLoopChange={setGroupLoopChange}
+                    />
+                  </div>
+
+                  <div style={{ flex: "0 0 auto" }}>
+                    <div
+                      style={{
+                        border: `1px solid ${theme.border}`,
+                        background: theme.bg2,
+                        borderRadius: 999,
+                        padding: "8px 10px",
+                        display: "flex",
+                        gap: 8,
+                        alignItems: "center",
+                      }}
+                      title="Correction (mm)"
+                    >
+                      <span style={{ fontSize: 12, opacity: 0.8 }}>Correction</span>
+
+                      <div style={{ display: "grid", gridTemplateRows: "1fr 1fr", gap: 4 }}>
+                        <button
+                          type="button"
+                          style={{ width: 28, height: 18, borderRadius: 8, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.08)", color: theme.text, cursor: "pointer", fontWeight: 950, lineHeight: 1 }}
+                          onClick={() => {
+                            setMeta((p) => {
+                              var vRaw = (p && p.correction != null) ? p.correction : 0;
+                              var v = Number(vRaw);
+                              if (!isFinite(v)) v = 0;
+
+                              // Nudge by exactly +1mm from the current displayed value.
+                              // Do NOT clamp here; users may temporarily be far outside tolerance.
+                              var next = v + 1;
+                              next = Math.round(next);
+                              return Object.assign({}, p, { correction: next });
+                            });
+                          }}
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          style={{ width: 28, height: 18, borderRadius: 8, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.08)", color: theme.text, cursor: "pointer", fontWeight: 950, lineHeight: 1 }}
+                          onClick={() => {
+                            setMeta((p) => {
+                              var vRaw = (p && p.correction != null) ? p.correction : 0;
+                              var v = Number(vRaw);
+                              if (!isFinite(v)) v = 0;
+
+                              // Nudge by exactly -1mm from the current displayed value.
+                              // Do NOT clamp here; users may temporarily be far outside tolerance.
+                              var next = v - 1;
+                              next = Math.round(next);
+                              return Object.assign({}, p, { correction: next });
+                            });
+                          }}
+                        >
+                          ▼
+                        </button>
+                      </div>
+
+                      <input
+                        type="number"
+                        value={Number(meta && meta.correction != null ? meta.correction : 0)}
+                        onChange={(e) => {
+                          var v = Number(e.target.value || 0);
+                          if (!isFinite(v)) v = 0;
+                          // Do NOT clamp here; allow any value and let other parts clamp if needed.
+                          setMeta((p) => ({ ...p, correction: v }));
+                        }}
+                        style={{
+                          width: 90,
+                          background: "transparent",
+                          color: theme.text,
+                          border: `1px solid ${theme.border}`,
+                          borderRadius: 12,
+                          padding: "6px 8px",
+                          fontWeight: 900,
+                          outline: "none",
+                        }}
+                      />
+                      <span style={{ fontSize: 12, opacity: 0.75 }}>mm</span>
+                    </div>
+                  
+                    <button
+                      type="button"
+                      title="Reset all loop overrides"
+                      onClick={() => setGroupLoopChange({})}
+                      style={{
+                        marginTop: 10,
+                        width: "100%",
+                        border: "1px solid rgba(255,220,80,0.55)",
+                        background: "rgba(0,0,0,0.45)",
+                        color: "rgba(255,220,80,0.95)",
+                        borderRadius: 999,
+                        padding: "8px 10px",
+                        fontWeight: 950,
+                        fontSize: 12,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Reset all loops
+                    </button>
+</div>
                 </div>
 
                 <div
@@ -2676,7 +2888,8 @@ function setRange(letter, bucket, field, value) {
                   {groupsInUse.length === 0 ? (
                     <div style={{ marginTop: 10, opacity: 0.75 }}>No groups detected. Complete Step 2 mapping first.</div>
                   ) : (() => { try { return (
-                    <div style={{ marginTop: 10, overflow: "auto", width: "100%", maxWidth: "100%", border: `1px solid ${theme.border}`, borderRadius: 12 }}>
+                    <div style={{ marginTop: 10, overflow: "auto", width: "100%", maxWidth: "100%",
+          minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 12 }}>
                       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1100 }}>
                         <thead>
                           <tr>
@@ -3135,7 +3348,8 @@ function setRange(letter, bucket, field, value) {
                     <div
                       style={{
                         marginTop: 10,
-                        overflow: "auto", width: "100%", maxWidth: "100%", border: `1px solid ${theme.border}`,
+                        overflow: "auto", width: "100%", maxWidth: "100%",
+          minWidth: 0, border: `1px solid ${theme.border}`,
                         borderRadius: 12,
                         maxHeight: 520,
                       }}
@@ -3316,8 +3530,8 @@ const step123Wrap = {
 };
 
 
-function RearViewChart({ rows, tolerance, height }) {
-  const width = 980;
+function RearViewChart({ rows, tolerance, height, loopTypes, groupLoopChange, setGroupLoopChange }) {
+  const width = 1240;
   const heightPx = Number.isFinite(Number(height)) ? Number(height) : 460;
   const pad = 24;
   const tol = Number.isFinite(Number(tolerance)) ? Number(tolerance) : 0;
@@ -3327,6 +3541,7 @@ function RearViewChart({ rows, tolerance, height }) {
   const [showBeforePoints, setShowBeforePoints] = React.useState(false);
   const [showGroupCuts, setShowGroupCuts] = React.useState(true);
   const [spanMode, setSpanMode] = React.useState("real");
+  const [pickedGroupId, setPickedGroupId] = React.useState(null);
 
   // Build per-cascade points (A/B/C/D rows) from Step 4 computed per-line rows.
   // IMPORTANT: This chart ONLY uses Step 4 computed rows (frozen baseline + overrides + adjustments),
@@ -3442,10 +3657,12 @@ function RearViewChart({ rows, tolerance, height }) {
 
   function xFor(side, i, count) {
     const center = width / 2;
-    const halfSpan = (width - pad * 2) / 2 - 40;
+    const halfSpan = (width - pad * 2) / 2 - 20;
     const centerGap = 18;
 
-    const t = count <= 1 ? 0 : i / (count - 1);
+    const countFixed = 25;
+
+    const t = countFixed <= 1 ? 0 : i / (countFixed - 1);
     const ts = spanScale(t);
     const dx = ts * halfSpan + centerGap;
 
@@ -3575,7 +3792,7 @@ function groupBands(letter, side) {
           {(() => {
             const y = pad + 30;
             const center = width / 2;
-            const halfSpan = (width - pad * 2) / 2 - 40;
+            const halfSpan = (width - pad * 2) / 2 - 20;
             const centerGap = 18;
             const ticks = [
               { t: 0.0, label: "MID" },
@@ -3715,23 +3932,79 @@ function groupBands(letter, side) {
                     const b = bands[L];
                     const bandsL = groupBands(L, "L");
                     const bandsR = groupBands(L, "R");
-                    const yText = b.y0 + 34;
+                    const yText = ((b.y0 + b.y1) / 2) + 38;
                     const renderBand = (side, band, i) => {
                       if (!band || !band.name || band.name === "—") return null;
                       const mid = (band.start + band.end) / 2;
                       const x = xFor(side, mid, count);
+                      const key = String((band && band.name) || "");
+                      const displayName = key.replace(/([LR])$/, "");
+                      const cur = (groupLoopChange && groupLoopChange[key]) ? groupLoopChange[key] : "";
+                      const w = 68;
+                      const h = 22;
                       return (
-                        <text
+                        <foreignObject
                           key={`glabel-${L}-${side}-${i}`}
-                          x={x}
-                          y={yText}
-                          textAnchor="middle"
-                          fill="rgba(255,220,80,0.95)"
-                          fontSize="11"
-                          fontFamily="ui-monospace, Menlo, Consolas, monospace"
+                          x={x - w / 2}
+                          y={yText - h + 6}
+                          width={w}
+                          height={h}
                         >
-                          {band.name}
-                        </text>
+                          <div
+                            xmlns="http://www.w3.org/1999/xhtml"
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              borderRadius: 999,
+                              border: "1px solid rgba(255,220,80,0.55)",
+                              background: "rgba(0,0,0,0.45)",
+                              boxSizing: "border-box",
+                            }}
+                            title={key}
+                          >
+                            <select
+                              value={cur}
+                              onChange={(e) => {
+                                const v = e.target.value || "";
+                                if (!setGroupLoopChange) return;
+                                setGroupLoopChange(function (prev) {
+                                  const next = Object.assign({}, prev || {});
+                                  if (v) next[key] = v;
+                                  else delete next[key];
+                                  return next;
+                                });
+                              }}
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                border: "none",
+                                outline: "none",
+                                background: "transparent",
+                                color: (cur ? "rgba(120,200,255,0.95)" : "rgba(255,220,80,0.95)"),
+                                fontSize: 11,
+                                fontWeight: 950,
+                                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                                textAlignLast: "center",
+                                cursor: "pointer",
+                                paddingLeft: 6,
+                                paddingRight: 6,
+                                appearance: "none",
+                                WebkitAppearance: "none",
+                                MozAppearance: "none",
+                              }}
+                            >
+                              <option value="">{displayName}</option>
+                              {((loopTypes && loopTypes.length) ? loopTypes : LOOP_TYPES).map((lt) => (
+                                <option key={lt} value={lt}>
+                                  {lt}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </foreignObject>
                       );
                     };
                     return (
