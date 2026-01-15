@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 
-const SITE_VERSION = "Trim Tuning v2";
+const SITE_VERSION = "Trim Tuning • Step1–3 Sandbox • v1.4.3";
 
 
 // Step 3 – Loop sizes (mm) are wing-specific and must be set before baseline loops
@@ -997,6 +997,9 @@ export default function App() {
   const [showCorrected, setShowCorrected] = useState(true);
   const [includeBrakeBlock, setIncludeBrakeBlock] = useState(true);
   const [showLoopModeCounts, setShowLoopModeCounts] = useState(false);
+  const [groupPitchTol, setGroupPitchTol] = useState(4);
+  const [autoLoopStatus, setAutoLoopStatus] = useState(null); // "factory" | "minimal" | null
+
   const [step4LetterFilter, setStep4LetterFilter] = useState({ A: true, B: true, C: true, D: true, BR: true });
 
 
@@ -1438,6 +1441,8 @@ const step4GroupStats = useMemo(() => {
   return out;
 }, [step4LineRows]);
 
+
+
   const step4BlockRowsByLetter = useMemo(() => {
     const byBase = new Map();
     for (const r of step4LineRows) {
@@ -1533,8 +1538,8 @@ const step4SheetByLetter = useMemo(() => {
   return { byLetter, maxDiff };
 }, [step4LineRows]);
 
-const abcAverages = useMemo(() => {
-  const letters = ["A", "B", "C"];
+var abcAverages = useMemo(() => {
+  const letters = ["A", "B", "C", "D"];
   const out = {};
   for (const L of letters) {
     out[L] = { L: { avg: null, n: 0 }, R: { avg: null, n: 0 }, sym: null };
@@ -1553,6 +1558,56 @@ const abcAverages = useMemo(() => {
   return out;
 }, [step4LineRows]);
 
+const pitchStats = useMemo(() => {
+  // "Pitch" here is derived from relative front-to-rear group deltas (After Δ vs nominal).
+  // Larger + values generally indicate the front groups (A/B) are longer relative to rear (C/D) -> lower AoA / faster trim.
+  const getAvg = (letter, side) => {
+    const g = abcAverages && abcAverages[letter] ? abcAverages[letter] : null;
+    const s = g && g[side] ? g[side] : null;
+    const v = s && Number.isFinite(Number(s.avg)) ? Number(s.avg) : null;
+    return v;
+  };
+
+  const mean2 = (a, b) => (Number.isFinite(a) && Number.isFinite(b) ? (a + b) / 2 : (Number.isFinite(a) ? a : (Number.isFinite(b) ? b : null)));
+
+  const row = (letter) => {
+    const L = getAvg(letter, "L");
+    const R = getAvg(letter, "R");
+    const both = mean2(L, R);
+    return { letter, L, R, both };
+  };
+
+  const A = row("A");
+  const B = row("B");
+  const C = row("C");
+  const D = row("D");
+
+  // Whole-wing pitch proxy: mean(front) - mean(rear)
+  const front = { L: mean2(A.L, B.L), R: mean2(A.R, B.R), both: mean2(A.both, B.both) };
+  const rear = { L: mean2(C.L, D.L), R: mean2(C.R, D.R), both: mean2(C.both, D.both) };
+  const pitchWhole = {
+    L: Number.isFinite(front.L) && Number.isFinite(rear.L) ? front.L - rear.L : null,
+    R: Number.isFinite(front.R) && Number.isFinite(rear.R) ? front.R - rear.R : null,
+    both: Number.isFinite(front.both) && Number.isFinite(rear.both) ? front.both - rear.both : null,
+  };
+
+  // Per-line-group "slope" (adjacent differences)
+  const seg = (x, y) => ({
+    L: Number.isFinite(x.L) && Number.isFinite(y.L) ? x.L - y.L : null,
+    R: Number.isFinite(x.R) && Number.isFinite(y.R) ? x.R - y.R : null,
+    both: Number.isFinite(x.both) && Number.isFinite(y.both) ? x.both - y.both : null,
+  });
+
+  return {
+    rows: [A, B, C, D],
+    pitchWhole,
+    segments: { AB: seg(A, B), BC: seg(B, C), CD: seg(C, D) },
+    front,
+    rear,
+  };
+}, [abcAverages]);
+
+
 
 const step4HasLoopEdits = useMemo(() => {
   const changes = groupLoopChange || {};
@@ -1568,7 +1623,7 @@ const step4HasLoopEdits = useMemo(() => {
 const abcLoopModeCounts = useMemo(() => {
   // Counts of loop types currently in effect per letter+side (A/B/C only).
   // "Currently in effect" means: groupLoopChange overrides baseline, else baseline.
-  const letters = ["A", "B", "C"];
+  const letters = ["A", "B", "C", "D"];
   const out = {};
   for (const L of letters) {
     out[L] = { L: {}, R: {} };
@@ -1590,7 +1645,7 @@ const abcLoopModeCounts = useMemo(() => {
 }, [step4LineRows, groupLoopBaseline, groupLoopChange]);
 
 const abcSuggestions = useMemo(() => {
-  const letters = ["A", "B", "C"];
+  const letters = ["A", "B", "C", "D"];
   const tol = Number(meta?.tolerance ?? 0);
 
   const loopMm = (t) => Number(loopSizes?.[t] ?? 0);
@@ -1667,6 +1722,115 @@ const abcSuggestions = useMemo(() => {
   }
   return out;
 }, [abcAverages, abcLoopModeCounts, loopSizes, meta?.tolerance]);
+
+  function applyAutoLoopPlan(kind) {
+    // kind: "factory" (closest to factory) or "minimal" (within tolerance with least loop changes)
+    if (step !== 4) return;
+    if (!groupLoopBaseline) return;
+
+    var tol = Number(meta && meta.tolerance != null ? meta.tolerance : 0);
+    if (!isFinite(tol)) tol = 0;
+
+    // Build avg delta per maillon group using BASELINE loops only (no overrides, no fine adjust).
+    var sums = {};
+    var counts = {};
+
+    var i;
+    for (i = 0; i < (step4LineRows || []).length; i++) {
+      var r = step4LineRows[i];
+      if (!r) continue;
+      var gid = String(r.groupId || "").trim();
+      if (!gid) continue;
+
+      var nominal = r.nominal;
+      var corrected = r.corrected;
+      if (nominal == null || !isFinite(Number(nominal))) continue;
+      if (corrected == null || !isFinite(Number(corrected))) continue;
+
+      var baseLoop = (groupLoopBaseline && groupLoopBaseline[gid]) ? groupLoopBaseline[gid] : (r.baseLoop || "SL");
+      var baseMm = Number(loopSizes && loopSizes[baseLoop] != null ? loopSizes[baseLoop] : 0);
+      if (!isFinite(baseMm)) baseMm = 0;
+
+      var after0 = Number(corrected) + baseMm;
+      var d0 = after0 - Number(nominal);
+      if (!isFinite(d0)) continue;
+
+      sums[gid] = (sums[gid] || 0) + d0;
+      counts[gid] = (counts[gid] || 0) + 1;
+    }
+
+    var changes = {};
+    var gids = Object.keys(sums);
+
+    for (i = 0; i < gids.length; i++) {
+      var gid2 = gids[i];
+      var n = counts[gid2] || 0;
+      if (!n) continue;
+
+      var avgDelta = sums[gid2] / n;
+      if (!isFinite(avgDelta)) continue;
+
+      var baseLoop2 = (groupLoopBaseline && groupLoopBaseline[gid2]) ? groupLoopBaseline[gid2] : "SL";
+      var baseMm2 = Number(loopSizes && loopSizes[baseLoop2] != null ? loopSizes[baseLoop2] : 0);
+      if (!isFinite(baseMm2)) baseMm2 = 0;
+
+      var best = baseLoop2;
+      var bestAbs = Math.abs(avgDelta);
+      var bestShiftAbs = 0;
+
+      // For "minimal": if already within tolerance, keep baseline.
+      if (kind === "minimal" && tol > 0 && Math.abs(avgDelta) <= tol) {
+        best = baseLoop2;
+      } else {
+        var j;
+        var foundWithin = false;
+        for (j = 0; j < (LOOP_TYPES || []).length; j++) {
+          var cand = LOOP_TYPES[j];
+          var candMm = Number(loopSizes && loopSizes[cand] != null ? loopSizes[cand] : 0);
+          if (!isFinite(candMm)) candMm = 0;
+          var shift = candMm - baseMm2;
+          var afterDelta = avgDelta + shift;
+          var absAfter = Math.abs(afterDelta);
+          var shiftAbs = Math.abs(shift);
+
+          if (kind === "minimal" && tol > 0) {
+            if (absAfter <= tol) {
+              if (!foundWithin || shiftAbs < bestShiftAbs || (shiftAbs === bestShiftAbs && absAfter < bestAbs)) {
+                foundWithin = true;
+                best = cand;
+                bestAbs = absAfter;
+                bestShiftAbs = shiftAbs;
+              }
+            } else if (!foundWithin) {
+              // If none within tol so far, track the best improvement (closest) with smallest shift.
+              if (absAfter < bestAbs || (absAfter === bestAbs && shiftAbs < bestShiftAbs)) {
+                best = cand;
+                bestAbs = absAfter;
+                bestShiftAbs = shiftAbs;
+              }
+            }
+          } else {
+            // "factory": just minimize residual.
+            if (absAfter < bestAbs || (absAfter === bestAbs && shiftAbs < bestShiftAbs)) {
+              best = cand;
+              bestAbs = absAfter;
+              bestShiftAbs = shiftAbs;
+            }
+          }
+        }
+      }
+
+      if (best && best !== baseLoop2) {
+        changes[gid2] = best;
+      }
+    }
+
+    // Apply: loops only. Do NOT write fine adjust values here.
+    setGroupAdjustments({});
+    setGroupLoopChange(changes);
+    setAutoLoopStatus(kind === "minimal" ? "minimal" : "factory");
+  }
+
 
 function setRange(letter, bucket, field, value) {
     setRangesByLetter((prev) => {
@@ -2698,10 +2862,15 @@ function setRange(letter, bucket, field, value) {
                       <span style={{ fontSize: 12, opacity: 0.75 }}>mm</span>
                     </div>
                   
-                    <button
-                      type="button"
-                      title="Reset all loop overrides"
-                      onClick={() => setGroupLoopChange({})}
+	                    <button
+	                      type="button"
+	                      title="Reset all loop overrides"
+	                      onClick={() => {
+	                        // Reset BOTH loop overrides and fine adjustments so the wing returns
+	                        // to the baseline loop set recorded in Step 3.
+	                        setGroupLoopChange({});
+	                        setGroupAdjustments({});
+	                      }}
                       style={{
                         marginTop: 10,
                         width: "100%",
@@ -3128,11 +3297,11 @@ function setRange(letter, bucket, field, value) {
 
 
 
-{/* Group averages / maillon loop advisory (A/B/C) */}
+{/* Group averages / maillon loop advisory (A/B/C/D) */}
 <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10 }}>
   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
     <div>
-      <div style={{ fontWeight: 950 }}>Group averages + loop suggestions (A/B/C)</div>
+      <div style={{ fontWeight: 950 }}>Group averages + loop suggestions (A/B/C/D)</div>
       <div style={{ opacity: 0.78, fontSize: 13, marginTop: 4 }}>
         Uses Step 4 <b>After</b> deltas (Δ vs nominal). Suggestions are advisory only — they won’t change any group settings automatically.
       </div>
@@ -3154,6 +3323,8 @@ function setRange(letter, bucket, field, value) {
         Copy suggestions
       </button>
 
+      <ControlPill label="Manual pitch tol" value={groupPitchTol} onChange={setGroupPitchTol} suffix="mm" width={110} step={1} min={0} max={20} />
+
       <button
         style={{ ...topBtn, background: showLoopModeCounts ? "rgba(99,102,241,0.25)" : "rgba(255,255,255,0.06)" }}
         onClick={() => setShowLoopModeCounts((v) => !v)}
@@ -3169,53 +3340,36 @@ function setRange(letter, bucket, field, value) {
 
 
 
-<div className="abcGrid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
-<div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: theme.panel, padding: 10, minWidth: 0 }}>
-      <div style={{ fontWeight: 950, marginBottom: 8 }}>Group averages (After Δ)</div>
-      <div style={{ overflow: "auto", border: `1px solid ${theme.border}`, borderRadius: 12 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 520 }}>
-          <thead>
-            <tr style={{ background: "rgba(255,255,255,0.05)" }}>
-              <th style={th}>Group</th>
-              <th style={th}>Left avg Δ</th>
-              <th style={th}>n</th>
-              <th style={th}>Right avg Δ</th>
-              <th style={th}>n</th>
-              <th style={th}>Sym avg (L−R)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {["A", "B", "C"].map((L) => {
-              const aL = abcAverages?.[L]?.L?.avg;
-              const nL = abcAverages?.[L]?.L?.n ?? 0;
-              const aR = abcAverages?.[L]?.R?.avg;
-              const nR = abcAverages?.[L]?.R?.n ?? 0;
-              const sym = abcAverages?.[L]?.sym;
+<div className="abcGrid" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: theme.panel, padding: 10, minWidth: 0, width: "100%" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+        <div style={{ fontWeight: 950 }}>Suggested loop change + fine adjust (advisory)</div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.06)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
+            onClick={() => applyAutoLoopPlan("factory")}
+            title="Choose the closest achievable loop configuration using discrete loops (no fine-adjust)."
+          >
+            Auto: closest factory loops
+          </button>
 
-              const f1 = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Number(n).toFixed(1));
+          <button
+            type="button"
+            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.06)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
+            onClick={() => applyAutoLoopPlan("minimal")}
+            title="Bring the wing within tolerance with the least loop change, using discrete loops only (no fine-adjust)."
+          >
+            Auto: minimal loop changes
+          </button>
 
-              return (
-                <tr key={L} style={{ borderTop: `1px solid ${theme.border}` }}>
-                  <td style={{ ...td, fontWeight: 950, color: (PALETTE[L] || PALETTE.A).base }}>{L}</td>
-                  <td style={td}>{f1(aL)}</td>
-                  <td style={{ ...td, opacity: 0.85 }}>{nL || "—"}</td>
-                  <td style={td}>{f1(aR)}</td>
-                  <td style={{ ...td, opacity: 0.85 }}>{nR || "—"}</td>
-                  <td style={{ ...td, fontWeight: 950 }}>{f1(sym)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+          {autoLoopStatus ? (
+            <div style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(99,102,241,0.20)", color: theme.text, fontWeight: 950, fontSize: 12 }}>
+              Auto applied
+            </div>
+          ) : null}
+        </div>
       </div>
-      <div style={{ marginTop: 8, opacity: 0.78, fontSize: 12 }}>
-        Tip: Positive Δ means “long” vs nominal; negative means “short”. Sym is based on averages only.
-      </div>
-    </div>
-
-    {/* Suggestions */}
-    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: theme.panel, padding: 10, minWidth: 0 }}>
-      <div style={{ fontWeight: 950, marginBottom: 8 }}>Suggested loop change + fine adjust (advisory)</div>
       <div style={{ overflow: "auto", border: `1px solid ${theme.border}`, borderRadius: 12 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
           <thead>
@@ -3234,7 +3388,7 @@ function setRange(letter, bucket, field, value) {
             </tr>
           </thead>
           <tbody>
-            {["A", "B", "C"].map((L) => {
+            {["A", "B", "C", "D"].map((L) => {
               const sL = abcSuggestions?.[L]?.L || null;
               const sR = abcSuggestions?.[L]?.R || null;
 
@@ -3267,11 +3421,87 @@ function setRange(letter, bucket, field, value) {
         Fine adjust is clamped to ±Tolerance (<b>{Number(meta?.tolerance ?? 0)}mm</b>). Suggestions use the most common current loop type in each A/B/C side as the “representative” baseline.
       </div>
 
+      <div style={{ marginTop: 10, borderTop: `1px solid ${theme.border}`, paddingTop: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontWeight: 950 }}>Pitch summary (A/B vs C/D)</div>
+          <div style={{ opacity: 0.78, fontSize: 12 }}>
+            Pitch proxy = avg Δ(front) − avg Δ(rear). Default tolerance ±{Number.isFinite(Number(groupPitchTol)) ? Number(groupPitchTol) : 4}mm.
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, marginTop: 10 }}>
+          <div style={{ border: `1px solid ${theme.border}`, borderRadius: 12, background: "rgba(0,0,0,0.22)", padding: 10, overflow: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 520 }}>
+              <thead>
+                <tr style={{ background: "rgba(255,255,255,0.05)" }}>
+                  <th style={th}>Metric</th>
+                  <th style={th}>Left</th>
+                  <th style={th}>Right</th>
+                  <th style={th}>Whole wing</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { key: "whole", label: "Whole pitch (front − rear)", v: pitchStats && pitchStats.pitchWhole ? pitchStats.pitchWhole : null },
+                  { key: "ab", label: "A − B", v: pitchStats && pitchStats.segments ? pitchStats.segments.AB : null },
+                  { key: "bc", label: "B − C", v: pitchStats && pitchStats.segments ? pitchStats.segments.BC : null },
+                  { key: "cd", label: "C − D", v: pitchStats && pitchStats.segments ? pitchStats.segments.CD : null },
+                ].map((row) => {
+                  const f1 = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Number(n).toFixed(1));
+                  const vL = row.v ? row.v.L : null;
+                  const vR = row.v ? row.v.R : null;
+                  const vB = row.v ? row.v.both : null;
+
+                  const sevL = severity(vL, groupPitchTol);
+                  const sevR = severity(vR, groupPitchTol);
+                  const sevB = severity(vB, groupPitchTol);
+
+                  const colFor = (sev) => {
+                    if (sev === "red") return "rgba(255,90,90,1)";
+                    if (sev === "yellow") return "rgba(255,215,90,1)";
+                    return "rgba(140,255,190,1)";
+                  };
+
+                  return (
+                    <tr key={row.key} style={{ borderTop: `1px solid ${theme.border}` }}>
+                      <td style={{ ...td, fontWeight: 950 }}>{row.label}</td>
+                      <td style={{ ...td, fontWeight: 950, color: colFor(sevL) }}>{f1(vL)}</td>
+                      <td style={{ ...td, fontWeight: 950, color: colFor(sevR) }}>{f1(vR)}</td>
+                      <td style={{ ...td, fontWeight: 950, color: colFor(sevB) }}>{f1(vB)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            <div style={{ marginTop: 8, opacity: 0.78, fontSize: 12 }}>
+              Interpretation tip: if A/B averages are relatively longer than C/D, the wing tends to fly “faster / lower AoA”; if A/B are shorter relative to C/D, it tends to fly “slower / higher AoA”.
+            </div>
+          </div>
+
+          <div style={{ border: `1px solid ${theme.border}`, borderRadius: 12, background: "rgba(0,0,0,0.22)", padding: 10 }}>
+            <div style={{ fontWeight: 950, marginBottom: 6 }}>Wing pitch profile (concept)</div>
+            <div style={{ opacity: 0.75, fontSize: 12, marginBottom: 8 }}>
+              A simple chord-line visual with your computed whole-wing pitch overlaid (not a flight dynamics simulator).
+            </div>
+
+            {pitchStats && pitchStats.pitchWhole ? (
+              <WingPitchViz pitchMm={pitchStats.pitchWhole.both} tolMm={groupPitchTol} />
+            ) : null}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontWeight: 950, marginBottom: 6 }}>Row averages overlaid (A/B/C/D)</div>
+          <PitchTrimChart rows={step4LineRows} tolerance={groupPitchTol} height={200} />
+        </div>
+      </div>
+
       {showLoopModeCounts ? (
         <div style={{ marginTop: 10, borderTop: `1px solid ${theme.border}`, paddingTop: 10 }}>
           <div style={{ fontWeight: 950, marginBottom: 6 }}>Loop counts used to pick “Rep”</div>
           <div style={{ display: "grid", gap: 8 }}>
-            {["A", "B", "C"].map((L) => (
+            {["A", "B", "C", "D"].map((L) => (
               <div key={`counts-${L}`} style={{ border: `1px solid ${theme.border}`, borderRadius: 12, padding: 8, background: "rgba(0,0,0,0.25)" }}>
                 <div style={{ fontWeight: 950, marginBottom: 6, color: (PALETTE[L] || PALETTE.A).base }}>{L}</div>
                 {["L", "R"].map((side) => {
@@ -3438,6 +3668,55 @@ function setRange(letter, bucket, field, value) {
   </div>
 
   <PitchTrimChart rows={step4LineRows} tolerance={Number(meta?.tolerance ?? 0)} height={220} />
+
+  {/* Group averages (After Δ) — placed under Pitch trim */}
+  <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 12, width: "100%" }}>
+    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 8, flexWrap: "wrap" }}>
+      <div style={{ fontWeight: 950 }}>Group averages (After Δ)</div>
+      <div style={{ opacity: 0.75, fontSize: 12 }}>A/B/C/D averages — L, R, and symmetry</div>
+    </div>
+
+    <div style={{ overflow: "auto", border: `1px solid ${theme.border}`, borderRadius: 12, width: "100%" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 520 }}>
+        <thead>
+          <tr style={{ background: "rgba(255,255,255,0.05)" }}>
+            <th style={th}>Group</th>
+            <th style={th}>Left avg Δ</th>
+            <th style={th}>n</th>
+            <th style={th}>Right avg Δ</th>
+            <th style={th}>n</th>
+            <th style={th}>Sym avg (L−R)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(["A", "B", "C", "D"]).map((L) => {
+            const aL = abcAverages?.[L]?.L?.avg;
+            const nL = abcAverages?.[L]?.L?.n ?? 0;
+            const aR = abcAverages?.[L]?.R?.avg;
+            const nR = abcAverages?.[L]?.R?.n ?? 0;
+            const sym = abcAverages?.[L]?.sym;
+
+            const f1 = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Number(n).toFixed(1));
+
+            return (
+              <tr key={L} style={{ borderTop: `1px solid ${theme.border}` }}>
+                <td style={{ ...td, fontWeight: 950, color: (PALETTE[L] || PALETTE.A).base }}>{L}</td>
+                <td style={td}>{f1(aL)}</td>
+                <td style={{ ...td, opacity: 0.85 }}>{nL || "—"}</td>
+                <td style={td}>{f1(aR)}</td>
+                <td style={{ ...td, opacity: 0.85 }}>{nR || "—"}</td>
+                <td style={{ ...td, fontWeight: 950 }}>{f1(sym)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+
+    <div style={{ marginTop: 8, opacity: 0.78, fontSize: 12 }}>
+      Tip: Positive Δ means “long” vs nominal; negative means “short”. Sym is based on averages only.
+    </div>
+  </div>
 
   <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
     {(["A", "B", "C", "D"]).map((L) =>
@@ -4139,6 +4418,71 @@ function groupBands(letter, side) {
 }
 
 
+
+
+function WingPitchViz({ pitchMm, tolMm, height = 160 }) {
+  const w = 980;
+  const h = height;
+  const xPad = 80;
+  const yMid = h / 2;
+
+  const p = Number.isFinite(Number(pitchMm)) ? Number(pitchMm) : 0;
+  const tol = Number.isFinite(Number(tolMm)) ? Number(tolMm) : 0;
+
+  // Map millimetres to a small visual rotation (purely illustrative).
+  const clamp = (v, lo, hi) => (v < lo ? lo : (v > hi ? hi : v));
+  const pClamped = clamp(p, -20, 20);
+  const deg = (pClamped / 20) * 8; // ±20mm -> ±8°
+
+  const sev = severity(p, tol);
+  const col = sev === "red" ? "rgba(255,90,90,1)" : (sev === "yellow" ? "rgba(255,215,90,1)" : "rgba(140,255,190,1)");
+
+  const cx = w / 2;
+  const cy = yMid;
+
+  const chordLen = w - xPad * 2;
+  const x1 = cx - chordLen / 2;
+  const x2 = cx + chordLen / 2;
+
+  return (
+    <div style={{ width: "100%" }}>
+      <svg width="100%" viewBox={`0 0 ${w} ${h}`} style={{ display: "block" }}>
+        {/* Reference horizon */}
+        <line x1={xPad} y1={yMid} x2={w - xPad} y2={yMid} stroke="rgba(148,163,184,0.25)" />
+
+        {/* Wing chord line (rotated) */}
+        <g transform={`rotate(${deg} ${cx} ${cy})`}>
+          <line x1={x1} y1={cy} x2={x2} y2={cy} stroke={col} strokeWidth="10" strokeLinecap="round" opacity="0.95" />
+          {/* Leading edge marker */}
+          <circle cx={x1} cy={cy} r="10" fill="rgba(255,255,255,0.9)" />
+          <text x={x1 - 6} y={cy + 34} fontSize="24" fill="rgba(255,255,255,0.75)">LE</text>
+          {/* Trailing edge marker */}
+          <circle cx={x2} cy={cy} r="10" fill="rgba(255,255,255,0.5)" />
+          <text x={x2 - 12} y={cy + 34} fontSize="24" fill="rgba(255,255,255,0.75)">TE</text>
+        </g>
+
+        {/* Readout */}
+        <text x={xPad} y={28} fontSize="26" fill="rgba(255,255,255,0.92)" fontWeight="900">
+          Pitch: {Number.isFinite(p) ? p.toFixed(1) : "—"} mm
+        </text>
+        <text x={xPad} y={58} fontSize="20" fill="rgba(255,255,255,0.7)">
+          Visual rotation: {Number.isFinite(deg) ? deg.toFixed(1) : "0.0"}°
+        </text>
+
+        {tol > 0 ? (
+          <text x={w - xPad} y={28} fontSize="20" fill="rgba(255,255,255,0.7)" textAnchor="end">
+            Tolerance: ±{tol.toFixed(0)}mm
+          </text>
+        ) : null}
+      </svg>
+
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+        <div style={{ opacity: 0.75, fontSize: 12 }}>Green/yellow/red reflects the tolerance threshold.</div>
+        <div style={{ opacity: 0.75, fontSize: 12 }}>This graphic is illustrative only.</div>
+      </div>
+    </div>
+  );
+}
 
 function PitchTrimChart({ rows, tolerance, height = 220 }) {
   const safeTol = Number.isFinite(Number(tolerance)) ? Number(tolerance) : 0;
