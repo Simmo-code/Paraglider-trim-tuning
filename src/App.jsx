@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 
-const SITE_VERSION = "Trim Tuning • Step1–3 Sandbox • v1.4.3";
+const SITE_VERSION = "Trim Tuning v1.2";
 
 
 // Step 3 – Loop sizes (mm) are wing-specific and must be set before baseline loops
@@ -1294,8 +1294,14 @@ export default function App() {
         const adj = Number(groupAdjustments?.[groupId] ?? 0);
 
         const corrected = raw == null ? null : raw + lineCorr + (showCorrected ? corr : 0);
-        const before = corrected == null ? null : corrected + loopMm(baseLoop);
-        const afterVal = corrected == null ? null : corrected + loopMm(afterLoop) + adj;
+
+        // IMPORTANT: Baseline loops are the *installed* state on the wing.
+        // Step 4 must not change the underlying measurements when you set baseline loops in Step 3.
+        // We apply ONLY the *difference* when an override loop is selected.
+        const loopDelta = override ? (loopMm(override) - loopMm(baseLoop)) : 0;
+
+        const before = corrected;
+        const afterVal = corrected == null ? null : corrected + loopDelta + adj;
 
         const delta = nominal == null || afterVal == null ? null : afterVal - nominal;
 
@@ -2240,24 +2246,28 @@ function setRange(letter, bucket, field, value) {
             </div>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <button style={{ ...topBtn, opacity: 0, padding: "2px 6px", fontSize: 10, minHeight: 0 }} onClick={() => setStep(2)}>← Back to Step 2</button>
               <ImportStatusRadio loaded={loaded} />
-              {stepTabs.map((t) => {
-                const disabled = t.value !== 1 && !loaded;
-                return (
-                  <button
-                    key={t.value}
-                    style={{
-                      ...topBtn,
-                      ...(step === t.value ? topBtnActive : {}),
-                      opacity: disabled ? 0.55 : 1,
-                      cursor: disabled ? "not-allowed" : "pointer",
-                    }}
-                    onClick={() => !disabled && setStep(t.value)}
-                  >
-                    {t.label}
-                  </button>
-                );
-              })}
+              {/* Step navigation buttons removed from the header (non-destructive). */}
+              {false ? (
+                stepTabs.map((t) => {
+                  const disabled = t.value !== 1 && !loaded;
+                  return (
+                    <button
+                      key={t.value}
+                      style={{
+                        ...topBtn,
+                        ...(step === t.value ? topBtnActive : {}),
+                        opacity: disabled ? 0.55 : 1,
+                        cursor: disabled ? "not-allowed" : "pointer",
+                      }}
+                      onClick={() => !disabled && setStep(t.value)}
+                    >
+                      {t.label}
+                    </button>
+                  );
+                })
+              ) : null}
               <button style={{ ...topBtn, background: "rgba(239,68,68,0.16)" }} onClick={confirmResetAll}>
                 Reset all
               </button>
@@ -2501,6 +2511,29 @@ function setRange(letter, bucket, field, value) {
                 <button style={topBtn} onClick={() => setStep(2)}>
                   ← Back to Step 2
                 </button>
+                <div style={{ padding: "6px 10px", borderRadius: 14, border: `1px solid ${theme.border}`, background: "rgba(245,158,11,0.14)", color: theme.text, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <div style={{ fontWeight: 950, opacity: 0.95 }}>Baseline loops required</div>
+                  <div style={{ fontSize: 12, opacity: 0.82, lineHeight: 1.15 }}>
+                    Set all installed baseline loops first. Step 4 freezes baseline and you can’t return to Step 3 unless you reset.
+                  </div>
+                  <button
+                    type="button"
+                    style={{ ...topBtn, padding: "6px 10px", background: "rgba(255,255,255,0.08)" }}
+                    onClick={() => {
+                      setStep3View("baseline");
+                      try {
+                        setTimeout(() => {
+                          const el = document.getElementById("baseline-loops-panel");
+                          if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }, 50);
+                      } catch (e) {}
+                    }}
+                    title="Jump to baseline loop selection"
+                  >
+                    Review installed loops
+                  </button>
+                </div>
+
                 <button style={{ ...topBtn, background: "rgba(34,197,94,0.18)" }} onClick={() => setStep(4)}>
                   Go to Step 4 →
                 </button>
@@ -2526,8 +2559,32 @@ function setRange(letter, bucket, field, value) {
               <WarningBanner title="No file loaded">Go back to Step 1 and import a file (or load test data).</WarningBanner>
             ) : (
               <div style={{ display: "grid", gap: 10 }}>
+
+                <WarningBanner title="Set baseline loops before Step 4">
+                  Step 4 freezes a snapshot of your installed baseline loops. After you enter Step 4, you can’t return to Step 3 without using the full Reset.
+                  <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <button
+                      style={{ ...topBtn, background: "rgba(245,158,11,0.20)", borderColor: "rgba(245,158,11,0.35)" }}
+                      onClick={() => {
+                        setStep3View("baseline");
+                        setTimeout(() => {
+                          var el = document.getElementById("step3-baseline-loops");
+                          if (el && el.scrollIntoView) {
+                            el.scrollIntoView({ behavior: "smooth", block: "start" });
+                          }
+                        }, 0);
+                      }}
+                      title="Jump to Installed loops per maillon group (baseline)"
+                    >
+                      Go to baseline loops
+                    </button>
+                    <div style={{ opacity: 0.78, fontSize: 12 }}>
+                      Make sure every group has an installed loop selected (Left and Right) before freezing Step 4.
+                    </div>
+                  </div>
+                </WarningBanner>
                 {step3View === "baseline" ? (
-                  <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10 }}>
+                  <div id="baseline-loops-panel" style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                       <div>
                         <div style={{ fontWeight: 950 }}>Installed loops per maillon group (baseline)</div>
@@ -2559,23 +2616,115 @@ function setRange(letter, bucket, field, value) {
                             <table style={{ width: "100%", borderCollapse: "collapse" }}>
                               <thead>
                                 <tr>
-                                  <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>Group</th>
+                                  <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }} rowSpan={2}>Group</th>
+                                  <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }} colSpan={2}>Left</th>
+                                  <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }} colSpan={2}>Right</th>
+                                </tr>
+                                <tr>
+                                  <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>Installed loop</th>
+                                  <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>mm</th>
                                   <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>Installed loop</th>
                                   <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>mm</th>
                                 </tr>
                               </thead>
                               <tbody>
-                                {groupsInUse.map((g) => {
-                                  const lt = groupLoopSetup?.[g] || "SL";
-                                  const mm = Number(loopSizes?.[lt] ?? 0);
-                                  return (
-                                    <tr key={g} style={{ borderTop: `1px solid ${theme.border}` }}>
-                                      <td style={td}><div style={{ fontWeight: 950 }}>{g}</div></td>
-                                      <td style={td}><Select value={lt} onChange={(v) => setGroupLoopSetup((prev) => ({ ...(prev || {}), [g]: v || "SL" }))} options={loopTypeOptions} width={150} /></td>
-                                      <td style={{ ...td, fontWeight: 950, opacity: 0.9 }}>{mm}</td>
-                                    </tr>
-                                  );
-                                })}
+                                {(() => {
+                                  const parseGroup = (g) => {
+                                    const m = /^([A-Za-z]+\d+)([LR])$/.exec(String(g || ""));
+                                    if (!m) return { base: String(g || ""), side: "" };
+                                    return { base: m[1], side: m[2] };
+                                  };
+
+                                  const byBase = {};
+                                  const order = [];
+
+                                  for (let i = 0; i < groupsInUse.length; i++) {
+                                    const g = groupsInUse[i];
+                                    const info = parseGroup(g);
+                                    const base = info.base;
+                                    const side = info.side;
+
+                                    if (!byBase[base]) {
+                                      byBase[base] = { base: base, L: null, R: null };
+                                      order.push(base);
+                                    }
+
+                                    if (side === "L") byBase[base].L = g;
+                                    else if (side === "R") byBase[base].R = g;
+                                    else {
+                                      // Unpaired group id (no L/R suffix) -> treat as Left-only display
+                                      if (!byBase[base].L) byBase[base].L = g;
+                                    }
+                                  }
+
+                                  order.sort((a, b) => {
+                                    // Sort like AR1, AR2, ... if possible
+                                    const ma = /^([A-Za-z]+)(\d+)$/.exec(a);
+                                    const mb = /^([A-Za-z]+)(\d+)$/.exec(b);
+                                    if (ma && mb) {
+                                      const pa = ma[1].toUpperCase();
+                                      const pb = mb[1].toUpperCase();
+                                      if (pa < pb) return -1;
+                                      if (pa > pb) return 1;
+                                      const na = Number(ma[2] || 0);
+                                      const nb = Number(mb[2] || 0);
+                                      return na - nb;
+                                    }
+                                    return String(a).localeCompare(String(b));
+                                  });
+
+                                  return order.map((base) => {
+                                    const row = byBase[base];
+
+                                    const gL = row && row.L ? row.L : null;
+                                    const gR = row && row.R ? row.R : null;
+
+                                    const ltL = gL ? (groupLoopSetup?.[gL] || "SL") : "";
+                                    const ltR = gR ? (groupLoopSetup?.[gR] || "SL") : "";
+
+                                    const mmL = gL ? Number(loopSizes?.[ltL] ?? 0) : null;
+                                    const mmR = gR ? Number(loopSizes?.[ltR] ?? 0) : null;
+
+                                    return (
+                                      <tr key={base} style={{ borderTop: `1px solid ${theme.border}` }}>
+                                        <td style={td}>
+                                          <div style={{ fontWeight: 950 }}>{base}</div>
+                                          <div style={{ opacity: 0.72, fontSize: 12, marginTop: 2 }}>
+                                            {gL ? gL : ""}{gL && gR ? " • " : ""}{gR ? gR : ""}
+                                          </div>
+                                        </td>
+
+                                        <td style={td}>
+                                          {gL ? (
+                                            <Select
+                                              value={ltL}
+                                              onChange={(v) => setGroupLoopSetup((prev) => ({ ...(prev || {}), [gL]: v || "SL" }))}
+                                              options={loopTypeOptions}
+                                              width={150}
+                                            />
+                                          ) : (
+                                            <div style={{ opacity: 0.45 }}>—</div>
+                                          )}
+                                        </td>
+                                        <td style={{ ...td, fontWeight: 950, opacity: 0.9 }}>{gL ? mmL : "—"}</td>
+
+                                        <td style={td}>
+                                          {gR ? (
+                                            <Select
+                                              value={ltR}
+                                              onChange={(v) => setGroupLoopSetup((prev) => ({ ...(prev || {}), [gR]: v || "SL" }))}
+                                              options={loopTypeOptions}
+                                              width={150}
+                                            />
+                                          ) : (
+                                            <div style={{ opacity: 0.45 }}>—</div>
+                                          )}
+                                        </td>
+                                        <td style={{ ...td, fontWeight: 950, opacity: 0.9 }}>{gR ? mmR : "—"}</td>
+                                      </tr>
+                                    );
+                                  });
+                                })()}
                               </tbody>
                             </table>
                           </div>
@@ -2684,9 +2833,6 @@ function setRange(letter, bucket, field, value) {
             title="Step 4 — Trim (frozen baseline)"
             right={
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                <button style={topBtn} onClick={() => setStep(3)}>
-                  ← Back to Step 3
-                </button>
                 <button
                   style={{ ...topBtn, background: "rgba(239,68,68,0.12)" }}
                   onClick={() => {
@@ -3822,6 +3968,20 @@ function RearViewChart({ rows, tolerance, height, loopTypes, groupLoopChange, se
   const [spanMode, setSpanMode] = React.useState("real");
   const [pickedGroupId, setPickedGroupId] = React.useState(null);
 
+  const baselineLoopByGroupKey = React.useMemo(() => {
+    const out = {};
+    if (!Array.isArray(rows)) return out;
+    for (let i = 0; i < rows.length; i++) {
+      const rr = rows[i];
+      const raw = rr && (rr.groupId || rr.group) ? String(rr.groupId || rr.group) : "";
+      const key = raw ? (raw.split("|")[0] || "") : "";
+      if (!key) continue;
+      const base = rr && rr.baseLoop ? String(rr.baseLoop) : "";
+      if (base && !out[key]) out[key] = base;
+    }
+    return out;
+  }, [rows]);
+
   // Build per-cascade points (A/B/C/D rows) from Step 4 computed per-line rows.
   // IMPORTANT: This chart ONLY uses Step 4 computed rows (frozen baseline + overrides + adjustments),
   // never Step 3 live state.
@@ -4218,6 +4378,10 @@ function groupBands(letter, side) {
                       const x = xFor(side, mid, count);
                       const key = String((band && band.name) || "");
                       const displayName = key.replace(/([LR])$/, "");
+                      const baseLoop = baselineLoopByGroupKey && baselineLoopByGroupKey[key] ? baselineLoopByGroupKey[key] : "";
+                      // Cosmetic tooltip: show the grouping key AND the Step 3 baseline loop (reference only).
+                      // Use newlines so it reads clearly in the native title tooltip.
+                      const titleText = key + "\nBaseline: " + (baseLoop ? baseLoop : "—");
                       const cur = (groupLoopChange && groupLoopChange[key]) ? groupLoopChange[key] : "";
                       const w = 68;
                       const h = 22;
@@ -4242,7 +4406,7 @@ function groupBands(letter, side) {
                               background: "rgba(0,0,0,0.45)",
                               boxSizing: "border-box",
                             }}
-                            title={key}
+                            title={titleText}
                           >
                             <select
                               value={cur}
