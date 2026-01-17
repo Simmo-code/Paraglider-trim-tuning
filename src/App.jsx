@@ -67,7 +67,7 @@ function clamp(n, a, b) {
   return Math.max(a, Math.min(b, x));
 }
 function safeNum(v) {
-  const s = String(v ?? "").trim();
+  const s = String(v || "").trim();
   if (!s) return null; // treat blanks as missing, not 0
   const n = Number(s.replace(",", "."));
   return Number.isFinite(n) ? n : null;
@@ -170,26 +170,26 @@ function parseWideTableFromRows(rows) {
   const metaVals = rows[1] || [];
 
   const findMeta = (needle) => {
-    const idx = metaKeys.findIndex((k) => String(k || "").toLowerCase().includes(needle));
+    const idx = metaKeys.findIndex((k) => String(k || "").toLowerCase().indexOf(needle) >= 0);
     return idx >= 0 ? metaVals[idx] : null;
   };
 
-  meta.make = String(findMeta("make") ?? metaVals[0] ?? "").trim();
-  meta.model = String(findMeta("model") ?? metaVals[1] ?? "").trim();
+  meta.make = String(findMeta("make") || metaVals[0] || "").trim();
+  meta.model = String(findMeta("model") || metaVals[1] || "").trim();
 
   const tolVal = findMeta("tolerance");
-  const corrVal = findMeta("korrektur") ?? findMeta("correction");
+  const corrVal = findMeta("korrektur") || findMeta("correction");
   if (safeNum(tolVal) != null) meta.tolerance = safeNum(tolVal);
   if (safeNum(corrVal) != null) meta.correction = safeNum(corrVal);
 
-  const header = (rows[2] || []).map((h) => String(h ?? "").trim());
+  const header = (rows[2] || []).map((h) => String(h || "").trim());
   const letters = ["A", "B", "C", "D"]; // core riser cascades
   const BRAKE_LETTER = "BR";
 
   const letterCols = [];
   for (let c = 0; c < header.length; c++) {
     const h = header[c].toUpperCase();
-    if (letters.includes(h)) letterCols.push({ letter: h, colStart: c });
+    if ((letters.indexOf(h) !== -1)) letterCols.push({ letter: h, colStart: c });
   }
   if (letterCols.length === 0 && header.length >= 16) {
     letterCols.push({ letter: "A", colStart: 0 });
@@ -209,7 +209,7 @@ function parseWideTableFromRows(rows) {
     let anyIdx = null;
     for (const blk of letterCols) {
       const c = blk.colStart;
-      const base = String(row[c] ?? "").trim();
+      const base = String(row[c] || "").trim();
       if (!base) continue;
 
       const nominal = safeNum(row[c + 1]);
@@ -217,12 +217,12 @@ function parseWideTableFromRows(rows) {
       const measuredR = safeNum(row[c + 3]);
 
       const m = base.match(/^([A-Za-z])\s*([0-9]+)\s*$/);
-      const letter = (m?.[1] || blk.letter || "").toUpperCase();
+      const letter = ((m && m[1]) || blk.letter || "").toUpperCase();
       const idx = m ? Number(m[2]) : safeNum(base.replace(/[^\d]/g, "")) || null;
       if (anyIdx == null && idx != null) anyIdx = idx;
 
-      if (!["A", "B", "C", "D"].includes(letter) || idx == null) continue;
-      wideRows.push({ letter, idx, lineBase: `${letter}${idx}`, nominal, measuredL, measuredR });
+        if (("ABCD".indexOf(letter) === -1) || idx == null) continue;
+        wideRows.push({ letter: letter, idx: idx, lineBase: String(letter) + String(idx), nominal: nominal, measuredL: measuredL, measuredR: measuredR });
 
     }
 
@@ -233,7 +233,7 @@ function parseWideTableFromRows(rows) {
       if (idx != null && Number.isFinite(idx)) {
         const nominal =
           brkStart >= 0 ? safeNum(row[brkStart + 1]) :
-          (brkLIdx > 0 && String(headerU[brkLIdx - 1] || "").includes("SOLL") ? safeNum(row[brkLIdx - 1]) : null);
+          (brkLIdx > 0 && String(headerU[brkLIdx - 1] || "").indexOf("SOLL") >= 0 ? safeNum(row[brkLIdx - 1]) : null);
         const nominalClean = nominal === 0 ? null : nominal; // treat 0 factory as missing for brakes
 
         const measuredL = brkStart >= 0 ? safeNum(row[brkStart + 2]) : safeNum(row[brkLIdx]);
@@ -320,16 +320,16 @@ function makeDefaultRanges(maxIdx, groupCount) {
 function buildInitialLineToGroup({ maxByLetter, groupCountByLetter, prefixByLetter, rangesByLetter }) {
   const mapping = {};
   for (const letter of ["A", "B", "C", "D"]) {
-    const maxIdx = Math.max(0, Number(maxByLetter?.[letter] || 0));
-    const count = Number(groupCountByLetter?.[letter] || 3);
-    const ranges = rangesByLetter?.[letter] || makeDefaultRanges(maxIdx, count);
-    const prefix = prefixByLetter?.[letter] || `${letter}R`;
+    const maxIdx = Math.max(0, Number(maxByLetter[letter] || 0));
+    const count = Number(groupCountByLetter[letter] || 3);
+    const ranges = rangesByLetter[letter] || makeDefaultRanges(maxIdx, count);
+    const prefix = prefixByLetter[letter] || `${letter}R`;
 
     for (let idx = 1; idx <= maxIdx; idx++) {
       let bucket = 1;
       for (let b = 1; b <= count; b++) {
-        const s = clamp(ranges[b]?.start ?? 1, 1, maxIdx);
-        const e = clamp(ranges[b]?.end ?? maxIdx, 1, maxIdx);
+        const s = clamp(ranges[b].start || 1, 1, maxIdx);
+        const e = clamp(ranges[b].end || maxIdx, 1, maxIdx);
         if (idx >= s && idx <= e) {
           bucket = b;
           break;
@@ -416,8 +416,8 @@ function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showW
           const sorted = lines
             .slice()
             .sort((a, b2) => {
-              const ai = Number(String(a).match(/(\d+)/)?.[1] || 0);
-              const bi = Number(String(b2).match(/(\d+)/)?.[1] || 0);
+              const ai = Number(String(a).match(/(\d+)/)[1] || 0);
+              const bi = Number(String(b2).match(/(\d+)/)[1] || 0);
               return side === "L" ? bi - ai : ai - bi;
             });
 
@@ -483,7 +483,7 @@ function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showW
     if (!drag.active) return;
     const { x, y } = screenToSvgPoint(e);
     const zone = findZoneAt(x, y);
-    if (zone?.groupId) setLineToGroupFromDrag(drag.lineId, zone.groupId);
+    if (zone.groupId) setLineToGroupFromDrag(drag.lineId, zone.groupId);
     setDrag({ active: false });
   }
 
@@ -509,7 +509,7 @@ function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showW
   items.push(<line key="center" x1={cx} y1={20} x2={cx} y2={H - 20} stroke="rgba(255,255,255,0.14)" strokeWidth={2} />);
 
   for (const b of layout.blocks) {
-    const bucketNum = Number(String(b.groupId).match(/(\d+)/)?.[1] || b.bucketNum || 1);
+    const bucketNum = Number(String(b.groupId).match(/(\d+)/)[1] || b.bucketNum || 1);
     const bucketStroke = groupColor(b.letter, bucketNum);
 
     items.push(
@@ -556,7 +556,7 @@ function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showW
       const yy = innerY + rr * (chip.h + chip.gapY);
 
       const chipStroke = chipColorFromLineId(lineId);
-      const moved = !!changedLineIds?.has?.(lineId);
+      const moved = !!changedLineIds.has(lineId);
       const chipText = moved ? theme.bad : "rgba(255,255,255,0.93)";
 
       items.push(
@@ -565,7 +565,7 @@ function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showW
           <text x={x + chip.w / 2} y={yy + chip.h * 0.74} textAnchor="middle" fill={chipText} fontSize={18} fontWeight={950}>
             {lineId}
           </text>
-          <rect x={x} y={yy} width={chip.w} height={chip.h} rx={12} ry={12} fill="transparent" style={{ cursor: "grab" }} onPointerDown={(e) => onPointerDownChip(e, { lineId, color: chipStroke })} />
+          <rect x={x} y={yy} width={chip.w} height={chip.h} rx={12} ry={12} fill="transparent" style={{ cursor: "grab" }} onPointerDown={function (e) { onPointerDownChip(e, { lineId: lineId, color: chipStroke }); }} />
         </g>
       );
     }
@@ -605,7 +605,7 @@ function BlockTable({ title, rows, theme, th, td, showCorrected, tolerance = 10,
 
   const fmt = (v, digits = 0) => (v == null || !Number.isFinite(Number(v)) ? "—" : Number(v).toFixed(digits));
 
-  const bandFromDelta = (delta) => {
+  var bandFromDelta = (delta) => {
     const d = Number(delta);
     if (!Number.isFinite(d)) return "";
     const a = Math.abs(d);
@@ -634,20 +634,20 @@ function BlockTable({ title, rows, theme, th, td, showCorrected, tolerance = 10,
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
           <thead>
             <tr>
-              <th style={{ ...th }}>Line</th>
-              <th style={{ ...th }}>Nominal</th>
+              <th style={th}>Line</th>
+              <th style={th}>Nominal</th>
 
-              <th style={{ ...th }}>L {showCorrected ? "Val" : "Raw"}</th>
-              <th style={{ ...th }}>L Corr (mm)</th>
-              <th style={{ ...th }}>L Before</th>
-              <th style={{ ...th }}>L After</th>
-              <th style={{ ...th }}>L Δ</th>
+              <th style={th}>L {showCorrected ? "Val" : "Raw"}</th>
+              <th style={th}>L Corr (mm)</th>
+              <th style={th}>L Before</th>
+              <th style={th}>L After</th>
+              <th style={th}>L Δ</th>
 
-              <th style={{ ...th }}>R {showCorrected ? "Val" : "Raw"}</th>
-              <th style={{ ...th }}>R Corr (mm)</th>
-              <th style={{ ...th }}>R Before</th>
-              <th style={{ ...th }}>R After</th>
-              <th style={{ ...th }}>R Δ</th>
+              <th style={th}>R {showCorrected ? "Val" : "Raw"}</th>
+              <th style={th}>R Corr (mm)</th>
+              <th style={th}>R Before</th>
+              <th style={th}>R After</th>
+              <th style={th}>R Δ</th>
             </tr>
           </thead>
           <tbody>
@@ -656,40 +656,40 @@ function BlockTable({ title, rows, theme, th, td, showCorrected, tolerance = 10,
               const R = r.R;
               return (
                 <tr key={r.lineBase}>
-                  <td style={{ ...td, fontWeight: 900 }}>{r.lineBase}</td>
-                  <td style={{ ...td }}>{fmt(r.nominal)}</td>
+                  <td style={Object.assign({}, td, { fontWeight: 900 })}>{r.lineBase}</td>
+                  <td style={td}>{fmt(r.nominal)}</td>
 
-                  <td style={{ ...td }}>{fmt(L?.corrected)}</td>
-                  <td style={{ ...td }}>
+                  <td style={td}>{fmt(L.corrected)}</td>
+                  <td style={td}>
                     <input
                       type="number"
-                      value={Number(step4LineCorr?.[`${r.lineBase}L`] ?? 0)}
+                      value={Number(step4LineCorr[`${r.lineBase}L`] || 0)}
                       onChange={(e) => {
                         const v = Number(e.target.value);
-                        setStep4LineCorr?.((prev) => ({ ...prev, [`${r.lineBase}L`]: Number.isFinite(v) ? v : 0 }));
+                        setStep4LineCorr((prev) => ({ ...prev, [`${r.lineBase}L`]: Number.isFinite(v) ? v : 0 }));
                       }}
                       style={{ width: 86, padding: "6px 8px", borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.panel, color: theme.text, outline: "none" }}
                     />
                   </td>
-                  <td style={{ ...td }}>{fmt(L?.before)}</td>
-                  <td style={{ ...td }}>{fmt(L?.afterVal)}</td>
-                  {(() => { const band = bandFromDelta(L?.delta); return (<td style={{ ...td, border: `1px solid ${theme.border}`, ...cellStyle(band), color: textColorForBand(band), fontWeight: 900 }}>{fmt(L?.delta)}</td>); })()}
+                  <td style={td}>{fmt(L.before)}</td>
+                  <td style={td}>{fmt(L.afterVal)}</td>
+                  <td style={Object.assign({}, td, cellStyle(bandFromDelta(L.delta)), { border: "1px solid " + theme.border, color: textColorForBand(bandFromDelta(L.delta)), fontWeight: 900 })}>{fmt(L.delta)}</td>
 
-                  <td style={{ ...td }}>{fmt(R?.corrected)}</td>
-                  <td style={{ ...td }}>
+                  <td style={td}>{fmt(R.corrected)}</td>
+                  <td style={td}>
                     <input
                       type="number"
-                      value={Number(step4LineCorr?.[`${r.lineBase}R`] ?? 0)}
+                      value={Number(step4LineCorr[`${r.lineBase}R`] || 0)}
                       onChange={(e) => {
                         const v = Number(e.target.value);
-                        setStep4LineCorr?.((prev) => ({ ...prev, [`${r.lineBase}R`]: Number.isFinite(v) ? v : 0 }));
+                        setStep4LineCorr((prev) => ({ ...prev, [`${r.lineBase}R`]: Number.isFinite(v) ? v : 0 }));
                       }}
                       style={{ width: 86, padding: "6px 8px", borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.panel, color: theme.text, outline: "none" }}
                     />
                   </td>
-                  <td style={{ ...td }}>{fmt(R?.before)}</td>
-                  <td style={{ ...td }}>{fmt(R?.afterVal)}</td>
-                  {(() => { const band = bandFromDelta(R?.delta); return (<td style={{ ...td, border: `1px solid ${theme.border}`, ...cellStyle(band), color: textColorForBand(band), fontWeight: 900 }}>{fmt(R?.delta)}</td>); })()}
+                  <td style={td}>{fmt(R.before)}</td>
+                  <td style={td}>{fmt(R.afterVal)}</td>
+                  <td style={Object.assign({}, td, cellStyle(bandFromDelta(R.delta)), { border: "1px solid " + theme.border, color: textColorForBand(bandFromDelta(R.delta)), fontWeight: 900 })}>{fmt(R.delta)}</td>
                 </tr>
               );
             })}
@@ -726,7 +726,7 @@ function NumInput({ value, onChange, min = -99999, max = 99999, step = 1, width 
       min={min}
       max={max}
       step={step}
-      onChange={(e) => onChange?.(Number(e.target.value))}
+      onChange={(e) => onChange(Number(e.target.value))}
       style={{
         width,
         padding: "7px 10px",
@@ -745,7 +745,7 @@ function Select({ value, onChange, options, width = 140 }) {
   return (
     <select
       value={value}
-      onChange={(e) => onChange?.(e.target.value)}
+      onChange={(e) => onChange(e.target.value)}
       style={{
         width,
         padding: "7px 10px",
@@ -778,7 +778,7 @@ function Toggle({ value, onChange, label }) {
           background: value ? "rgba(59,130,246,0.35)" : "rgba(255,255,255,0.08)",
           position: "relative",
         }}
-        onClick={() => onChange?.(!value)}
+        onClick={() => onChange(!value)}
       >
         <span
           style={{
@@ -1005,10 +1005,28 @@ export default function App() {
 
   // Step 1
   const [meta, setMeta] = useState({ make: "", model: "", tolerance: 10, correction: 0 });
+  const [measurementProtocol, setMeasurementProtocol] = useState("preTension22kg_thenMeasure5kg");
+  const [brakeConvention, setBrakeConvention] = useState("knotToKnot");
   const [wideRows, setWideRows] = useState([]);
   const [importStatus, setImportStatus] = useState({ ok: false, name: "", err: "" });
   const [tab, setTab] = useState("import");
   const fileInputRef = useRef(null);
+  function getFirstFileFromRef(refObj) {
+    var inputEl = refObj && refObj.current ? refObj.current : null;
+    var files = inputEl && inputEl.files ? inputEl.files : null;
+    if (files && files.item) return files.item(0);
+    return null;
+  }
+  function clickRef(refObj) {
+    if (refObj && refObj.current) refObj.current.click();
+  }
+  function importMeasurementFileFromRef() {
+    var f = getFirstFileFromRef(fileInputRef);
+    handleFile(f);
+  }
+  function clickMeasurementFilePicker() {
+    clickRef(fileInputRef);
+  }
 
   // Step 2
   const [prefixByLetter, setPrefixByLetter] = useState({ A: "AR", B: "BR", C: "CR", D: "DR" });
@@ -1036,10 +1054,19 @@ export default function App() {
   // Profile JSON
   const [profileName, setProfileName] = useState("");
   const profileImportRef = useRef(null);
+  function importWingProfileFromRef() {
+    var f = getFirstFileFromRef(profileImportRef);
+    importWingProfileJSON(f);
+  }
+  function clickProfileImportPicker() {
+    clickRef(profileImportRef);
+  }
 
   function resetAll() {
     setStep(1);
     setMeta({ make: "", model: "", tolerance: 10, correction: 0 });
+    setMeasurementProtocol("preTension22kg_thenMeasure5kg");
+    setBrakeConvention("knotToKnot");
     setWideRows([]);
     setImportStatus({ ok: false, name: "", err: "" });
 
@@ -1089,8 +1116,8 @@ export default function App() {
     const maxCore = { A: 0, B: 0, C: 0, D: 0 };
     let maxBR = 0;
     for (const r of parsed.wideRows) {
-      const L = String(r?.letter || "").toUpperCase();
-      if (r?.idx == null) continue;
+      const L = String(r.letter || "").toUpperCase();
+      if (r.idx == null) continue;
       const ix = Number(r.idx || 0);
       if (!Number.isFinite(ix)) continue;
       if (L === "BR") {
@@ -1168,8 +1195,8 @@ export default function App() {
     const maxCore = { A: 0, B: 0, C: 0, D: 0 };
     let maxBR = 0;
     for (const r of wideRows) {
-      const L = String(r?.letter || "").toUpperCase();
-      if (r?.idx == null) continue;
+      const L = String(r.letter || "").toUpperCase();
+      if (r.idx == null) continue;
       const ix = Number(r.idx || 0);
       if (!Number.isFinite(ix)) continue;
       if (L === "BR") {
@@ -1263,35 +1290,35 @@ export default function App() {
     // Build per-line rows for the whole wing. Each side is a separate entity (A1L, A1R, ...).
     if (!Array.isArray(wideRows) || wideRows.length === 0) return [];
     const out = [];
-    const tol = Number(meta?.tolerance ?? 0);
-    const corr = Number(meta?.correction ?? 0);
+    const tol = Number(meta.tolerance || 0);
+    const corr = Number(meta.correction || 0);
 
-    const loopMm = (t) => Number(loopSizes?.[t] ?? 0);
+    const loopMm = (t) => Number(loopSizes[t] || 0);
 
     for (const r of wideRows) {
-      const letter = String(r?.letter || "").toUpperCase();
-      if (!step4LetterFilter?.[letter]) continue;
+      const letter = String(r.letter || "").toUpperCase();
+      if (!step4LetterFilter[letter]) continue;
 
-      const idx = Number(r?.idx);
+      const idx = Number(r.idx);
       if (!Number.isFinite(idx)) continue;
 
       const base = `${letter}${idx}`;
-      const nominal = Number.isFinite(Number(r?.nominal)) ? Number(r.nominal) : null;
+      const nominal = Number.isFinite(Number(r.nominal)) ? Number(r.nominal) : null;
 
       for (const side of ["L", "R"]) {
         const lineId = `${base}${side}`;
-        const measured = side === "L" ? r?.measuredL : r?.measuredR;
+        const measured = side === "L" ? r.measuredL : r.measuredR;
         const raw = Number.isFinite(Number(measured)) ? Number(measured) : null;
 
-        const lineCorr = Number(step4LineCorr?.[lineId] ?? 0);
+        const lineCorr = Number(step4LineCorr[lineId] || 0);
 
-        const groupId = String(lineToGroup?.[lineId] || "");
+        const groupId = String(lineToGroup[lineId] || "");
 
-        const baseLoop = groupLoopBaseline?.[groupId] || "SL";
-        const override = groupLoopChange?.[groupId] || "";
+        const baseLoop = groupLoopBaseline && groupLoopBaseline[groupId] ? groupLoopBaseline[groupId] : "SL";
+        const override = groupLoopChange && groupLoopChange[groupId] ? groupLoopChange[groupId] : "";
         const afterLoop = override || baseLoop;
 
-        const adj = Number(groupAdjustments?.[groupId] ?? 0);
+        const adj = Number((groupAdjustments && groupAdjustments[groupId]) || 0);
 
         const corrected = raw == null ? null : raw + lineCorr + (showCorrected ? corr : 0);
 
@@ -1305,7 +1332,7 @@ export default function App() {
 
         const delta = nominal == null || afterVal == null ? null : afterVal - nominal;
 
-        const band = bandForDelta(delta, tol);
+        var band = bandForDelta(delta, tol);
 
         let sev = "na";
         if (delta != null) {
@@ -1351,8 +1378,8 @@ export default function App() {
     groupLoopChange,
     groupAdjustments,
     loopSizes,
-    meta?.tolerance,
-    meta?.correction,
+    meta.tolerance,
+    meta.correction,
     showCorrected,
     step4LetterFilter,
   ]);
@@ -1366,10 +1393,10 @@ export default function App() {
 const chartPointsByLetter = useMemo(() => {
   const out = { A: [], B: [], C: [], D: [] };
   const maxIdx = {
-    A: Number(maxByLetter?.A || 0),
-    B: Number(maxByLetter?.B || 0),
-    C: Number(maxByLetter?.C || 0),
-    D: Number(maxByLetter?.D || 0),
+    A: Number(maxByLetter.A || 0),
+    B: Number(maxByLetter.B || 0),
+    C: Number(maxByLetter.C || 0),
+    D: Number(maxByLetter.D || 0),
   };
 
   const sevAfterFor = (sev) => {
@@ -1452,11 +1479,11 @@ const step4GroupStats = useMemo(() => {
   const step4BlockRowsByLetter = useMemo(() => {
     const byBase = new Map();
     for (const r of step4LineRows) {
-      const base = r?.lineBase;
+      const base = r.lineBase;
       if (!base) continue;
       let rec = byBase.get(base);
       if (!rec) {
-        rec = { letter: r.letter, idx: r.idx, lineBase: base, nominal: r.nominal ?? null, sides: {} };
+        rec = { letter: r.letter, idx: r.idx, lineBase: base, nominal: r.nominal || null, sides: {} };
         byBase.set(base, rec);
       }
       rec.sides[r.side] = r;
@@ -1470,7 +1497,7 @@ const step4GroupStats = useMemo(() => {
       out[letter].push({ ...rec, L, R });
     }
     for (const k of Object.keys(out)) {
-      out[k].sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
+      out[k].sort((a, b) => (a.idx || 0) - (b.idx || 0));
     }
     return out;
   }, [step4LineRows]);
@@ -1485,32 +1512,32 @@ const step4SheetByLetter = useMemo(() => {
   // Collect per (letter, idx) with left/right pivot
   const map = new Map(); // key = `${letter}:${idx}`
   for (const r of step4LineRows) {
-    const letter = String(r?.letter || "").toUpperCase();
+    const letter = String(r.letter || "").toUpperCase();
     if (!byLetter[letter]) continue;
-    const idx = Number(r?.idx);
+    const idx = Number(r.idx);
     if (!Number.isFinite(idx)) continue;
 
     const key = `${letter}:${idx}`;
     const cur = map.get(key) || {
       letter,
       idx,
-      factory: Number.isFinite(Number(r?.nominal)) ? Number(r.nominal) : null,
+      factory: Number.isFinite(Number(r.nominal)) ? Number(r.nominal) : null,
       L: null,
       R: null,
       dL: null,
       dR: null,
     };
 
-    if (r?.side === "L") {
-      cur.L = Number.isFinite(Number(r?.after)) ? Number(r.after) : null;
-      cur.dL = Number.isFinite(Number(r?.delta)) ? Number(r.delta) : null;
-    } else if (r?.side === "R") {
-      cur.R = Number.isFinite(Number(r?.after)) ? Number(r.after) : null;
-      cur.dR = Number.isFinite(Number(r?.delta)) ? Number(r.delta) : null;
+    if (r.side === "L") {
+      cur.L = Number.isFinite(Number(r.after)) ? Number(r.after) : null;
+      cur.dL = Number.isFinite(Number(r.delta)) ? Number(r.delta) : null;
+    } else if (r.side === "R") {
+      cur.R = Number.isFinite(Number(r.after)) ? Number(r.after) : null;
+      cur.dR = Number.isFinite(Number(r.delta)) ? Number(r.delta) : null;
     }
 
     // Prefer the nominal from whichever side has it
-    if (cur.factory == null && Number.isFinite(Number(r?.nominal))) cur.factory = Number(r.nominal);
+    if (cur.factory == null && Number.isFinite(Number(r.nominal))) cur.factory = Number(r.nominal);
 
     map.set(key, cur);
   }
@@ -1608,6 +1635,7 @@ const pitchStats = useMemo(() => {
     rows: [A, B, C, D],
     pitchWhole,
     segments: { AB: seg(A, B), BC: seg(B, C), CD: seg(C, D) },
+    comparisons: { AvB: seg(A, B), CvB: seg(C, B), DvB: seg(D, B) },
     front,
     rear,
   };
@@ -1619,7 +1647,7 @@ const step4HasLoopEdits = useMemo(() => {
   const changes = groupLoopChange || {};
   for (const [gid, v] of Object.entries(changes)) {
     if (v == null || v === "") continue;
-    const base = groupLoopBaseline?.[gid];
+    const base = groupLoopBaseline[gid];
     if (v !== base) return true;
   }
   return false;
@@ -1643,8 +1671,8 @@ const abcLoopModeCounts = useMemo(() => {
     const gid = String(r.groupId || "").trim();
     if (!gid) continue;
     const curLoop = step4HasLoopEdits
-      ? (groupLoopChange?.[gid] || groupLoopBaseline?.[gid] || "SL")
-      : (groupLoopBaseline?.[gid] || "SL");
+      ? ((groupLoopChange && groupLoopChange[gid]) || (groupLoopBaseline && groupLoopBaseline[gid]) || "SL")
+      : ((groupLoopBaseline && groupLoopBaseline[gid]) || "SL");
     out[L][side][curLoop] = (out[L][side][curLoop] || 0) + 1;
   }
   return out;
@@ -1652,9 +1680,9 @@ const abcLoopModeCounts = useMemo(() => {
 
 const abcSuggestions = useMemo(() => {
   const letters = ["A", "B", "C", "D"];
-  const tol = Number(meta?.tolerance ?? 0);
+  const tol = Number(meta.tolerance || 0);
 
-  const loopMm = (t) => Number(loopSizes?.[t] ?? 0);
+  const loopMm = (t) => Number(loopSizes[t] || 0);
 
   const loopTypesSorted = [...LOOP_TYPES].sort((a, b) => loopMm(a) - loopMm(b));
 
@@ -1685,7 +1713,7 @@ const abcSuggestions = useMemo(() => {
   for (const L of letters) {
     out[L] = { L: null, R: null };
     for (const side of ["L", "R"]) {
-      const avg = abcAverages?.[L]?.[side]?.avg;
+      const avg = abcAverages[L][side].avg;
       if (!Number.isFinite(avg)) {
         out[L][side] = null;
         continue;
@@ -1693,7 +1721,7 @@ const abcSuggestions = useMemo(() => {
 
       const neededMm = -Number(avg);
 
-      const counts = abcLoopModeCounts?.[L]?.[side] || {};
+      const counts = abcLoopModeCounts[L][side] || {};
       const repLoop = pickModeLoop(counts);
       const repMm = loopMm(repLoop);
 
@@ -1727,7 +1755,7 @@ const abcSuggestions = useMemo(() => {
     }
   }
   return out;
-}, [abcAverages, abcLoopModeCounts, loopSizes, meta?.tolerance]);
+}, [abcAverages, abcLoopModeCounts, loopSizes, meta.tolerance]);
 
   function applyAutoLoopPlan(kind) {
     // kind: "factory" (closest to factory) or "minimal" (within tolerance with least loop changes)
@@ -2110,12 +2138,12 @@ function setRange(letter, bucket, field, value) {
 
                 <div style={{ display: "flex", gap: 8, alignItems: "center", justifySelf: "start" }}>
                   <span style={{ opacity: 0.72, fontWeight: 850, fontSize: 12 }}>S</span>
-                  <NumInput value={bucket === 1 ? 1 : (Number(r[bucket - 1]?.end ?? 0) + 1)} min={1} max={maxByLetter[L]} disabled={bucket !== 1} onChange={(vv) => setRange(L, bucket, "start", vv)} width={62} />
+                  <NumInput value={bucket === 1 ? 1 : (Number(r[bucket - 1].end || 0) + 1)} min={1} max={maxByLetter[L]} disabled={bucket !== 1} onChange={(vv) => setRange(L, bucket, "start", vv)} width={62} />
                 </div>
 
                 <div style={{ display: "flex", gap: 8, alignItems: "center", justifySelf: "start" }}>
                   <span style={{ opacity: 0.72, fontWeight: 850, fontSize: 12 }}>E</span>
-                  <NumInput value={bucket === count ? (maxByLetter[L] || 1) : (r[bucket]?.end ?? (maxByLetter[L] || 1))} min={1} max={maxByLetter[L]} disabled={bucket === count} onChange={(vv) => setRange(L, bucket, "end", vv)} width={62} />
+                  <NumInput value={bucket === count ? (maxByLetter[L] || 1) : (r[bucket].end || (maxByLetter[L] || 1))} min={1} max={maxByLetter[L]} disabled={bucket === count} onChange={(vv) => setRange(L, bucket, "end", vv)} width={62} />
                 </div>
               </div>
             );
@@ -2246,7 +2274,7 @@ function setRange(letter, bucket, field, value) {
             </div>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <button style={{ ...topBtn, opacity: 0, padding: "2px 6px", fontSize: 10, minHeight: 0 }} onClick={() => setStep(2)}>← Back to Step 2</button>
+              <button style={Object.assign({}, topBtn, { opacity: 0, padding: "2px 6px", fontSize: 10, minHeight: 0 })} onClick={() => setStep(2)}>← Back to Step 2</button>
               <ImportStatusRadio loaded={loaded} />
               {/* Step navigation buttons removed from the header (non-destructive). */}
               {false ? (
@@ -2268,7 +2296,7 @@ function setRange(letter, bucket, field, value) {
                   );
                 })
               ) : null}
-              <button style={{ ...topBtn, background: "rgba(239,68,68,0.16)" }} onClick={confirmResetAll}>
+              <button style={Object.assign({}, topBtn, { background: "rgba(239,68,68,0.16)" })} onClick={confirmResetAll}>
                 Reset all
               </button>
             </div>
@@ -2295,13 +2323,34 @@ function setRange(letter, bucket, field, value) {
             <div style={{ display: "grid", gap: 10 }}>
               {tab === "import" ? (
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-                  <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" onChange={(e) => handleFile(e.target.files?.[0])} style={{ display: "none" }} />
-                  <button style={chooseBtn} onClick={() => fileInputRef.current?.click()}>
+                    <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={importMeasurementFileFromRef} />
+                    <button style={chooseBtn} onClick={clickMeasurementFilePicker}>
                     Choose file…
                   </button>
 
                   <div style={{ opacity: 0.85, fontWeight: 900 }}>
                     Imported rows: <b>{wideRows.length}</b> • Lines total (L+R): <b>{summary.totalLines}</b>
+
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <div style={{ opacity: 0.8, fontWeight: 950, fontSize: 12 }}>Measurement protocol:</div>
+                    <select
+                      value={measurementProtocol}
+                      onChange={function (e) { setMeasurementProtocol(e && e.target ? e.target.value : measurementProtocol); }}
+                      style={{ padding: "6px 8px", borderRadius: 10, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.25)", color: theme.text, fontWeight: 900, fontSize: 12 }}
+                    >
+                      <option value="preTension22kg_thenMeasure5kg">Pre-tension 22kg x3, measure at 5kg</option>
+                      <option value="other">Other / custom (notes)</option>
+                    </select>
+                    <div style={{ opacity: 0.8, fontWeight: 950, fontSize: 12 }}>Brake convention:</div>
+                    <select
+                      value={brakeConvention}
+                      onChange={function (e) { setBrakeConvention(e && e.target ? e.target.value : brakeConvention); }}
+                      style={{ padding: "6px 8px", borderRadius: 10, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.25)", color: theme.text, fontWeight: 900, fontSize: 12 }}
+                    >
+                      <option value="knotToKnot">Knot-to-knot</option>
+                      <option value="toggleToTE">Toggle-end to trailing edge</option>
+                    </select>
+                  </div>
                   </div>
 
                   {importStatus.ok ? (
@@ -2367,7 +2416,7 @@ function setRange(letter, bucket, field, value) {
                 <button style={topBtn} onClick={() => setStep(1)}>
                   ← Back
                 </button>
-<button style={{ ...topBtn, background: "rgba(59,130,246,0.22)" }} onClick={() => setStep(3)} disabled={!loaded}>
+<button style={Object.assign({}, topBtn, { background: "rgba(59,130,246,0.22)" })} onClick={() => setStep(3)} disabled={!loaded}>
                   Open diagram page →
                 </button>
               </div>
@@ -2391,12 +2440,12 @@ function setRange(letter, bucket, field, value) {
                         placeholder="Profile file name…"
                         style={{ width: 240, padding: "7px 10px", borderRadius: 12, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.68)", color: theme.text, outline: "none", fontWeight: 900, fontSize: 14 }}
                       />
-                      <button style={{ ...topBtn, background: "rgba(59,130,246,0.20)" }} onClick={exportWingProfileJSON}>
+                      <button style={Object.assign({}, topBtn, { background: "rgba(59,130,246,0.20)" })} onClick={exportWingProfileJSON}>
                         Export JSON
                       </button>
 
-                      <input ref={profileImportRef} type="file" accept=".json,application/json" style={{ display: "none" }} onChange={(e) => importWingProfileJSON(e.target.files?.[0])} />
-                      <button style={topBtn} onClick={() => profileImportRef.current?.click()}>
+                      <input ref={profileImportRef} type="file" accept=".json,application/json" style={{ display: "none" }} onChange={importWingProfileFromRef} />
+                      <button style={topBtn} onClick={clickProfileImportPicker}>
                         Import JSON
                       </button>
                     </div>
@@ -2422,10 +2471,10 @@ function setRange(letter, bucket, field, value) {
                       <div style={{ fontWeight: 950 }}>Ranges</div>
                       <ColoredRangeTabs />
                       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <button style={{ ...topBtn, background: "rgba(59,130,246,0.22)" }} onClick={() => rebuildMappingFromRanges(false)} disabled={!loaded}>
+                        <button style={Object.assign({}, topBtn, { background: "rgba(59,130,246,0.22)" })} onClick={() => rebuildMappingFromRanges(false)} disabled={!loaded}>
                           Apply ranges
                         </button>
-                        <button style={{ ...topBtn, background: "rgba(239,68,68,0.12)" }} onClick={() => rebuildMappingFromRanges(true)} disabled={!loaded}>
+                        <button style={Object.assign({}, topBtn, { background: "rgba(239,68,68,0.12)" })} onClick={() => rebuildMappingFromRanges(true)} disabled={!loaded}>
                           Reset ranges
                         </button>
                       </div>
@@ -2467,7 +2516,7 @@ function setRange(letter, bucket, field, value) {
 
                             return (
                               <tr key={`${letter}-${idx}`} style={{ borderTop: `1px solid ${theme.border}` }}>
-                                <td style={{ ...td, fontWeight: 950, color: col }}>
+                                <td style={Object.assign({}, td, { fontWeight: 950, color: col })}>
                                   {letter}
                                   {idx}
                                 </td>
@@ -2500,10 +2549,10 @@ function setRange(letter, bucket, field, value) {
             right={
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                 <div style={{ display: "flex", gap: 8, padding: "6px 8px", borderRadius: 14, border: `1px solid ${theme.border}`, background: theme.panel2 }}>
-                  <button style={{ ...topBtn, ...(step3View === "diagram" ? { background: "rgba(59,130,246,0.25)" } : null) }} onClick={() => setStep3View("diagram")}>
+                  <button style={Object.assign({}, topBtn, (step3View === "diagram" ? { background: "rgba(59,130,246,0.25)" } : null))} onClick={() => setStep3View("diagram")}>
                     Diagram
                   </button>
-                  <button style={{ ...topBtn, ...(step3View === "baseline" ? { background: "rgba(59,130,246,0.25)" } : null) }} onClick={() => setStep3View("baseline")}>
+                  <button style={Object.assign({}, topBtn, (step3View === "baseline" ? { background: "rgba(59,130,246,0.25)" } : null))} onClick={() => setStep3View("baseline")}>
                     Baseline loops
                   </button>
                 </div>
@@ -2518,7 +2567,7 @@ function setRange(letter, bucket, field, value) {
                   </div>
                   <button
                     type="button"
-                    style={{ ...topBtn, padding: "6px 10px", background: "rgba(255,255,255,0.08)" }}
+                    style={Object.assign({}, topBtn, { padding: "6px 10px", background: "rgba(255,255,255,0.08)" })}
                     onClick={() => {
                       setStep3View("baseline");
                       try {
@@ -2534,7 +2583,7 @@ function setRange(letter, bucket, field, value) {
                   </button>
                 </div>
 
-                <button style={{ ...topBtn, background: "rgba(34,197,94,0.18)" }} onClick={() => setStep(4)}>
+                <button style={Object.assign({}, topBtn, { background: "rgba(34,197,94,0.18)" })} onClick={() => setStep(4)}>
                   Go to Step 4 →
                 </button>
                 <button style={topBtn} onClick={fitDiagramToScreen}>
@@ -2564,7 +2613,7 @@ function setRange(letter, bucket, field, value) {
                   Step 4 freezes a snapshot of your installed baseline loops. After you enter Step 4, you can’t return to Step 3 without using the full Reset.
                   <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                     <button
-                      style={{ ...topBtn, background: "rgba(245,158,11,0.20)", borderColor: "rgba(245,158,11,0.35)" }}
+                      style={Object.assign({}, topBtn, { background: "rgba(245,158,11,0.20)", borderColor: "rgba(245,158,11,0.35)" })}
                       onClick={() => {
                         setStep3View("baseline");
                         setTimeout(() => {
@@ -2598,7 +2647,7 @@ function setRange(letter, bucket, field, value) {
                           {LOOP_TYPES.map((lt) => (
                             <div key={lt} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                               <div style={{ fontWeight: 900 }}>{lt}</div>
-                              <input type="number" value={Number(loopSizes?.[lt] ?? 0)} onChange={(e) => setLoopSizes((prev) => ({ ...(prev || {}), [lt]: Number(e.target.value || 0) }))} style={{ width: 90, padding: "8px 10px", borderRadius: 10, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.45)", color: theme.text, fontWeight: 900 }} />
+                              <input type="number" value={Number(loopSizes[lt] || 0)} onChange={(e) => setLoopSizes((prev) => ({ ...(prev || {}), [lt]: Number(e.target.value || 0) }))} style={{ width: 90, padding: "8px 10px", borderRadius: 10, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.45)", color: theme.text, fontWeight: 900 }} />
                             </div>
                           ))}
                         </div>
@@ -2616,19 +2665,19 @@ function setRange(letter, bucket, field, value) {
                             <table style={{ width: "100%", borderCollapse: "collapse" }}>
                               <thead>
                                 <tr>
-                                  <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }} rowSpan={2}>Group</th>
-                                  <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }} colSpan={2}>Left</th>
-                                  <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }} colSpan={2}>Right</th>
+                                  <th style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 1 })} rowSpan={2}>Group</th>
+                                  <th style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 1 })} colSpan={2}>Left</th>
+                                  <th style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 1 })} colSpan={2}>Right</th>
                                 </tr>
                                 <tr>
-                                  <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>Installed loop</th>
-                                  <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>mm</th>
-                                  <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>Installed loop</th>
-                                  <th style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>mm</th>
+                                  <th style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 1 })}>Installed loop</th>
+                                  <th style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 1 })}>mm</th>
+                                  <th style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 1 })}>Installed loop</th>
+                                  <th style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 1 })}>mm</th>
                                 </tr>
                               </thead>
                               <tbody>
-                                {(() => {
+                                {(function () {
                                   const parseGroup = (g) => {
                                     const m = /^([A-Za-z]+\d+)([LR])$/.exec(String(g || ""));
                                     if (!m) return { base: String(g || ""), side: "" };
@@ -2679,11 +2728,11 @@ function setRange(letter, bucket, field, value) {
                                     const gL = row && row.L ? row.L : null;
                                     const gR = row && row.R ? row.R : null;
 
-                                    const ltL = gL ? (groupLoopSetup?.[gL] || "SL") : "";
-                                    const ltR = gR ? (groupLoopSetup?.[gR] || "SL") : "";
+                                    const ltL = gL ? (groupLoopSetup[gL] || "SL") : "";
+                                    const ltR = gR ? (groupLoopSetup[gR] || "SL") : "";
 
-                                    const mmL = gL ? Number(loopSizes?.[ltL] ?? 0) : null;
-                                    const mmR = gR ? Number(loopSizes?.[ltR] ?? 0) : null;
+                                    const mmL = gL ? Number(loopSizes[ltL] || 0) : null;
+                                    const mmR = gR ? Number(loopSizes[ltR] || 0) : null;
 
                                     return (
                                       <tr key={base} style={{ borderTop: `1px solid ${theme.border}` }}>
@@ -2706,7 +2755,7 @@ function setRange(letter, bucket, field, value) {
                                             <div style={{ opacity: 0.45 }}>—</div>
                                           )}
                                         </td>
-                                        <td style={{ ...td, fontWeight: 950, opacity: 0.9 }}>{gL ? mmL : "—"}</td>
+                                        <td style={Object.assign({}, td, { fontWeight: 950, opacity: 0.9 })}>{gL ? mmL : "—"}</td>
 
                                         <td style={td}>
                                           {gR ? (
@@ -2720,7 +2769,7 @@ function setRange(letter, bucket, field, value) {
                                             <div style={{ opacity: 0.45 }}>—</div>
                                           )}
                                         </td>
-                                        <td style={{ ...td, fontWeight: 950, opacity: 0.9 }}>{gR ? mmR : "—"}</td>
+                                        <td style={Object.assign({}, td, { fontWeight: 950, opacity: 0.9 })}>{gR ? mmR : "—"}</td>
                                       </tr>
                                     );
                                   });
@@ -2772,7 +2821,7 @@ function setRange(letter, bucket, field, value) {
                         Changed lines: <b>{changes.length}</b>
                       </div>
                       <button
-                        style={{ ...topBtn, background: "rgba(59,130,246,0.20)" }}
+                        style={Object.assign({}, topBtn, { background: "rgba(59,130,246,0.20)" })}
                         onClick={() => {
                           const payload = { schema: "trim-tuning-step2-changes-v1", exportedAt: new Date().toISOString(), wing: { make: meta.make || "", model: meta.model || "" }, changes };
                           const name = `${meta.make || "Wing"}-${meta.model || "Changes"}`.replace(/\s+/g, "-");
@@ -2800,7 +2849,7 @@ function setRange(letter, bucket, field, value) {
                           <tbody>
                             {changes.map((c) => (
                               <tr key={c.lineId} style={{ borderTop: `1px solid ${theme.border}` }}>
-                                <td style={{ ...td, color: chipColorFromLineId(c.lineId), fontWeight: 950 }}>{c.lineId}</td>
+                                <td style={Object.assign({}, td, { color: chipColorFromLineId(c.lineId), fontWeight: 950 })}>{c.lineId}</td>
                                 <td style={td}>{c.from}</td>
                                 <td style={td}>{c.to}</td>
                               </tr>
@@ -2834,7 +2883,7 @@ function setRange(letter, bucket, field, value) {
             right={
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                 <button
-                  style={{ ...topBtn, background: "rgba(239,68,68,0.12)" }}
+                  style={Object.assign({}, topBtn, { background: "rgba(239,68,68,0.12)" })}
                   onClick={() => {
                     setGroupLoopChange({});
                     setGroupAdjustments({});
@@ -2853,7 +2902,7 @@ function setRange(letter, bucket, field, value) {
                 Step 4 must freeze a snapshot of Step 3 <b>exactly once</b>. Click “Freeze baseline now” to continue.
                 <div style={{ marginTop: 10 }}>
                   <button
-                    style={{ ...topBtn, background: "rgba(34,197,94,0.18)" }}
+                    style={Object.assign({}, topBtn, { background: "rgba(34,197,94,0.18)" })}
                     onClick={() => setGroupLoopBaseline(deepClone(groupLoopSetup || {}))}
                   >
                     Freeze baseline now
@@ -2873,7 +2922,7 @@ function setRange(letter, bucket, field, value) {
                     <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-start" }}>
                       <ControlPill
                         label="Tolerance"
-                        value={meta.tolerance ?? 6}
+                        value={meta.tolerance || 6}
                         onChange={(v) => setMeta((p) => ({ ...p, tolerance: v }))}
                         suffix="mm"
                         width={90}
@@ -2881,7 +2930,7 @@ function setRange(letter, bucket, field, value) {
                       />
                       <ControlPill
                         label="Correction"
-                        value={meta.correction ?? 0}
+                        value={meta.correction || 0}
                         onChange={(v) => setMeta((p) => ({ ...p, correction: v }))}
                         suffix="mm"
                         width={110}
@@ -2903,7 +2952,7 @@ function setRange(letter, bucket, field, value) {
                       <StatPill label="Right median" value={zeroingStats.rightMedian} n={zeroingStats.nRight} />
 
                       <button
-                        style={{ ...topBtn, background: "rgba(99,102,241,0.20)" }}
+                        style={Object.assign({}, topBtn, { background: "rgba(99,102,241,0.20)" })}
                         disabled={!Number.isFinite(zeroingStats.wholeMedian)}
                         onClick={() => {
                           const v = zeroingStats.wholeMedian;
@@ -3051,10 +3100,10 @@ function setRange(letter, bucket, field, value) {
                     Mirrors the spreadsheet layout: <b>Factory</b>, <b>Left</b>, <b>Right</b>, <b>Δ Left</b>, <b>Δ Right</b>, <b>Sym</b>. Values come from Step 4 “after” and “delta”.
                   </div>
 
-                  {(() => {
+                  {(function () {
                     const letters = includeBrakeBlock ? ["A", "B", "C", "D", "BR"] : ["A", "B", "C", "D"];
-                    const byLetter = step4SheetByLetter?.byLetter || {};
-                    const maxDiff = step4SheetByLetter?.maxDiff || {};
+                    const byLetter = step4SheetByLetter.byLetter || {};
+                    const maxDiff = step4SheetByLetter.maxDiff || {};
                     const letterMaps = {};
                     let maxIdx = 0;
 
@@ -3080,11 +3129,11 @@ function setRange(letter, bucket, field, value) {
                       return sum / xs.length;
                     };
 
-                    const bandFromDelta = (delta) => {
+                    var bandFromDelta = (delta) => {
                       const d = Number(delta);
                       if (!Number.isFinite(d)) return "";
                       const a = Math.abs(d);
-                      const tol = Number(meta?.tolerance ?? 10);
+                      const tol = Number(meta.tolerance || 10);
                       if (a <= 4) return "good";
                       if (a < tol) return "warn";
                       return "bad";
@@ -3106,15 +3155,15 @@ function setRange(letter, bucket, field, value) {
                       <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 10, fontSize: 13 }}>
                         <thead>
                           <tr>
-                            <th style={{ ...headerCell, textAlign: "left", position: "sticky", left: 0, background: theme.panel2, zIndex: 2 }}>#</th>
+                            <th style={Object.assign({}, headerCell, { textAlign: "left", position: "sticky", left: 0, background: theme.panel2, zIndex: 2 })}>#</th>
                             {letters.map((L) => (
-                              <th key={L} colSpan={6} style={{ ...headerCell, textAlign: "center", background: "rgba(255,255,255,0.03)" }}>
+                              <th key={L} colSpan={6} style={Object.assign({}, headerCell, { textAlign: "center", background: "rgba(255,255,255,0.03)" })}>
                                 {L}
                               </th>
                             ))}
                           </tr>
                           <tr>
-                            <th style={{ ...headerCell, textAlign: "left", position: "sticky", left: 0, background: theme.panel2, zIndex: 2 }} />
+                            <th style={Object.assign({}, headerCell, { textAlign: "left", position: "sticky", left: 0, background: theme.panel2, zIndex: 2 })} />
                             {letters.map((L) => (
                               <React.Fragment key={`${L}-sub`}>
                                 <th style={headerCell}>Factory</th>
@@ -3131,17 +3180,17 @@ function setRange(letter, bucket, field, value) {
                         <tbody>
                           {Array.from({ length: Math.max(0, maxIdx) }, (_, i) => i + 1).map((idx) => (
                             <tr key={`row-${idx}`}>
-                              <td style={{ ...cell, textAlign: "left", position: "sticky", left: 0, background: theme.panel2, zIndex: 1, fontWeight: 700 }}>{idx}</td>
+                              <td style={Object.assign({}, cell, { textAlign: "left", position: "sticky", left: 0, background: theme.panel2, zIndex: 1, fontWeight: 700 })}>{idx}</td>
                               {letters.map((L) => {
-                                const r = letterMaps[L].get(idx);
+                                const r = letterMaps[L] && letterMaps[L].get ? letterMaps[L].get(idx) : null;
                                 return (
                                   <React.Fragment key={`${L}-${idx}`}>
-                                    <td style={cell}>{fmt(r?.factory, 0)}</td>
-                                    <td style={cell}>{fmt(r?.L, 0)}</td>
-                                    <td style={cell}>{fmt(r?.R, 0)}</td>
-                                    <td style={{ ...cell, background: bgForBand(bandFromDelta(r?.dL)), color: colorForBand(bandFromDelta(r?.dL)), fontWeight: 950 }}>{fmt(r?.dL, 0)}</td>
-                                    <td style={{ ...cell, background: bgForBand(bandFromDelta(r?.dR)), color: colorForBand(bandFromDelta(r?.dR)), fontWeight: 950 }}>{fmt(r?.dR, 0)}</td>
-                                    <td style={{ ...cell, background: bgForBand(bandFromDelta(r?.sym)), color: colorForBand(bandFromDelta(r?.sym)), fontWeight: 950 }}>{fmt(r?.sym, 0)}</td>
+                                    <td style={cell}>{fmt(r ? r.factory : null, 0)}</td>
+                                    <td style={cell}>{fmt(r ? r.L : null, 0)}</td>
+                                    <td style={cell}>{fmt(r ? r.R : null, 0)}</td>
+                                    <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(r ? r.dL : null)), color: colorForBand(bandFromDelta(r ? r.dL : null)), fontWeight: 950 })}>{fmt(r ? r.dL : null, 0)}</td>
+                                    <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(r ? r.dR : null)), color: colorForBand(bandFromDelta(r ? r.dR : null)), fontWeight: 950 })}>{fmt(r ? r.dR : null, 0)}</td>
+                                    <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(r ? r.sym : null)), color: colorForBand(bandFromDelta(r ? r.sym : null)), fontWeight: 950 })}>{fmt(r ? r.sym : null, 0)}</td>
                                   </React.Fragment>
                                 );
                               })}
@@ -3149,29 +3198,29 @@ function setRange(letter, bucket, field, value) {
                           ))}
 
                           <tr>
-                            <td style={{ ...cell, textAlign: "left", position: "sticky", left: 0, background: theme.panel2, zIndex: 1, fontWeight: 900 }}>
+                            <td style={Object.assign({}, cell, { textAlign: "left", position: "sticky", left: 0, background: theme.panel2, zIndex: 1, fontWeight: 900 })}>
                               Averages
                             </td>
                             {letters.map((L) => {
                               const rows = Array.isArray(byLetter[L]) ? byLetter[L] : [];
-                              const aDL = avgOf(rows.map((r) => r?.dL));
-                              const aDR = avgOf(rows.map((r) => r?.dR));
-                              const aSY = avgOf(rows.map((r) => r?.sym));
+                              const aDL = avgOf(rows.map((r) => r.dL));
+                              const aDR = avgOf(rows.map((r) => r.dR));
+                              const aSY = avgOf(rows.map((r) => r.sym));
                               return (
                                 <React.Fragment key={`avg-${L}`}>
                                   <td style={cell} />
                                   <td style={cell} />
                                   <td style={cell} />
-                                  <td style={{ ...cell, background: bgForBand(bandFromDelta(aDL)), color: colorForBand(bandFromDelta(aDL)), fontWeight: 950 }}>{fmt(aDL, 1)}</td>
-                                  <td style={{ ...cell, background: bgForBand(bandFromDelta(aDR)), color: colorForBand(bandFromDelta(aDR)), fontWeight: 950 }}>{fmt(aDR, 1)}</td>
-                                  <td style={{ ...cell, background: bgForBand(bandFromDelta(aSY)), color: colorForBand(bandFromDelta(aSY)), fontWeight: 950 }}>{fmt(aSY, 1)}</td>
+                                  <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(aDL)), color: colorForBand(bandFromDelta(aDL)), fontWeight: 950 })}>{fmt(aDL, 1)}</td>
+                                  <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(aDR)), color: colorForBand(bandFromDelta(aDR)), fontWeight: 950 })}>{fmt(aDR, 1)}</td>
+                                  <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(aSY)), color: colorForBand(bandFromDelta(aSY)), fontWeight: 950 })}>{fmt(aSY, 1)}</td>
                                 </React.Fragment>
                               );
                             })}
                           </tr>
 
                           <tr>
-                            <td style={{ ...cell, textAlign: "left", position: "sticky", left: 0, background: theme.panel2, zIndex: 1, fontWeight: 900 }}>
+                            <td style={Object.assign({}, cell, { textAlign: "left", position: "sticky", left: 0, background: theme.panel2, zIndex: 1, fontWeight: 900 })}>
                               <span title="Maximum Difference (peak-to-peak) for Δ Left, Δ Right, and Sym">Diffs</span>
                             </td>
                             {letters.map((L) => (
@@ -3179,9 +3228,9 @@ function setRange(letter, bucket, field, value) {
                                 <td style={cell} />
                                 <td style={cell} />
                                 <td style={cell} />
-                                <td style={cell}>{fmt(maxDiff?.[L]?.dL, 0)}</td>
-                                <td style={cell}>{fmt(maxDiff?.[L]?.dR, 0)}</td>
-                                <td style={cell}>{fmt(maxDiff?.[L]?.sym, 0)}</td>
+                                <td style={cell}>{fmt(maxDiff[L].dL, 0)}</td>
+                                <td style={cell}>{fmt(maxDiff[L].dR, 0)}</td>
+                                <td style={cell}>{fmt(maxDiff[L].sym, 0)}</td>
                               </React.Fragment>
                             ))}
                           </tr>
@@ -3208,21 +3257,21 @@ function setRange(letter, bucket, field, value) {
                       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1100 }}>
                         <thead>
                           <tr>
-                            <th rowSpan={2} style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 2 }}>Group</th>
-                            <th colSpan={5} style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 2, textAlign: "center" }}>Left</th>
-                            <th colSpan={5} style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 2, textAlign: "center" }}>Right</th>
+                            <th rowSpan={2} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2 })}>Group</th>
+                            <th colSpan={5} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2, textAlign: "center" })}>Left</th>
+                            <th colSpan={5} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2, textAlign: "center" })}>Right</th>
                           </tr>
                           <tr>
                             {["Baseline loop", "Override loop", "Loop Δ (mm)", "Adjust (mm)", "Total Δ (mm)"].map((h) => (
-                              <th key={"L-"+h} style={{ ...th, position: "sticky", top: 34, background: theme.panel2, zIndex: 2 }}>{h}</th>
+                              <th key={"L-"+h} style={Object.assign({}, th, { position: "sticky", top: 34, background: theme.panel2, zIndex: 2 })}>{h}</th>
                             ))}
                             {["Baseline loop", "Override loop", "Loop Δ (mm)", "Adjust (mm)", "Total Δ (mm)"].map((h) => (
-                              <th key={"R-"+h} style={{ ...th, position: "sticky", top: 34, background: theme.panel2, zIndex: 2 }}>{h}</th>
+                              <th key={"R-"+h} style={Object.assign({}, th, { position: "sticky", top: 34, background: theme.panel2, zIndex: 2 })}>{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
-                          {(() => {
+                          {(function () {
                             const parse = (s) => {
                               const m = String(s || "").match(/^([A-Z]+)(\d+)([LR])$/i);
                               if (!m) return null;
@@ -3263,15 +3312,15 @@ function setRange(letter, bucket, field, value) {
                                   totalColor: "transparent",
                                 };
                               }
-                              const baseLoop = groupLoopBaseline?.[gid] || "SL";
-                              const override = groupLoopChange?.[gid] || "";
+                              const baseLoop = groupLoopBaseline[gid] || "SL";
+                              const override = groupLoopChange[gid] || "";
                               const afterLoop = override || baseLoop;
 
-                              const baseMm = Number(loopSizes?.[baseLoop] ?? 0);
-                              const afterMm = Number(loopSizes?.[afterLoop] ?? 0);
+                              const baseMm = Number(loopSizes[baseLoop] || 0);
+                              const afterMm = Number(loopSizes[afterLoop] || 0);
                               const loopDelta = afterMm - baseMm;
 
-                              const adj = Number(groupAdjustments?.[gid] ?? 0);
+                              const adj = Number(groupAdjustments[gid] || 0);
                               const total = loopDelta + adj;
 
                               const tol = Number((meta && meta.tolerance != null) ? meta.tolerance : 0);
@@ -3287,7 +3336,7 @@ function setRange(letter, bucket, field, value) {
 
                               return (
                                 <tr key={row.key} style={{ borderTop: `1px solid ${theme.border}` }}>
-                                  <td style={{ ...td, whiteSpace: "nowrap" }}>
+                                  <td style={Object.assign({}, td, { whiteSpace: "nowrap" })}>
                                     <div style={{ fontWeight: 900 }}>{row.L || row.single || row.labelL}</div>
                                     {row.R ? <div style={{ opacity: 0.85, marginTop: 2 }}>{row.R}</div> : null}
                                   </td>
@@ -3297,7 +3346,7 @@ function setRange(letter, bucket, field, value) {
                                   <td style={td}>
                                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                                       <select
-                                        style={{ ...miniInput, width: 86, padding: "4px 8px", background: theme.panel2, color: theme.text }}
+                                        style={Object.assign({}, miniInput, { width: 86, padding: "4px 8px", background: theme.panel2, color: theme.text })}
                                         disabled={!row.L}
                                         value={(row.L && groupLoopChange && groupLoopChange[row.L]) ? groupLoopChange[row.L] : ""}
                                         onChange={(e) => {
@@ -3358,14 +3407,14 @@ function setRange(letter, bucket, field, value) {
                                       }}
                                     />
                                   </td>
-                                  <td style={{ ...td, textAlign: "center" }}><div style={{ display: "inline-block", minWidth: 46, padding: "4px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: L.totalColor, fontWeight: 950, lineHeight: 1 }}>{Number.isFinite(L.total) ? Math.round(L.total) : ""}</div></td>
+                                  <td style={Object.assign({}, td, { textAlign: "center" })}><div style={{ display: "inline-block", minWidth: 46, padding: "4px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: L.totalColor, fontWeight: 950, lineHeight: 1 }}>{Number.isFinite(L.total) ? Math.round(L.total) : ""}</div></td>
 
                                   {/* Right */}
                                   <td style={td}>{R.baseLoop}</td>
                                   <td style={td}>
                                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                                       <select
-                                        style={{ ...miniInput, width: 86, padding: "4px 8px", background: theme.panel2, color: theme.text }}
+                                        style={Object.assign({}, miniInput, { width: 86, padding: "4px 8px", background: theme.panel2, color: theme.text })}
                                         disabled={!row.R}
                                         value={(row.R && groupLoopChange && groupLoopChange[row.R]) ? groupLoopChange[row.R] : ""}
                                         onChange={(e) => {
@@ -3426,7 +3475,7 @@ function setRange(letter, bucket, field, value) {
                                       }}
                                     />
                                   </td>
-                                  <td style={{ ...td, textAlign: "center" }}><div style={{ display: "inline-block", minWidth: 46, padding: "4px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: R.totalColor, fontWeight: 950, lineHeight: 1 }}>{Number.isFinite(R.total) ? Math.round(R.total) : ""}</div></td>
+                                  <td style={Object.assign({}, td, { textAlign: "center" })}><div style={{ display: "inline-block", minWidth: 46, padding: "4px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: R.totalColor, fontWeight: 950, lineHeight: 1 }}>{Number.isFinite(R.total) ? Math.round(R.total) : ""}</div></td>
                                 </tr>
                               );
                             });
@@ -3455,7 +3504,7 @@ function setRange(letter, bucket, field, value) {
 
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
       <button
-        style={{ ...topBtn, background: "rgba(255,255,255,0.06)" }}
+        style={Object.assign({}, topBtn, { background: "rgba(255,255,255,0.06)" })}
         onClick={async () => {
           try {
             const payload = { schema: "abc-loop-suggestions-v1", exportedAt: new Date().toISOString(), wing: { make: meta.make || "", model: meta.model || "" }, suggestions: abcSuggestions, averages: abcAverages };
@@ -3472,7 +3521,7 @@ function setRange(letter, bucket, field, value) {
       <ControlPill label="Manual pitch tol" value={groupPitchTol} onChange={setGroupPitchTol} suffix="mm" width={110} step={1} min={0} max={20} />
 
       <button
-        style={{ ...topBtn, background: showLoopModeCounts ? "rgba(99,102,241,0.25)" : "rgba(255,255,255,0.06)" }}
+        style={Object.assign({}, topBtn, { background: showLoopModeCounts ? "rgba(99,102,241,0.25)" : "rgba(255,255,255,0.06)" })}
         onClick={() => setShowLoopModeCounts((v) => !v)}
       >
         {showLoopModeCounts ? "Hide loop counts" : "Show loop counts"}
@@ -3535,27 +3584,27 @@ function setRange(letter, bucket, field, value) {
           </thead>
           <tbody>
             {["A", "B", "C", "D"].map((L) => {
-              const sL = abcSuggestions?.[L]?.L || null;
-              const sR = abcSuggestions?.[L]?.R || null;
+              const sL = abcSuggestions[L].L || null;
+              const sR = abcSuggestions[L].R || null;
 
               const fmt1 = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Number(n).toFixed(1));
               const fmti = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Math.round(Number(n)));
 
               return (
                 <tr key={L} style={{ borderTop: `1px solid ${theme.border}` }}>
-                  <td style={{ ...td, fontWeight: 950, color: (PALETTE[L] || PALETTE.A).base }}>{L}</td>
+                  <td style={Object.assign({}, td, { fontWeight: 950, color: (PALETTE[L] || PALETTE.A).base })}>{L}</td>
 
                   <td style={td}>{sL ? sL.repLoop : "—"}</td>
                   <td style={td}>{sL ? sL.bestLoop : "—"}</td>
                   <td style={td}>{sL ? fmti(sL.loopDeltaMm) : "—"}</td>
                   <td style={td}>{sL ? fmti(sL.suggestedAdjMm) : "—"}</td>
-                  <td style={{ ...td, fontWeight: 950 }}>{sL ? fmt1(sL.residualAfterAdj) : "—"}</td>
+                  <td style={Object.assign({}, td, { fontWeight: 950 })}>{sL ? fmt1(sL.residualAfterAdj) : "—"}</td>
 
                   <td style={td}>{sR ? sR.repLoop : "—"}</td>
                   <td style={td}>{sR ? sR.bestLoop : "—"}</td>
                   <td style={td}>{sR ? fmti(sR.loopDeltaMm) : "—"}</td>
                   <td style={td}>{sR ? fmti(sR.suggestedAdjMm) : "—"}</td>
-                  <td style={{ ...td, fontWeight: 950 }}>{sR ? fmt1(sR.residualAfterAdj) : "—"}</td>
+                  <td style={Object.assign({}, td, { fontWeight: 950 })}>{sR ? fmt1(sR.residualAfterAdj) : "—"}</td>
                 </tr>
               );
             })}
@@ -3564,14 +3613,14 @@ function setRange(letter, bucket, field, value) {
       </div>
 
       <div style={{ marginTop: 8, opacity: 0.78, fontSize: 12 }}>
-        Fine adjust is clamped to ±Tolerance (<b>{Number(meta?.tolerance ?? 0)}mm</b>). Suggestions use the most common current loop type in each A/B/C side as the “representative” baseline.
+        Fine adjust is clamped to ±Tolerance (<b>{Number(meta.tolerance || 0)}mm</b>). Suggestions use the most common current loop type in each A/B/C side as the “representative” baseline.
       </div>
 
       <div style={{ marginTop: 10, borderTop: `1px solid ${theme.border}`, paddingTop: 10 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-          <div style={{ fontWeight: 950 }}>Pitch summary (A/B vs C/D)</div>
+          <div style={{ fontWeight: 950 }}>Pitch OK (factory): A vs B, C vs B, D vs B</div>
           <div style={{ opacity: 0.78, fontSize: 12 }}>
-            Pitch proxy = avg Δ(front) − avg Δ(rear). Default tolerance ±{Number.isFinite(Number(groupPitchTol)) ? Number(groupPitchTol) : 4}mm.
+            Pitch OK is judged by A−B, C−B, and D−B (vs B), not whole-wing pitch. Default tolerance ±{Number.isFinite(Number(groupPitchTol)) ? Number(groupPitchTol) : 4}mm.
           </div>
         </div>
 
@@ -3589,9 +3638,9 @@ function setRange(letter, bucket, field, value) {
               <tbody>
                 {[
                   { key: "whole", label: "Whole pitch (front − rear)", v: pitchStats && pitchStats.pitchWhole ? pitchStats.pitchWhole : null },
-                  { key: "ab", label: "A − B", v: pitchStats && pitchStats.segments ? pitchStats.segments.AB : null },
-                  { key: "bc", label: "B − C", v: pitchStats && pitchStats.segments ? pitchStats.segments.BC : null },
-                  { key: "cd", label: "C − D", v: pitchStats && pitchStats.segments ? pitchStats.segments.CD : null },
+                  { key: "avb", label: "A − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.AvB : null },
+                  { key: "cvb", label: "C − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.CvB : null },
+                  { key: "dvb", label: "D − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.DvB : null },
                 ].map((row) => {
                   const f1 = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Number(n).toFixed(1));
                   const vL = row.v ? row.v.L : null;
@@ -3610,10 +3659,10 @@ function setRange(letter, bucket, field, value) {
 
                   return (
                     <tr key={row.key} style={{ borderTop: `1px solid ${theme.border}` }}>
-                      <td style={{ ...td, fontWeight: 950 }}>{row.label}</td>
-                      <td style={{ ...td, fontWeight: 950, color: colFor(sevL) }}>{f1(vL)}</td>
-                      <td style={{ ...td, fontWeight: 950, color: colFor(sevR) }}>{f1(vR)}</td>
-                      <td style={{ ...td, fontWeight: 950, color: colFor(sevB) }}>{f1(vB)}</td>
+                      <td style={Object.assign({}, td, { fontWeight: 950 })}>{row.label}</td>
+                      <td style={Object.assign({}, td, { fontWeight: 950, color: colFor(sevL) })}>{f1(vL)}</td>
+                      <td style={Object.assign({}, td, { fontWeight: 950, color: colFor(sevR) })}>{f1(vR)}</td>
+                      <td style={Object.assign({}, td, { fontWeight: 950, color: colFor(sevB) })}>{f1(vB)}</td>
                     </tr>
                   );
                 })}
@@ -3651,7 +3700,7 @@ function setRange(letter, bucket, field, value) {
               <div key={`counts-${L}`} style={{ border: `1px solid ${theme.border}`, borderRadius: 12, padding: 8, background: "rgba(0,0,0,0.25)" }}>
                 <div style={{ fontWeight: 950, marginBottom: 6, color: (PALETTE[L] || PALETTE.A).base }}>{L}</div>
                 {["L", "R"].map((side) => {
-                  const counts = abcLoopModeCounts?.[L]?.[side] || {};
+                  const counts = abcLoopModeCounts[L][side] || {};
                   const entries = Object.entries(counts).sort((a, b) => (Number(b[1]) - Number(a[1])) || String(a[0]).localeCompare(String(b[0])));
                   return (
                     <div key={`${L}-${side}`} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
@@ -3694,7 +3743,7 @@ function setRange(letter, bucket, field, value) {
 
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                       <button
-                        style={{ ...topBtn, ...(showCorrected ? topBtnActive : null) }}
+                        style={Object.assign({}, topBtn, (showCorrected ? topBtnActive : null))}
                         onClick={() => setShowCorrected((v) => !v)}
                         title="Toggle whether correction is applied to measured values"
                       >
@@ -3706,11 +3755,11 @@ function setRange(letter, bucket, field, value) {
                           key={L}
                           style={{
                             ...topBtn,
-                            background: step4LetterFilter?.[L] ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
-                            borderColor: step4LetterFilter?.[L] ? "rgba(255,255,255,0.22)" : theme.border,
-                            color: step4LetterFilter?.[L] ? theme.text : "rgba(255,255,255,0.65)",
+                            background: step4LetterFilter[L] ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
+                            borderColor: step4LetterFilter[L] ? "rgba(255,255,255,0.22)" : theme.border,
+                            color: step4LetterFilter[L] ? theme.text : "rgba(255,255,255,0.65)",
                           }}
-                          onClick={() => setStep4LetterFilter((p) => ({ ...(p || {}), [L]: !p?.[L] }))}
+                          onClick={() => setStep4LetterFilter((p) => ({ ...(p || {}), [L]: !p[L] }))}
                         >
                           {L}
                         </button>
@@ -3746,7 +3795,7 @@ function setRange(letter, bucket, field, value) {
                               "After",
                               "Δ vs nominal",
                             ].map((h) => (
-                              <th key={h} style={{ ...th, position: "sticky", top: 0, background: theme.panel2, zIndex: 1 }}>
+                              <th key={h} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 1 })}>
                                 {h}
                               </th>
                             ))}
@@ -3762,7 +3811,7 @@ function setRange(letter, bucket, field, value) {
 
                             return (
                               <tr key={r.lineId} style={{ borderTop: `1px solid ${theme.border}`, background: rowBg }}>
-                                <td style={{ ...td, fontWeight: 950, color: chipColorFromLineId(r.lineId) }}>{r.lineId}</td>
+                                <td style={Object.assign({}, td, { fontWeight: 950, color: chipColorFromLineId(r.lineId) })}>{r.lineId}</td>
                                 <td style={td}>{r.groupId || "—"}</td>
                                 <td style={td}>{fmt(r.nominal)}</td>
                                 <td style={td}>{fmt(r.raw)}</td>
@@ -3772,7 +3821,7 @@ function setRange(letter, bucket, field, value) {
                                 <td style={td}>{fmt(r.adj)}</td>
                                 <td style={td}>{fmt(r.before)}</td>
                                 <td style={td}>{fmt(r.after)}</td>
-                                <td style={{ ...td, fontWeight: 950, color: sevColor }}>{r.delta == null ? "—" : fmt(r.delta)}</td>
+                                <td style={Object.assign({}, td, { fontWeight: 950, color: sevColor })}>{r.delta == null ? "—" : fmt(r.delta)}</td>
                               </tr>
                             );
                           })}
@@ -3782,7 +3831,7 @@ function setRange(letter, bucket, field, value) {
                   )}
 
                   <div style={{ marginTop: 10, opacity: 0.78, fontSize: 13 }}>
-                    Tolerance: <b>{Number(meta?.tolerance ?? 0)}mm</b> • Yellow within <b>3mm</b> of tolerance • Red at/over tolerance
+                    Tolerance: <b>{Number(meta.tolerance || 0)}mm</b> • Yellow within <b>3mm</b> of tolerance • Red at/over tolerance
                   </div>
                 </div>
 
@@ -3801,8 +3850,8 @@ function setRange(letter, bucket, field, value) {
             padding: "3px 8px",
             borderRadius: 999,
             border: `1px solid ${theme.border}`,
-            background: step4LetterFilter?.[L] ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)",
-            color: step4LetterFilter?.[L] ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.45)",
+            background: step4LetterFilter[L] ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)",
+            color: step4LetterFilter[L] ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.45)",
             fontWeight: 950,
             fontSize: 12,
           }}
@@ -3813,7 +3862,7 @@ function setRange(letter, bucket, field, value) {
     </div>
   </div>
 
-  <PitchTrimChart rows={step4LineRows} tolerance={Number(meta?.tolerance ?? 0)} height={220} />
+  <PitchTrimChart rows={step4LineRows} tolerance={Number(meta.tolerance || 0)} height={220} />
 
   {/* Group averages (After Δ) — placed under Pitch trim */}
   <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 12, width: "100%" }}>
@@ -3829,29 +3878,65 @@ function setRange(letter, bucket, field, value) {
             <th style={th}>Group</th>
             <th style={th}>Left avg Δ</th>
             <th style={th}>n</th>
+            <th style={th}>Left range</th>
+            <th style={th}>Outlier</th>
             <th style={th}>Right avg Δ</th>
             <th style={th}>n</th>
+            <th style={th}>Right range</th>
+            <th style={th}>Outlier</th>
             <th style={th}>Sym avg (L−R)</th>
           </tr>
         </thead>
         <tbody>
           {(["A", "B", "C", "D"]).map((L) => {
-            const aL = abcAverages?.[L]?.L?.avg;
-            const nL = abcAverages?.[L]?.L?.n ?? 0;
-            const aR = abcAverages?.[L]?.R?.avg;
-            const nR = abcAverages?.[L]?.R?.n ?? 0;
-            const sym = abcAverages?.[L]?.sym;
+            const aL = abcAverages[L].L.avg;
+            const nL = abcAverages[L].L.n || 0;
+            const aR = abcAverages[L].R.avg;
+            const nR = abcAverages[L].R.n || 0;
+            const sym = abcAverages[L].sym;
+            var valsL = [];
+            var valsR = [];
+            for (var ii = 0; ii < step4LineRows.length; ii++) {
+              var rr = step4LineRows[ii];
+              if (!rr) continue;
+              if (rr.letter !== L) continue;
+              if (!Number.isFinite(Number(rr.delta))) continue;
+              if (rr.side === "L") valsL.push(Number(rr.delta));
+              if (rr.side === "R") valsR.push(Number(rr.delta));
+            }
+            var minL = null;
+            var maxL = null;
+            for (var j = 0; j < valsL.length; j++) {
+              var v = valsL[j];
+              if (minL == null || v < minL) minL = v;
+              if (maxL == null || v > maxL) maxL = v;
+            }
+            var minR = null;
+            var maxR = null;
+            for (var k = 0; k < valsR.length; k++) {
+              var v2 = valsR[k];
+              if (minR == null || v2 < minR) minR = v2;
+              if (maxR == null || v2 > maxR) maxR = v2;
+            }
+            var rangeL = minL == null || maxL == null ? null : maxL - minL;
+            var rangeR = minR == null || maxR == null ? null : maxR - minR;
+            var outlierL = rangeL != null && rangeL > 10;
+            var outlierR = rangeR != null && rangeR > 10;
 
             const f1 = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Number(n).toFixed(1));
 
             return (
               <tr key={L} style={{ borderTop: `1px solid ${theme.border}` }}>
-                <td style={{ ...td, fontWeight: 950, color: (PALETTE[L] || PALETTE.A).base }}>{L}</td>
+                <td style={Object.assign({}, td, { fontWeight: 950, color: (PALETTE[L] || PALETTE.A).base })}>{L}</td>
                 <td style={td}>{f1(aL)}</td>
-                <td style={{ ...td, opacity: 0.85 }}>{nL || "—"}</td>
+                <td style={Object.assign({}, td, { opacity: 0.85 })}>{nL || "—"}</td>
+                <td style={td}>{rangeL == null ? "—" : f1(rangeL)}</td>
+                <td style={Object.assign({}, td, { fontWeight: 950, color: outlierL ? theme.bad : "rgba(255,255,255,0.55)" })}>{outlierL ? "Re-measure" : "OK"}</td>
                 <td style={td}>{f1(aR)}</td>
-                <td style={{ ...td, opacity: 0.85 }}>{nR || "—"}</td>
-                <td style={{ ...td, fontWeight: 950 }}>{f1(sym)}</td>
+                <td style={Object.assign({}, td, { opacity: 0.85 })}>{nR || "—"}</td>
+                <td style={td}>{rangeR == null ? "—" : f1(rangeR)}</td>
+                <td style={Object.assign({}, td, { fontWeight: 950, color: outlierR ? theme.bad : "rgba(255,255,255,0.55)" })}>{outlierR ? "Re-measure" : "OK"}</td>
+                <td style={Object.assign({}, td, { fontWeight: 950 })}>{f1(sym)}</td>
               </tr>
             );
           })}
@@ -3860,25 +3945,25 @@ function setRange(letter, bucket, field, value) {
     </div>
 
     <div style={{ marginTop: 8, opacity: 0.78, fontSize: 12 }}>
-      Tip: Positive Δ means “long” vs nominal; negative means “short”. Sym is based on averages only.
+      Tip: Positive Δ means “long” vs nominal; negative means “short”. Range highlights within-group spread (>10mm suggests re-measure/outliers). Sym is based on averages only.
     </div>
   </div>
 
   <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
     {(["A", "B", "C", "D"]).map((L) =>
-      step4LetterFilter?.[L] && (chartPointsByLetter?.[L]?.length || 0) > 0 ? (
+      step4LetterFilter[L] && (chartPointsByLetter[L].length || 0) > 0 ? (
         <DeltaLineChart
           key={L}
           title={`Δ per line — ${L} rows (After vs Before)  `}
           points={chartPointsByLetter[L]}
-          tolerance={Number(meta?.tolerance ?? 0)}
+          tolerance={Number(meta.tolerance || 0)}
           height={240}
         />
       ) : null
     )}
   </div>
 
-  <WingProfileChart groupStats={step4GroupStats} tolerance={Number(meta?.tolerance ?? 0)} height={260} />
+  <WingProfileChart groupStats={step4GroupStats} tolerance={Number(meta.tolerance || 0)} height={260} />
 </div>
 
 {/* Close Step 4 content grid */}
@@ -3990,9 +4075,9 @@ function RearViewChart({ rows, tolerance, height, loopTypes, groupLoopChange, se
 
     const byKey = new Map();
     for (const rr of rows) {
-      const letter = String(rr?.letter || "").toUpperCase();
-      if (!["A", "B", "C", "D"].includes(letter)) continue;
-      const idx = Number(rr?.idx);
+      const letter = String(rr.letter || "").toUpperCase();
+      if ((["A", "B", "C", "D"].indexOf(letter) === -1)) continue;
+      const idx = Number(rr.idx);
       if (!Number.isFinite(idx)) continue;
 
       const key = `${letter}|${idx}`;
@@ -4014,22 +4099,22 @@ function RearViewChart({ rows, tolerance, height, loopTypes, groupLoopChange, se
         byKey.set(key, p);
       }
 
-      const side = String(rr?.side || "").toUpperCase();
-      const groupName = String(rr?.groupId || rr?.group || "—").split("|")[0] || "—";
+      const side = String(rr.side || "").toUpperCase();
+      const groupName = String(rr.groupId || rr.group || "—").split("|")[0] || "—";
       if (side === "L") p.groupNameL = groupName;
       else if (side === "R") p.groupNameR = groupName;
-      const nominal = rr?.nominal;
-      const beforeAbs = rr?.before;
-      const afterDelta = rr?.delta;
+      const nominal = rr.nominal;
+      const beforeAbs = rr.before;
+      const afterDelta = rr.delta;
 
       const beforeDelta = nominal == null || beforeAbs == null ? null : beforeAbs - nominal;
 
       if (side === "L") {
-        p.lineIdL = rr?.lineId || p.lineIdL;
+        p.lineIdL = rr.lineId || p.lineIdL;
         p.beforeL = beforeDelta;
         p.afterL = afterDelta;
       } else if (side === "R") {
-        p.lineIdR = rr?.lineId || p.lineIdR;
+        p.lineIdR = rr.lineId || p.lineIdR;
         p.beforeR = beforeDelta;
         p.afterR = afterDelta;
       }
@@ -4067,7 +4152,7 @@ function RearViewChart({ rows, tolerance, height, loopTypes, groupLoopChange, se
     );
   }
 
-  const bands = {
+  var bands = {
     A: { y0: pad + 74, y1: pad + 74 + 85 },
     B: { y0: pad + 74 + 95, y1: pad + 74 + 180 },
     C: { y0: pad + 74 + 190, y1: pad + 74 + 275 },
@@ -4228,7 +4313,7 @@ function groupBands(letter, side) {
           <line x1={width / 2} y1={pad + 24} x2={width / 2} y2={height - pad} stroke="rgba(42,47,63,0.85)" strokeDasharray="6 6" />
 
           {/* Span ticks + MID→TIP labels */}
-          {(() => {
+          {(function () {
             const y = pad + 30;
             const center = width / 2;
             const halfSpan = (width - pad * 2) / 2 - 20;
@@ -4266,7 +4351,7 @@ function groupBands(letter, side) {
           })()}
 
           {/* Subtle wing outline arc (background) */}
-          {(() => {
+          {(function () {
             const left = pad + 20;
             const right = width - pad - 20;
             const top = pad + 66;
@@ -4369,8 +4454,8 @@ function groupBands(letter, side) {
                 {showGroupCuts &&
                   (() => {
                     const b = bands[L];
-                    const bandsL = groupBands(L, "L");
-                    const bandsR = groupBands(L, "R");
+                    var bandsL = groupBands(L, "L");
+                    var bandsR = groupBands(L, "R");
                     const yText = ((b.y0 + b.y1) / 2) + 38;
                     const renderBand = (side, band, i) => {
                       if (!band || !band.name || band.name === "—") return null;
@@ -4657,8 +4742,8 @@ function PitchTrimChart({ rows, tolerance, height = 220 }) {
     const out = [];
     const list = Array.isArray(rows) ? rows : [];
     for (const letter of ["A", "B", "C", "D"]) {
-      const L = list.filter((r) => r?.letter === letter && r?.side === "L" && Number.isFinite(Number(r?.delta)));
-      const R = list.filter((r) => r?.letter === letter && r?.side === "R" && Number.isFinite(Number(r?.delta)));
+      const L = list.filter((r) => r.letter === letter && r.side === "L" && Number.isFinite(Number(r.delta)));
+      const R = list.filter((r) => r.letter === letter && r.side === "R" && Number.isFinite(Number(r.delta)));
       const mean = (arr) => (arr.length ? arr.reduce((s, r) => s + Number(r.delta), 0) / arr.length : 0);
       out.push({ letter, left: mean(L), right: mean(R), nL: L.length, nR: R.length });
     }
@@ -4681,7 +4766,7 @@ function PitchTrimChart({ rows, tolerance, height = 220 }) {
 
   const barW = Math.max(10, xStep * 0.22);
 
-  const bandFill = (delta) => {
+  var bandFill = (delta) => {
     const b = bandForDelta(delta, safeTol);
     if (b === "good") return "rgba(34,197,94,0.75)";
     if (b === "warn") return "rgba(245,158,11,0.75)";
@@ -4909,7 +4994,7 @@ function WingProfileChart({ groupStats, tolerance, height = 260 }) {
     const pts = [];
     groups.forEach((gName, i) => {
       const rec = groupStats.find((r) => r.groupName === gName && r.side === side);
-      pts.push({ i, y: rec?.after ?? null, before: rec?.before ?? null, groupName: gName });
+      pts.push({ i: i, y: rec && rec.after != null ? rec.after : null, before: rec && rec.before != null ? rec.before : null, groupName: gName });
     });
     return pts;
   };
@@ -4957,12 +5042,14 @@ function WingProfileChart({ groupStats, tolerance, height = 260 }) {
           <path d={pathFor(R, "after")} fill="none" stroke="rgba(168,85,247,0.90)" strokeWidth={2.5} />
 
           {/* Points + labels */}
-          {groups.map((gName, i) => {
-            const x = xScale(i);
-            const lRec = groupStats.find((r) => r.groupName === gName && r.side === "L");
-            const rRec = groupStats.find((r) => r.groupName === gName && r.side === "R");
-            const yL = Number.isFinite(lRec?.after) ? yScale(lRec.after) : null;
-            const yR = Number.isFinite(rRec?.after) ? yScale(rRec.after) : null;
+          {groups.map(function (gName, i) {
+            var x = xScale(i);
+            var lRec = groupStats.find(function (r) { return r && r.groupName === gName && r.side === "L"; });
+            var rRec = groupStats.find(function (r) { return r && r.groupName === gName && r.side === "R"; });
+            var lAfter = lRec && Number.isFinite(lRec.after) ? lRec.after : null;
+            var rAfter = rRec && Number.isFinite(rRec.after) ? rRec.after : null;
+            var yL = lAfter != null ? yScale(lAfter) : null;
+            var yR = rAfter != null ? yScale(rAfter) : null;
 
             return (
               <g key={gName}>
@@ -4970,13 +5057,13 @@ function WingProfileChart({ groupStats, tolerance, height = 260 }) {
                   {gName}
                 </text>
                 {yL != null ? (
-                  <circle cx={x - 6} cy={yL} r={4.2} fill={sevColor(lRec.after)} stroke="rgba(0,0,0,0.45)" strokeWidth={1}>
-                    <title>{`${gName} L: Δ=${Math.round(lRec.after)}mm`}</title>
+                  <circle cx={x - 6} cy={yL} r={4.2} fill={sevColor(lAfter)} stroke="rgba(0,0,0,0.45)" strokeWidth={1}>
+                    <title>{"".concat(gName, " L: Δ=").concat(Math.round(lAfter), "mm")}</title>
                   </circle>
                 ) : null}
                 {yR != null ? (
-                  <circle cx={x + 6} cy={yR} r={4.2} fill={sevColor(rRec.after)} stroke="rgba(0,0,0,0.45)" strokeWidth={1}>
-                    <title>{`${gName} R: Δ=${Math.round(rRec.after)}mm`}</title>
+                  <circle cx={x + 6} cy={yR} r={4.2} fill={sevColor(rAfter)} stroke="rgba(0,0,0,0.45)" strokeWidth={1}>
+                    <title>{"".concat(gName, " R: Δ=").concat(Math.round(rAfter), "mm")}</title>
                   </circle>
                 ) : null}
               </g>
