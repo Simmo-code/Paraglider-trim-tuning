@@ -3637,7 +3637,6 @@ function setRange(letter, bucket, field, value) {
               </thead>
               <tbody>
                 {[
-                  { key: "whole", label: "Whole pitch (front − rear)", v: pitchStats && pitchStats.pitchWhole ? pitchStats.pitchWhole : null },
                   { key: "avb", label: "A − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.AvB : null },
                   { key: "cvb", label: "C − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.CvB : null },
                   { key: "dvb", label: "D − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.DvB : null },
@@ -3674,16 +3673,7 @@ function setRange(letter, bucket, field, value) {
             </div>
           </div>
 
-          <div style={{ border: `1px solid ${theme.border}`, borderRadius: 12, background: "rgba(0,0,0,0.22)", padding: 10 }}>
-            <div style={{ fontWeight: 950, marginBottom: 6 }}>Wing pitch profile (concept)</div>
-            <div style={{ opacity: 0.75, fontSize: 12, marginBottom: 8 }}>
-              A simple chord-line visual with your computed whole-wing pitch overlaid (not a flight dynamics simulator).
-            </div>
-
-            {pitchStats && pitchStats.pitchWhole ? (
-              <WingPitchViz pitchMm={pitchStats.pitchWhole.both} tolMm={groupPitchTol} />
-            ) : null}
-          </div>
+          
         </div>
 
         <div style={{ marginTop: 10 }}>
