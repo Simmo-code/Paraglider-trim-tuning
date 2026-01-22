@@ -6,7 +6,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 
-const SITE_VERSION = "Trim Tuning v1.3";
+const SITE_VERSION = "Trim Tuning v1.2";
 
 
 // Step 3 – Loop sizes (mm) are wing-specific and must be set before baseline loops
@@ -634,7 +634,7 @@ function BlockTable({ title, rows, theme, th, td, showCorrected, tolerance = 10,
         </div>
       </div>
 
-      <div style={{ marginTop: 10, overflow: "auto", width: "100%", maxWidth: "100%",
+      <div style={{ marginTop: 10, overflow: "hidden", width: "100%", maxWidth: "100%",
           minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 12 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
           <thead>
@@ -3022,7 +3022,7 @@ function setRange(letter, bucket, field, value) {
                   <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
                     <div style={{ fontWeight: 950 }}>Line grouping overrides</div>
 
-                    <div style={{ marginTop: 10, maxHeight: "60vh", overflow: "auto", width: "100%", maxWidth: "100%",
+                    <div style={{ marginTop: 10, maxHeight: "60vh", overflow: "hidden", width: "100%", maxWidth: "100%",
           minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 14 }}>
                       <table style={{ width: "100%", borderCollapse: "collapse" }}>
                         <thead>
@@ -3409,7 +3409,7 @@ function setRange(letter, bucket, field, value) {
                       </button>
                     </div>
 
-                    <div style={{ marginTop: 10, maxHeight: 320, overflow: "auto", width: "100%", maxWidth: "100%",
+                    <div style={{ marginTop: 10, maxHeight: 320, overflow: "hidden", width: "100%", maxWidth: "100%",
           minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 14 }}>
                       {changes.length === 0 ? (
                         <div style={{ padding: 8, opacity: 0.78, fontWeight: 900 }}>No overrides yet. Drag a line into a new bucket or use dropdowns in Step 2.</div>
@@ -3679,7 +3679,7 @@ function setRange(letter, bucket, field, value) {
                     background: theme.panel2,
                     padding: 8,
                     minWidth: 0,
-                    overflow: "auto",
+                    overflow: "hidden",
                   }}
                 >
                   <div style={{ fontWeight: 950 }}>A/B/C/D — Factory vs Left/Right (Step 4 data)</div>
@@ -3840,21 +3840,33 @@ function setRange(letter, bucket, field, value) {
                   {groupsInUse.length === 0 ? (
                     <div style={{ marginTop: 10, opacity: 0.75 }}>No groups detected. Complete Step 2 mapping first.</div>
                   ) : (() => { try { return (
-                    <div style={{ marginTop: 8, overflow: "auto", width: "100%", maxWidth: "100%",
+                    <div style={{ marginTop: 8, overflow: "hidden", width: "100%", maxWidth: "100%",
           minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 12 }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 0 }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 0, tableLayout: "fixed" }}>
                         <thead>
                           <tr>
-                            <th rowSpan={2} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2 })}>Group</th>
-                            <th colSpan={5} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2, textAlign: "center" })}>Left</th>
-                            <th colSpan={5} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2, textAlign: "center" })}>Right</th>
+                            <th rowSpan={2} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2, padding: "6px 6px", fontSize: 11, lineHeight: 1.1, whiteSpace: "normal" })}>Group</th>
+                            <th colSpan={5} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2, textAlign: "center", padding: "6px 6px", fontSize: 11, lineHeight: 1.1, whiteSpace: "normal" })}>Left</th>
+                            <th colSpan={5} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2, textAlign: "center", padding: "6px 6px", fontSize: 11, lineHeight: 1.1, whiteSpace: "normal" })}>Right</th>
                           </tr>
                           <tr>
-                            {["Baseline loop", "Override loop", "Loop Δ (mm)", "Adjust (mm)", "Total Δ (mm)"].map((h) => (
-                              <th key={"L-"+h} style={Object.assign({}, th, { position: "sticky", top: 34, background: theme.panel2, zIndex: 2 })}>{h}</th>
+                            {[
+                              <>Baseline<br />loop</>,
+                              <>Override<br />loop</>,
+                              <>Loop Δ<br />(mm)</>,
+                              <>Adjust<br />(mm)</>,
+                              <>Total Δ<br />(mm)</>,
+                            ].map((h, i) => (
+                              <th key={"L-h"+i} style={Object.assign({}, th, { position: "sticky", top: 34, background: theme.panel2, zIndex: 2, padding: "6px 6px", fontSize: 11, lineHeight: 1.1, whiteSpace: "normal" })}>{h}</th>
                             ))}
-                            {["Baseline loop", "Override loop", "Loop Δ (mm)", "Adjust (mm)", "Total Δ (mm)"].map((h) => (
-                              <th key={"R-"+h} style={Object.assign({}, th, { position: "sticky", top: 34, background: theme.panel2, zIndex: 2 })}>{h}</th>
+                            {[
+                              <>Baseline<br />loop</>,
+                              <>Override<br />loop</>,
+                              <>Loop Δ<br />(mm)</>,
+                              <>Adjust<br />(mm)</>,
+                              <>Total Δ<br />(mm)</>,
+                            ].map((h, i) => (
+                              <th key={"R-h"+i} style={Object.assign({}, th, { position: "sticky", top: 34, background: theme.panel2, zIndex: 2, padding: "6px 6px", fontSize: 11, lineHeight: 1.1, whiteSpace: "normal" })}>{h}</th>
                             ))}
                           </tr>
                         </thead>
@@ -3934,7 +3946,7 @@ function setRange(letter, bucket, field, value) {
                                   <td style={td}>
                                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                                       <select
-                                        style={Object.assign({}, miniInput, { width: 86, padding: "4px 8px", background: theme.panel2, color: theme.text })}
+                                        style={Object.assign({}, miniInput, { width: 64, padding: "3px 6px", background: theme.panel2, color: theme.text })}
                                         disabled={!row.L}
                                         value={(row.L && groupLoopChange && groupLoopChange[row.L]) ? groupLoopChange[row.L] : ""}
                                         onChange={(e) => {
@@ -3986,7 +3998,7 @@ function setRange(letter, bucket, field, value) {
                                   <td style={td}>{Number.isFinite(L.loopDelta) ? Math.round(L.loopDelta) : ""}</td>
                                   <td style={td}>
                                     <input
-                                      style={miniInput}
+                                      style={Object.assign({}, miniInput, { width: 52, padding: "3px 6px" })}
                                       value={Number.isFinite(L.adj) ? String(L.adj) : ""}
                                       onChange={(e) => {
                                         const v = Number(e.target.value);
@@ -3995,14 +4007,14 @@ function setRange(letter, bucket, field, value) {
                                       }}
                                     />
                                   </td>
-                                  <td style={Object.assign({}, td, { textAlign: "center" })}><div style={{ display: "inline-block", minWidth: 46, padding: "4px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: L.totalColor, fontWeight: 950, lineHeight: 1 }}>{Number.isFinite(L.total) ? Math.round(L.total) : ""}</div></td>
+                                  <td style={Object.assign({}, td, { textAlign: "center" })}><div style={{ display: "inline-block", minWidth: 38, padding: "3px 8px", borderRadius: 999, border: `1px solid ${theme.border}`, background: L.totalColor, fontWeight: 950, lineHeight: 1 }}>{Number.isFinite(L.total) ? Math.round(L.total) : ""}</div></td>
 
                                   {/* Right */}
                                   <td style={td}>{R.baseLoop}</td>
                                   <td style={td}>
                                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                                       <select
-                                        style={Object.assign({}, miniInput, { width: 86, padding: "4px 8px", background: theme.panel2, color: theme.text })}
+                                        style={Object.assign({}, miniInput, { width: 64, padding: "3px 6px", background: theme.panel2, color: theme.text })}
                                         disabled={!row.R}
                                         value={(row.R && groupLoopChange && groupLoopChange[row.R]) ? groupLoopChange[row.R] : ""}
                                         onChange={(e) => {
@@ -4054,7 +4066,7 @@ function setRange(letter, bucket, field, value) {
                                   <td style={td}>{Number.isFinite(R.loopDelta) ? Math.round(R.loopDelta) : ""}</td>
                                   <td style={td}>
                                     <input
-                                      style={miniInput}
+                                      style={Object.assign({}, miniInput, { width: 52, padding: "3px 6px" })}
                                       value={Number.isFinite(R.adj) ? String(R.adj) : ""}
                                       onChange={(e) => {
                                         const v = Number(e.target.value);
@@ -4063,7 +4075,7 @@ function setRange(letter, bucket, field, value) {
                                       }}
                                     />
                                   </td>
-                                  <td style={Object.assign({}, td, { textAlign: "center" })}><div style={{ display: "inline-block", minWidth: 46, padding: "4px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: R.totalColor, fontWeight: 950, lineHeight: 1 }}>{Number.isFinite(R.total) ? Math.round(R.total) : ""}</div></td>
+                                  <td style={Object.assign({}, td, { textAlign: "center" })}><div style={{ display: "inline-block", minWidth: 38, padding: "3px 8px", borderRadius: 999, border: `1px solid ${theme.border}`, background: R.totalColor, fontWeight: 950, lineHeight: 1 }}>{Number.isFinite(R.total) ? Math.round(R.total) : ""}</div></td>
                                 </tr>
                               );
                             });
@@ -4324,7 +4336,527 @@ function setRange(letter, bucket, field, value) {
       </div>
 </div>
 
+{/* Group averages / maillon loop advisory (A/B/C/D) */}
+<div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
+  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+    <div>
+      <div style={{ fontWeight: 950 }}>Group averages + loop suggestions (A/B/C/D)</div>
+      <div style={{ opacity: 0.78, fontSize: 12, marginTop: 4 }}>
+        Uses Step 4 <b>After</b> deltas (Δ vs nominal). Suggestions are advisory only — they won’t change any group settings automatically.
+      </div>
+    </div>
 
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      <button
+        style={Object.assign({}, topBtn, { background: "rgba(255,255,255,0.06)" })}
+        onClick={async () => {
+          try {
+            const payload = { schema: "abc-loop-suggestions-v1", exportedAt: new Date().toISOString(), wing: { make: meta.make || "", model: meta.model || "" }, suggestions: abcSuggestions, averages: abcAverages };
+            await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+            alert("Copied suggestions JSON to clipboard.");
+          } catch (e) {
+            alert("Clipboard copy failed (browser permission).");
+          }
+        }}
+      >
+        Copy suggestions
+      </button>
+
+      <ControlPill label="Manual pitch tol" value={groupPitchTol} onChange={setGroupPitchTol} suffix="mm" width={110} step={1} min={0} max={20} />
+
+      <button
+        style={Object.assign({}, topBtn, { background: showLoopModeCounts ? "rgba(99,102,241,0.25)" : "rgba(255,255,255,0.06)" })}
+        onClick={() => setShowLoopModeCounts((v) => !v)}
+      >
+        {showLoopModeCounts ? "Hide loop counts" : "Show loop counts"}
+      </button>
+    </div>
+  </div>
+
+  <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+    {/* Averages */}
+    
+
+
+
+<div className="abcGrid" style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 10, alignItems: "start" }}>
+    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: theme.panel, padding: 8, minWidth: 0, width: "100%" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+        <div style={{ fontWeight: 950 }}>Suggested loop change + fine adjust (advisory)</div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.06)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
+            onClick={() => applyAutoLoopPlan("factory")}
+            title="Choose the closest achievable loop configuration using discrete loops (no fine-adjust)."
+          >
+            Auto: closest factory loops
+          </button>
+
+          <button
+            type="button"
+            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.06)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
+            onClick={() => applyAutoLoopPlan("minimal")}
+            title="Bring the wing within tolerance with the least loop change, using discrete loops only (no fine-adjust)."
+          >
+            Auto: minimal loop changes
+          </button>
+
+          <button
+            type="button"
+            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(99,102,241,0.14)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
+            onClick={() => applyAutoZeroAndMinimalLoops()}
+            title="Search for the best correction (zeroing) value that results in the fewest loop changes to bring the wing into tolerance. Prefers one longer outlier over multiple outliers."
+          >
+            Auto: zero + minimal loops
+          </button>
+
+          
+          <button
+            type="button"
+            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.14)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
+            onClick={() => applyAutoZeroForBestTrimPitch()}
+            title="Search for the best correction (zeroing) value to optimize trim + factory-style pitch (A vs B, C vs B, D vs B). Does not change loops."
+          >
+            Auto: zero for best trim + pitch
+          </button>
+
+{autoLoopStatus && ((groupLoopChange && Object.keys(groupLoopChange).length > 0) || (groupAdjustments && Object.keys(groupAdjustments).length > 0) || (step4LineCorr && Object.keys(step4LineCorr).length > 0)) ? (
+            <div style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(34,197,94,0.25)", color: theme.text, fontWeight: 950, fontSize: 12 }}>
+              Auto applied
+            </div>
+           ) : null}
+        </div>
+        {autoDecision ? (
+          <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85, display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <span style={{ fontWeight: 900 }}>Auto summary:</span>{" "}
+              <span style={{ fontWeight: 900 }}>{autoDecision.mode}</span>{" "}
+              • correction <span style={{ fontWeight: 900 }}>{Number(autoDecision.corr || 0)}</span>mm
+            </div>
+            {autoDecision.loopChangeCount != null ? (
+              <div>
+                loop changes <span style={{ fontWeight: 900 }}>{autoDecision.loopChangeCount}</span>
+              </div>
+            ) : null}
+            {autoDecision.outliers != null ? (
+              <div>
+                outliers <span style={{ fontWeight: 900 }}>{autoDecision.outliers}</span>
+              </div>
+            ) : null}
+            {autoDecision.maxOver != null ? (
+              <div>
+                max over tol <span style={{ fontWeight: 900 }}>{Math.round(Number(autoDecision.maxOver || 0))}</span>mm
+              </div>
+            ) : null}
+
+            {autoDecision.pitchFails != null ? (
+              <div>
+                pitch fails <span style={{ fontWeight: 900 }}>{autoDecision.pitchFails}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Step 5 — A4 report (print-ready) */}
+        {showReport ? (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 60,
+              overflow: "hidden",
+              background: "rgba(10,12,16,0.92)",
+              padding: "28px 0 60px",
+              display: "flex",
+              justifyContent: "center",
+            }}
+          >
+            <style>{`@media print {
+  body { background: #fff !important; }
+  .noPrint { display: none !important; }
+  .a4Page { box-shadow: none !important; border: none !important; border-radius: 0 !important; margin: 0 !important; }
+  @page { size: A4; margin: 12mm; }
+}`}</style>
+
+            <div style={{ width: "210mm" }}>
+              <div className="noPrint" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div style={{ fontSize: 12, opacity: 0.85, color: theme.text }}>
+                  Report preview (A4) • Generated from Step 4
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <button type="button" style={topBtn} onClick={() => setShowReport(false)}>
+                    ← Back to Step 4
+                  </button>
+                  <button type="button" style={topBtn} onClick={() => window.print()}>
+                    Print / Save PDF
+                  </button>
+                </div>
+              </div>
+
+              <div
+                className="a4Page"
+                style={{
+                  width: "210mm",
+                  minHeight: "297mm",
+                  background: "#fff",
+                  color: "#111",
+                  border: "1px solid rgba(0,0,0,0.15)",
+                  borderRadius: 14,
+                  boxShadow: "0 14px 40px rgba(0,0,0,0.35)",
+                  padding: "14mm",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start" }}>
+                  <div>
+                    <div style={{ fontSize: 22, fontWeight: 950, letterSpacing: 0.2 }}>Paraglider Trim Tuning Report</div>
+                    <div style={{ marginTop: 4, fontSize: 12, color: "#444" }}>
+                      File: <span style={{ fontWeight: 900 }}>{importStatus?.ok ? importStatus.name : "—"}</span>
+                    </div>
+                    <div style={{ marginTop: 2, fontSize: 12, color: "#444" }}>
+                      Lines (L+R): <span style={{ fontWeight: 900 }}>{summary.totalLines}</span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "auto auto", gap: "6px 10px", fontSize: 12 }}>
+                    <div style={{ fontWeight: 900, color: "#333" }}>Manufacturer</div>
+                    <div>{meta.make || "—"}</div>
+                    <div style={{ fontWeight: 900, color: "#333" }}>Model</div>
+                    <div>{meta.model || "—"}</div>
+                    <div style={{ fontWeight: 900, color: "#333" }}>Size</div>
+                    <div>{meta.size || "—"}</div>
+                    <div style={{ fontWeight: 900, color: "#333" }}>Serial #</div>
+                    <div>{meta.serial || "—"}</div>
+                    <div style={{ fontWeight: 900, color: "#333" }}>Checked by</div>
+                    <div>{meta.checkedBy || "—"}</div>
+                    <div style={{ fontWeight: 900, color: "#333" }}>Date</div>
+                    <div>{meta.date || "—"}</div>
+                    <div style={{ fontWeight: 900, color: "#333" }}>Tolerance</div>
+                    <div>±{Number(meta.tolerance || 0)} mm</div>
+                    <div style={{ fontWeight: 900, color: "#333" }}>Correction</div>
+                    <div>{Number(meta.correction || 0)} mm</div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 14, border: "1px solid rgba(0,0,0,0.15)", borderRadius: 10, overflow: "hidden" }}>
+                  <div style={{ background: "#f3f4f6", padding: "6px 10px", fontSize: 12, fontWeight: 950 }}>Pitch (factory comparisons)</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, padding: "10px" }}>
+                    {[
+                      { key: "avb", label: "A − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.AvB : null },
+                      { key: "cvb", label: "C − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.CvB : null },
+                      { key: "dvb", label: "D − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.DvB : null },
+                    ].map((row) => (
+                      <div key={row.key} style={{ border: "1px solid rgba(0,0,0,0.12)", borderRadius: 10, padding: "8px 10px" }}>
+                        <div style={{ fontSize: 11, color: "#555", fontWeight: 900 }}>{row.label}</div>
+                        <div style={{ fontSize: 16, fontWeight: 950 }}>
+                          {(() => {
+                            var both = row.v ? row.v.both : null;
+                            var n = both == null || !Number.isFinite(Number(both)) ? null : Number(both);
+                            return n == null ? "—" : (n >= 0 ? `+${n.toFixed(1)}` : n.toFixed(1));
+                          })()} mm
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ padding: "0 10px 10px", fontSize: 11, color: "#555" }}>
+                    Pass/fail uses ±{Number(groupPitchTol || 4)}mm against B (A vs B, C vs B, D vs B).
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 14, border: "1px solid rgba(0,0,0,0.15)", borderRadius: 10, overflow: "hidden" }}>
+                  <div style={{ background: "#f3f4f6", padding: "6px 10px", fontSize: 12, fontWeight: 950 }}>Loop changes</div>
+                  <div style={{ padding: 8, fontSize: 12 }}>
+                    {(groupLoopChange && Object.keys(groupLoopChange).length > 0) ? (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+                        {(() => {
+                          var gids = Object.keys(groupLoopChange).sort();
+                          var byRow = { A: [], B: [], C: [], D: [] };
+                          gids.forEach((gid) => {
+                            var row = (gid || "")[0];
+                            if (byRow[row]) byRow[row].push(gid);
+                          });
+
+                          var renderCol = (rowKey, title, isLast) => (
+                            <div key={rowKey} style={{ minWidth: 0, paddingRight: isLast ? 0 : 10, borderRight: isLast ? "none" : "1px solid rgba(0,0,0,0.15)" }}>
+                              <div style={{ fontWeight: 950, marginBottom: 6, textAlign: "center" }}>{title}</div>
+                              <div style={{ display: "grid", gridTemplateColumns: "72px 1fr", columnGap: 10, rowGap: 6 }}>
+                                {byRow[rowKey].length ? byRow[rowKey].map((gid) => {
+                                  var from = groupLoopBaseline && groupLoopBaseline[gid] != null ? groupLoopBaseline[gid] : "—";
+                                  var to = groupLoopChange[gid];
+                                  return (
+                                    <React.Fragment key={gid}>
+                                      <div style={{ fontWeight: 950 }}>{gid}</div>
+                                      <div>{from} → <span style={{ fontWeight: 950 }}>{to}</span></div>
+                                    </React.Fragment>
+                                  );
+                                }) : (
+                                  <div style={{ gridColumn: "1 / -1", color: "#555" }}>—</div>
+                                )}
+                              </div>
+                            </div>
+                          );
+
+                          return (
+                            <>
+                              {renderCol("A", "A Row", false)}
+                              {renderCol("B", "B Row", false)}
+                              {renderCol("C", "C Row", false)}
+                              {renderCol("D", "D Row", true)}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    ) : (
+                      <div style={{ color: "#555" }}>No loop changes.</div>
+                    )}
+                  </div>
+                </div>
+
+                {autoDecision ? (
+                  <div style={{ marginTop: 14, border: "1px solid rgba(0,0,0,0.15)", borderRadius: 10, overflow: "hidden" }}>
+                    <div style={{ background: "#f3f4f6", padding: "6px 10px", fontSize: 12, fontWeight: 950 }}>Auto decision</div>
+                    <div style={{ padding: 8, display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12, color: "#222" }}>
+                      <div>
+                        mode <span style={{ fontWeight: 950 }}>{autoDecision.mode}</span>
+                      </div>
+                      <div>
+                        correction <span style={{ fontWeight: 950 }}>{Number(autoDecision.corr || 0)}</span>mm
+                      </div>
+                      {autoDecision.loopChangeCount != null ? (
+                        <div>
+                          loop changes <span style={{ fontWeight: 950 }}>{autoDecision.loopChangeCount}</span>
+                        </div>
+                      ) : null}
+                      {autoDecision.outliers != null ? (
+                        <div>
+                          outliers <span style={{ fontWeight: 950 }}>{autoDecision.outliers}</span>
+                        </div>
+                      ) : null}
+                      {autoDecision.maxOver != null ? (
+                        <div>
+                          max over tol <span style={{ fontWeight: 950 }}>{Math.round(Number(autoDecision.maxOver || 0))}</span>mm
+                        </div>
+                      ) : null}
+                      {autoDecision.pitchFails != null ? (
+                        <div>
+                          pitch fails <span style={{ fontWeight: 950 }}>{autoDecision.pitchFails}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div style={{ marginTop: 16, display: "flex", justifyContent: "space-between", gap: 12, fontSize: 11, color: "#555" }}>
+                  <div>Baseline loops shown in Step 3 are reference only and never affect Step 4 calculations.</div>
+                  <div style={{ textAlign: "right" }}>Signature: ________________________</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {autoDecision ? (
+          <details style={{ marginTop: 8, fontSize: 12, opacity: 0.9 }}>
+            <summary style={{ cursor: "pointer", fontWeight: 900 }}>Why this result?</summary>
+            <div style={{ marginTop: 6, lineHeight: 1.35 }}>
+              <div>• Objective: minimize outliers first, then minimize loop changes.</div>
+              {autoDecision.mode && String(autoDecision.mode).indexOf("zero") === 0 ? (
+                <div>• The app searched correction values and chose the one that achieved the best score under that objective.</div>
+              ) : (
+                <div>• The app chose a discrete loop configuration under the selected auto mode.</div>
+              )}
+              {autoDecision.outliers != null ? (
+                autoDecision.outliers === 0 ? (
+                  <div>
+                    • All included lines are within ±{Number(meta && meta.tolerance != null ? meta.tolerance : 0)}mm after applying this plan.
+                  </div>
+                ) : (
+                  <div>
+                    • {autoDecision.outliers} outlier{autoDecision.outliers === 1 ? "" : "s"} remain outside tolerance. Preference is to keep outliers concentrated (line insert use-case) rather than spreading loop changes.
+                  </div>
+                )
+              ) : null}
+              {autoDecision.maxOver != null ? (
+                <div>• Max over tolerance (worst residual) is {Math.round(Number(autoDecision.maxOver || 0))}mm.</div>
+              ) : null}
+              <div>• If you change any loops/adjustments manually, “Auto applied” clears to indicate the plan is no longer purely automatic.</div>
+            </div>
+          </details>
+        ) : null}
+        {autoDecision ? (
+          <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.03)" }}>
+            <div style={{ fontWeight: 950, marginBottom: 6 }}>Actionable plan</div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12, lineHeight: 1.35 }}>
+              <div style={{ minWidth: 260 }}>
+                <div style={{ fontWeight: 900, marginBottom: 4 }}>Loop changes</div>
+                {(groupLoopChange && Object.keys(groupLoopChange).length > 0) ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+                    {(() => {
+                      var gids = Object.keys(groupLoopChange).sort();
+                      var byRow = { A: [], B: [], C: [], D: [] };
+                      gids.forEach((gid) => {
+                        var row = (gid || "")[0];
+                        if (byRow[row]) byRow[row].push(gid);
+                      });
+
+                      var renderCol = (rowKey, title, isLast) => (
+                        <div key={rowKey} style={{ minWidth: 0, paddingRight: isLast ? 0 : 10, borderRight: isLast ? "none" : "1px solid rgba(0,0,0,0.15)" }}>
+                          <div style={{ fontWeight: 900, marginBottom: 6, textAlign: "center" }}>{title}</div>
+                          <div style={{ display: "grid", gridTemplateColumns: "72px 1fr", columnGap: 10, rowGap: 4 }}>
+                            {byRow[rowKey].length ? byRow[rowKey].map((gid) => {
+                              var from = groupLoopBaseline && groupLoopBaseline[gid] != null ? groupLoopBaseline[gid] : "—";
+                              var to = groupLoopChange[gid];
+                              return (
+                                <React.Fragment key={gid}>
+                                  <div style={{ fontWeight: 900 }}>{gid}</div>
+                                  <div>{from} → <span style={{ fontWeight: 900 }}>{to}</span></div>
+                                </React.Fragment>
+                              );
+                            }) : (
+                              <div style={{ gridColumn: "1 / -1", opacity: 0.7 }}>—</div>
+                            )}
+                          </div>
+                        </div>
+                      );
+
+                      return (
+                        <>
+                          {renderCol("A", "A Row", false)}
+                          {renderCol("B", "B Row", false)}
+                          {renderCol("C", "C Row", false)}
+                          {renderCol("D", "D Row", true)}
+                        </>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <div>No loop changes.</div>
+                )}
+              </div>
+
+              <div style={{ minWidth: 260 }}>
+                <div style={{ fontWeight: 900, marginBottom: 4 }}>Notes</div>
+                {autoDecision.outliers != null ? (
+                  autoDecision.outliers === 0 ? (
+                    <div>All included lines are within tolerance. Apply loops as listed.</div>
+                  ) : (
+                    autoDecision.outliers === 1 ? (
+                      <div>
+                        One outlier remains outside tolerance. Consider a line insert on the affected line if needed.
+                      </div>
+                    ) : (
+                      <div>
+                        Multiple outliers remain outside tolerance. Re-measure and inspect before applying further changes.
+                      </div>
+                    )
+                  )
+                ) : (
+                  <div>Apply loops as listed and verify against tolerance.</div>
+                )}
+                {autoDecision.maxOver != null ? (
+                  <div style={{ marginTop: 6 }}>Worst residual (max over tol): <span style={{ fontWeight: 900 }}>{Math.round(Number(autoDecision.maxOver || 0))}</span>mm</div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+      </div>
+      <div style={{ overflow: "hidden", border: `1px solid ${theme.border}`, borderRadius: 12 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+          <thead>
+            <tr style={{ background: "rgba(255,255,255,0.05)" }}>
+              <th style={th} rowSpan={2}>Group</th>
+              <th style={th} colSpan={5}>Left</th>
+              <th style={th} colSpan={5}>Right</th>
+            </tr>
+            <tr style={{ background: "rgba(255,255,255,0.05)" }}>
+              {["Rep", "Suggest", "Loop Δ", "Adj", "Residual"].map((h) => (
+                <th key={`L-${h}`} style={th}>{h}</th>
+              ))}
+              {["Rep", "Suggest", "Loop Δ", "Adj", "Residual"].map((h) => (
+                <th key={`R-${h}`} style={th}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {["A", "B", "C", "D"].map((L) => {
+              const sL = abcSuggestions[L].L || null;
+              const sR = abcSuggestions[L].R || null;
+
+              const fmt1 = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Number(n).toFixed(1));
+              const fmti = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Math.round(Number(n)));
+
+              return (
+                <tr key={L} style={{ borderTop: `1px solid ${theme.border}` }}>
+                  <td style={Object.assign({}, td, { fontWeight: 950, color: (PALETTE[L] || PALETTE.A).base })}>{L}</td>
+
+                  <td style={td}>{sL ? sL.repLoop : "—"}</td>
+                  <td style={td}>{sL ? sL.bestLoop : "—"}</td>
+                  <td style={td}>{sL ? fmti(sL.loopDeltaMm) : "—"}</td>
+                  <td style={td}>{sL ? fmti(sL.suggestedAdjMm) : "—"}</td>
+                  <td style={Object.assign({}, td, { fontWeight: 950 })}>{sL ? fmt1(sL.residualAfterAdj) : "—"}</td>
+
+                  <td style={td}>{sR ? sR.repLoop : "—"}</td>
+                  <td style={td}>{sR ? sR.bestLoop : "—"}</td>
+                  <td style={td}>{sR ? fmti(sR.loopDeltaMm) : "—"}</td>
+                  <td style={td}>{sR ? fmti(sR.suggestedAdjMm) : "—"}</td>
+                  <td style={Object.assign({}, td, { fontWeight: 950 })}>{sR ? fmt1(sR.residualAfterAdj) : "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ marginTop: 8, opacity: 0.78, fontSize: 12 }}>
+        Fine adjust is clamped to ±Tolerance (<b>{Number(meta.tolerance || 0)}mm</b>). Suggestions use the most common current loop type in each A/B/C side as the “representative” baseline.
+      </div>
+
+      
+
+      {showLoopModeCounts ? (
+        <div style={{ marginTop: 10, borderTop: `1px solid ${theme.border}`, paddingTop: 10 }}>
+          <div style={{ fontWeight: 950, marginBottom: 6 }}>Loop counts used to pick “Rep”</div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {["A", "B", "C", "D"].map((L) => (
+              <div key={`counts-${L}`} style={{ border: `1px solid ${theme.border}`, borderRadius: 12, padding: 8, background: "rgba(0,0,0,0.25)" }}>
+                <div style={{ fontWeight: 950, marginBottom: 6, color: (PALETTE[L] || PALETTE.A).base }}>{L}</div>
+                {["L", "R"].map((side) => {
+                  const counts = abcLoopModeCounts[L][side] || {};
+                  const entries = Object.entries(counts).sort((a, b) => (Number(b[1]) - Number(a[1])) || String(a[0]).localeCompare(String(b[0])));
+                  return (
+                    <div key={`${L}-${side}`} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
+                      <span style={{ opacity: 0.8, fontWeight: 950, width: 42 }}>{side === "L" ? "Left" : "Right"}</span>
+                      {entries.length === 0 ? (
+                        <span style={{ opacity: 0.7 }}>—</span>
+                      ) : (
+                        entries.map(([lt, c]) => (
+                          <span key={`${L}-${side}-${lt}`} style={{ padding: "3px 8px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.06)", fontWeight: 950, fontSize: 12 }}>
+                            {lt}: {c}
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  
+    
+</div>
+</div>
+
+  <style>{`
+    @media (max-width: 860px) {
+      .abcGrid { grid-template-columns: 1fr !important; }
+    }
+  `}</style>
+</div>
 <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                     <div>
@@ -4366,7 +4898,7 @@ function setRange(letter, bucket, field, value) {
                     <div
                       style={{
                         marginTop: 10,
-                        overflow: "auto", width: "100%", maxWidth: "100%",
+                        overflow: "hidden", width: "100%", maxWidth: "100%",
           minWidth: 0, border: `1px solid ${theme.border}`,
                         borderRadius: 12,
                         maxHeight: 520,
@@ -5269,528 +5801,7 @@ function PitchTrimChart({ rows, tolerance, height = 220 }) {
   };
 
   return (
-    {/* Group averages / maillon loop advisory (A/B/C/D) */}
-<div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
-  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-    <div>
-      <div style={{ fontWeight: 950 }}>Group averages + loop suggestions (A/B/C/D)</div>
-      <div style={{ opacity: 0.78, fontSize: 12, marginTop: 4 }}>
-        Uses Step 4 <b>After</b> deltas (Δ vs nominal). Suggestions are advisory only — they won’t change any group settings automatically.
-      </div>
-    </div>
-
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-      <button
-        style={Object.assign({}, topBtn, { background: "rgba(255,255,255,0.06)" })}
-        onClick={async () => {
-          try {
-            const payload = { schema: "abc-loop-suggestions-v1", exportedAt: new Date().toISOString(), wing: { make: meta.make || "", model: meta.model || "" }, suggestions: abcSuggestions, averages: abcAverages };
-            await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-            alert("Copied suggestions JSON to clipboard.");
-          } catch (e) {
-            alert("Clipboard copy failed (browser permission).");
-          }
-        }}
-      >
-        Copy suggestions
-      </button>
-
-      <ControlPill label="Manual pitch tol" value={groupPitchTol} onChange={setGroupPitchTol} suffix="mm" width={110} step={1} min={0} max={20} />
-
-      <button
-        style={Object.assign({}, topBtn, { background: showLoopModeCounts ? "rgba(99,102,241,0.25)" : "rgba(255,255,255,0.06)" })}
-        onClick={() => setShowLoopModeCounts((v) => !v)}
-      >
-        {showLoopModeCounts ? "Hide loop counts" : "Show loop counts"}
-      </button>
-    </div>
-  </div>
-
-  <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-    {/* Averages */}
-    
-
-
-
-<div className="abcGrid" style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 10, alignItems: "start" }}>
-    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: theme.panel, padding: 8, minWidth: 0, width: "100%" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-        <div style={{ fontWeight: 950 }}>Suggested loop change + fine adjust (advisory)</div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <button
-            type="button"
-            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.06)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
-            onClick={() => applyAutoLoopPlan("factory")}
-            title="Choose the closest achievable loop configuration using discrete loops (no fine-adjust)."
-          >
-            Auto: closest factory loops
-          </button>
-
-          <button
-            type="button"
-            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.06)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
-            onClick={() => applyAutoLoopPlan("minimal")}
-            title="Bring the wing within tolerance with the least loop change, using discrete loops only (no fine-adjust)."
-          >
-            Auto: minimal loop changes
-          </button>
-
-          <button
-            type="button"
-            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(99,102,241,0.14)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
-            onClick={() => applyAutoZeroAndMinimalLoops()}
-            title="Search for the best correction (zeroing) value that results in the fewest loop changes to bring the wing into tolerance. Prefers one longer outlier over multiple outliers."
-          >
-            Auto: zero + minimal loops
-          </button>
-
-          
-          <button
-            type="button"
-            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.14)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
-            onClick={() => applyAutoZeroForBestTrimPitch()}
-            title="Search for the best correction (zeroing) value to optimize trim + factory-style pitch (A vs B, C vs B, D vs B). Does not change loops."
-          >
-            Auto: zero for best trim + pitch
-          </button>
-
-{autoLoopStatus && ((groupLoopChange && Object.keys(groupLoopChange).length > 0) || (groupAdjustments && Object.keys(groupAdjustments).length > 0) || (step4LineCorr && Object.keys(step4LineCorr).length > 0)) ? (
-            <div style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(34,197,94,0.25)", color: theme.text, fontWeight: 950, fontSize: 12 }}>
-              Auto applied
-            </div>
-           ) : null}
-        </div>
-        {autoDecision ? (
-          <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85, display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <div>
-              <span style={{ fontWeight: 900 }}>Auto summary:</span>{" "}
-              <span style={{ fontWeight: 900 }}>{autoDecision.mode}</span>{" "}
-              • correction <span style={{ fontWeight: 900 }}>{Number(autoDecision.corr || 0)}</span>mm
-            </div>
-            {autoDecision.loopChangeCount != null ? (
-              <div>
-                loop changes <span style={{ fontWeight: 900 }}>{autoDecision.loopChangeCount}</span>
-              </div>
-            ) : null}
-            {autoDecision.outliers != null ? (
-              <div>
-                outliers <span style={{ fontWeight: 900 }}>{autoDecision.outliers}</span>
-              </div>
-            ) : null}
-            {autoDecision.maxOver != null ? (
-              <div>
-                max over tol <span style={{ fontWeight: 900 }}>{Math.round(Number(autoDecision.maxOver || 0))}</span>mm
-              </div>
-            ) : null}
-
-            {autoDecision.pitchFails != null ? (
-              <div>
-                pitch fails <span style={{ fontWeight: 900 }}>{autoDecision.pitchFails}</span>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        {/* Step 5 — A4 report (print-ready) */}
-        {showReport ? (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 60,
-              overflow: "auto",
-              background: "rgba(10,12,16,0.92)",
-              padding: "28px 0 60px",
-              display: "flex",
-              justifyContent: "center",
-            }}
-          >
-            <style>{`@media print {
-  body { background: #fff !important; }
-  .noPrint { display: none !important; }
-  .a4Page { box-shadow: none !important; border: none !important; border-radius: 0 !important; margin: 0 !important; }
-  @page { size: A4; margin: 12mm; }
-}`}</style>
-
-            <div style={{ width: "210mm" }}>
-              <div className="noPrint" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <div style={{ fontSize: 12, opacity: 0.85, color: theme.text }}>
-                  Report preview (A4) • Generated from Step 4
-                </div>
-                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <button type="button" style={topBtn} onClick={() => setShowReport(false)}>
-                    ← Back to Step 4
-                  </button>
-                  <button type="button" style={topBtn} onClick={() => window.print()}>
-                    Print / Save PDF
-                  </button>
-                </div>
-              </div>
-
-              <div
-                className="a4Page"
-                style={{
-                  width: "210mm",
-                  minHeight: "297mm",
-                  background: "#fff",
-                  color: "#111",
-                  border: "1px solid rgba(0,0,0,0.15)",
-                  borderRadius: 14,
-                  boxShadow: "0 14px 40px rgba(0,0,0,0.35)",
-                  padding: "14mm",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start" }}>
-                  <div>
-                    <div style={{ fontSize: 22, fontWeight: 950, letterSpacing: 0.2 }}>Paraglider Trim Tuning Report</div>
-                    <div style={{ marginTop: 4, fontSize: 12, color: "#444" }}>
-                      File: <span style={{ fontWeight: 900 }}>{importStatus?.ok ? importStatus.name : "—"}</span>
-                    </div>
-                    <div style={{ marginTop: 2, fontSize: 12, color: "#444" }}>
-                      Lines (L+R): <span style={{ fontWeight: 900 }}>{summary.totalLines}</span>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "auto auto", gap: "6px 10px", fontSize: 12 }}>
-                    <div style={{ fontWeight: 900, color: "#333" }}>Manufacturer</div>
-                    <div>{meta.make || "—"}</div>
-                    <div style={{ fontWeight: 900, color: "#333" }}>Model</div>
-                    <div>{meta.model || "—"}</div>
-                    <div style={{ fontWeight: 900, color: "#333" }}>Size</div>
-                    <div>{meta.size || "—"}</div>
-                    <div style={{ fontWeight: 900, color: "#333" }}>Serial #</div>
-                    <div>{meta.serial || "—"}</div>
-                    <div style={{ fontWeight: 900, color: "#333" }}>Checked by</div>
-                    <div>{meta.checkedBy || "—"}</div>
-                    <div style={{ fontWeight: 900, color: "#333" }}>Date</div>
-                    <div>{meta.date || "—"}</div>
-                    <div style={{ fontWeight: 900, color: "#333" }}>Tolerance</div>
-                    <div>±{Number(meta.tolerance || 0)} mm</div>
-                    <div style={{ fontWeight: 900, color: "#333" }}>Correction</div>
-                    <div>{Number(meta.correction || 0)} mm</div>
-                  </div>
-                </div>
-
-                <div style={{ marginTop: 14, border: "1px solid rgba(0,0,0,0.15)", borderRadius: 10, overflow: "hidden" }}>
-                  <div style={{ background: "#f3f4f6", padding: "6px 10px", fontSize: 12, fontWeight: 950 }}>Pitch (factory comparisons)</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, padding: "10px" }}>
-                    {[
-                      { key: "avb", label: "A − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.AvB : null },
-                      { key: "cvb", label: "C − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.CvB : null },
-                      { key: "dvb", label: "D − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.DvB : null },
-                    ].map((row) => (
-                      <div key={row.key} style={{ border: "1px solid rgba(0,0,0,0.12)", borderRadius: 10, padding: "8px 10px" }}>
-                        <div style={{ fontSize: 11, color: "#555", fontWeight: 900 }}>{row.label}</div>
-                        <div style={{ fontSize: 16, fontWeight: 950 }}>
-                          {(() => {
-                            var both = row.v ? row.v.both : null;
-                            var n = both == null || !Number.isFinite(Number(both)) ? null : Number(both);
-                            return n == null ? "—" : (n >= 0 ? `+${n.toFixed(1)}` : n.toFixed(1));
-                          })()} mm
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ padding: "0 10px 10px", fontSize: 11, color: "#555" }}>
-                    Pass/fail uses ±{Number(groupPitchTol || 4)}mm against B (A vs B, C vs B, D vs B).
-                  </div>
-                </div>
-
-                <div style={{ marginTop: 14, border: "1px solid rgba(0,0,0,0.15)", borderRadius: 10, overflow: "hidden" }}>
-                  <div style={{ background: "#f3f4f6", padding: "6px 10px", fontSize: 12, fontWeight: 950 }}>Loop changes</div>
-                  <div style={{ padding: 8, fontSize: 12 }}>
-                    {(groupLoopChange && Object.keys(groupLoopChange).length > 0) ? (
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
-                        {(() => {
-                          var gids = Object.keys(groupLoopChange).sort();
-                          var byRow = { A: [], B: [], C: [], D: [] };
-                          gids.forEach((gid) => {
-                            var row = (gid || "")[0];
-                            if (byRow[row]) byRow[row].push(gid);
-                          });
-
-                          var renderCol = (rowKey, title, isLast) => (
-                            <div key={rowKey} style={{ minWidth: 0, paddingRight: isLast ? 0 : 10, borderRight: isLast ? "none" : "1px solid rgba(0,0,0,0.15)" }}>
-                              <div style={{ fontWeight: 950, marginBottom: 6, textAlign: "center" }}>{title}</div>
-                              <div style={{ display: "grid", gridTemplateColumns: "72px 1fr", columnGap: 10, rowGap: 6 }}>
-                                {byRow[rowKey].length ? byRow[rowKey].map((gid) => {
-                                  var from = groupLoopBaseline && groupLoopBaseline[gid] != null ? groupLoopBaseline[gid] : "—";
-                                  var to = groupLoopChange[gid];
-                                  return (
-                                    <React.Fragment key={gid}>
-                                      <div style={{ fontWeight: 950 }}>{gid}</div>
-                                      <div>{from} → <span style={{ fontWeight: 950 }}>{to}</span></div>
-                                    </React.Fragment>
-                                  );
-                                }) : (
-                                  <div style={{ gridColumn: "1 / -1", color: "#555" }}>—</div>
-                                )}
-                              </div>
-                            </div>
-                          );
-
-                          return (
-                            <>
-                              {renderCol("A", "A Row", false)}
-                              {renderCol("B", "B Row", false)}
-                              {renderCol("C", "C Row", false)}
-                              {renderCol("D", "D Row", true)}
-                            </>
-                          );
-                        })()}
-                      </div>
-                    ) : (
-                      <div style={{ color: "#555" }}>No loop changes.</div>
-                    )}
-                  </div>
-                </div>
-
-                {autoDecision ? (
-                  <div style={{ marginTop: 14, border: "1px solid rgba(0,0,0,0.15)", borderRadius: 10, overflow: "hidden" }}>
-                    <div style={{ background: "#f3f4f6", padding: "6px 10px", fontSize: 12, fontWeight: 950 }}>Auto decision</div>
-                    <div style={{ padding: 8, display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12, color: "#222" }}>
-                      <div>
-                        mode <span style={{ fontWeight: 950 }}>{autoDecision.mode}</span>
-                      </div>
-                      <div>
-                        correction <span style={{ fontWeight: 950 }}>{Number(autoDecision.corr || 0)}</span>mm
-                      </div>
-                      {autoDecision.loopChangeCount != null ? (
-                        <div>
-                          loop changes <span style={{ fontWeight: 950 }}>{autoDecision.loopChangeCount}</span>
-                        </div>
-                      ) : null}
-                      {autoDecision.outliers != null ? (
-                        <div>
-                          outliers <span style={{ fontWeight: 950 }}>{autoDecision.outliers}</span>
-                        </div>
-                      ) : null}
-                      {autoDecision.maxOver != null ? (
-                        <div>
-                          max over tol <span style={{ fontWeight: 950 }}>{Math.round(Number(autoDecision.maxOver || 0))}</span>mm
-                        </div>
-                      ) : null}
-                      {autoDecision.pitchFails != null ? (
-                        <div>
-                          pitch fails <span style={{ fontWeight: 950 }}>{autoDecision.pitchFails}</span>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-
-                <div style={{ marginTop: 16, display: "flex", justifyContent: "space-between", gap: 12, fontSize: 11, color: "#555" }}>
-                  <div>Baseline loops shown in Step 3 are reference only and never affect Step 4 calculations.</div>
-                  <div style={{ textAlign: "right" }}>Signature: ________________________</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {autoDecision ? (
-          <details style={{ marginTop: 8, fontSize: 12, opacity: 0.9 }}>
-            <summary style={{ cursor: "pointer", fontWeight: 900 }}>Why this result?</summary>
-            <div style={{ marginTop: 6, lineHeight: 1.35 }}>
-              <div>• Objective: minimize outliers first, then minimize loop changes.</div>
-              {autoDecision.mode && String(autoDecision.mode).indexOf("zero") === 0 ? (
-                <div>• The app searched correction values and chose the one that achieved the best score under that objective.</div>
-              ) : (
-                <div>• The app chose a discrete loop configuration under the selected auto mode.</div>
-              )}
-              {autoDecision.outliers != null ? (
-                autoDecision.outliers === 0 ? (
-                  <div>
-                    • All included lines are within ±{Number(meta && meta.tolerance != null ? meta.tolerance : 0)}mm after applying this plan.
-                  </div>
-                ) : (
-                  <div>
-                    • {autoDecision.outliers} outlier{autoDecision.outliers === 1 ? "" : "s"} remain outside tolerance. Preference is to keep outliers concentrated (line insert use-case) rather than spreading loop changes.
-                  </div>
-                )
-              ) : null}
-              {autoDecision.maxOver != null ? (
-                <div>• Max over tolerance (worst residual) is {Math.round(Number(autoDecision.maxOver || 0))}mm.</div>
-              ) : null}
-              <div>• If you change any loops/adjustments manually, “Auto applied” clears to indicate the plan is no longer purely automatic.</div>
-            </div>
-          </details>
-        ) : null}
-        {autoDecision ? (
-          <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.03)" }}>
-            <div style={{ fontWeight: 950, marginBottom: 6 }}>Actionable plan</div>
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12, lineHeight: 1.35 }}>
-              <div style={{ minWidth: 260 }}>
-                <div style={{ fontWeight: 900, marginBottom: 4 }}>Loop changes</div>
-                {(groupLoopChange && Object.keys(groupLoopChange).length > 0) ? (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
-                    {(() => {
-                      var gids = Object.keys(groupLoopChange).sort();
-                      var byRow = { A: [], B: [], C: [], D: [] };
-                      gids.forEach((gid) => {
-                        var row = (gid || "")[0];
-                        if (byRow[row]) byRow[row].push(gid);
-                      });
-
-                      var renderCol = (rowKey, title, isLast) => (
-                        <div key={rowKey} style={{ minWidth: 0, paddingRight: isLast ? 0 : 10, borderRight: isLast ? "none" : "1px solid rgba(0,0,0,0.15)" }}>
-                          <div style={{ fontWeight: 900, marginBottom: 6, textAlign: "center" }}>{title}</div>
-                          <div style={{ display: "grid", gridTemplateColumns: "72px 1fr", columnGap: 10, rowGap: 4 }}>
-                            {byRow[rowKey].length ? byRow[rowKey].map((gid) => {
-                              var from = groupLoopBaseline && groupLoopBaseline[gid] != null ? groupLoopBaseline[gid] : "—";
-                              var to = groupLoopChange[gid];
-                              return (
-                                <React.Fragment key={gid}>
-                                  <div style={{ fontWeight: 900 }}>{gid}</div>
-                                  <div>{from} → <span style={{ fontWeight: 900 }}>{to}</span></div>
-                                </React.Fragment>
-                              );
-                            }) : (
-                              <div style={{ gridColumn: "1 / -1", opacity: 0.7 }}>—</div>
-                            )}
-                          </div>
-                        </div>
-                      );
-
-                      return (
-                        <>
-                          {renderCol("A", "A Row", false)}
-                          {renderCol("B", "B Row", false)}
-                          {renderCol("C", "C Row", false)}
-                          {renderCol("D", "D Row", true)}
-                        </>
-                      );
-                    })()}
-                  </div>
-                ) : (
-                  <div>No loop changes.</div>
-                )}
-              </div>
-
-              <div style={{ minWidth: 260 }}>
-                <div style={{ fontWeight: 900, marginBottom: 4 }}>Notes</div>
-                {autoDecision.outliers != null ? (
-                  autoDecision.outliers === 0 ? (
-                    <div>All included lines are within tolerance. Apply loops as listed.</div>
-                  ) : (
-                    autoDecision.outliers === 1 ? (
-                      <div>
-                        One outlier remains outside tolerance. Consider a line insert on the affected line if needed.
-                      </div>
-                    ) : (
-                      <div>
-                        Multiple outliers remain outside tolerance. Re-measure and inspect before applying further changes.
-                      </div>
-                    )
-                  )
-                ) : (
-                  <div>Apply loops as listed and verify against tolerance.</div>
-                )}
-                {autoDecision.maxOver != null ? (
-                  <div style={{ marginTop: 6 }}>Worst residual (max over tol): <span style={{ fontWeight: 900 }}>{Math.round(Number(autoDecision.maxOver || 0))}</span>mm</div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-      </div>
-      <div style={{ overflow: "auto", border: `1px solid ${theme.border}`, borderRadius: 12 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
-          <thead>
-            <tr style={{ background: "rgba(255,255,255,0.05)" }}>
-              <th style={th} rowSpan={2}>Group</th>
-              <th style={th} colSpan={5}>Left</th>
-              <th style={th} colSpan={5}>Right</th>
-            </tr>
-            <tr style={{ background: "rgba(255,255,255,0.05)" }}>
-              {["Rep", "Suggest", "Loop Δ", "Adj", "Residual"].map((h) => (
-                <th key={`L-${h}`} style={th}>{h}</th>
-              ))}
-              {["Rep", "Suggest", "Loop Δ", "Adj", "Residual"].map((h) => (
-                <th key={`R-${h}`} style={th}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {["A", "B", "C", "D"].map((L) => {
-              const sL = abcSuggestions[L].L || null;
-              const sR = abcSuggestions[L].R || null;
-
-              const fmt1 = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Number(n).toFixed(1));
-              const fmti = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Math.round(Number(n)));
-
-              return (
-                <tr key={L} style={{ borderTop: `1px solid ${theme.border}` }}>
-                  <td style={Object.assign({}, td, { fontWeight: 950, color: (PALETTE[L] || PALETTE.A).base })}>{L}</td>
-
-                  <td style={td}>{sL ? sL.repLoop : "—"}</td>
-                  <td style={td}>{sL ? sL.bestLoop : "—"}</td>
-                  <td style={td}>{sL ? fmti(sL.loopDeltaMm) : "—"}</td>
-                  <td style={td}>{sL ? fmti(sL.suggestedAdjMm) : "—"}</td>
-                  <td style={Object.assign({}, td, { fontWeight: 950 })}>{sL ? fmt1(sL.residualAfterAdj) : "—"}</td>
-
-                  <td style={td}>{sR ? sR.repLoop : "—"}</td>
-                  <td style={td}>{sR ? sR.bestLoop : "—"}</td>
-                  <td style={td}>{sR ? fmti(sR.loopDeltaMm) : "—"}</td>
-                  <td style={td}>{sR ? fmti(sR.suggestedAdjMm) : "—"}</td>
-                  <td style={Object.assign({}, td, { fontWeight: 950 })}>{sR ? fmt1(sR.residualAfterAdj) : "—"}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <div style={{ marginTop: 8, opacity: 0.78, fontSize: 12 }}>
-        Fine adjust is clamped to ±Tolerance (<b>{Number(meta.tolerance || 0)}mm</b>). Suggestions use the most common current loop type in each A/B/C side as the “representative” baseline.
-      </div>
-
-      
-
-      {showLoopModeCounts ? (
-        <div style={{ marginTop: 10, borderTop: `1px solid ${theme.border}`, paddingTop: 10 }}>
-          <div style={{ fontWeight: 950, marginBottom: 6 }}>Loop counts used to pick “Rep”</div>
-          <div style={{ display: "grid", gap: 8 }}>
-            {["A", "B", "C", "D"].map((L) => (
-              <div key={`counts-${L}`} style={{ border: `1px solid ${theme.border}`, borderRadius: 12, padding: 8, background: "rgba(0,0,0,0.25)" }}>
-                <div style={{ fontWeight: 950, marginBottom: 6, color: (PALETTE[L] || PALETTE.A).base }}>{L}</div>
-                {["L", "R"].map((side) => {
-                  const counts = abcLoopModeCounts[L][side] || {};
-                  const entries = Object.entries(counts).sort((a, b) => (Number(b[1]) - Number(a[1])) || String(a[0]).localeCompare(String(b[0])));
-                  return (
-                    <div key={`${L}-${side}`} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
-                      <span style={{ opacity: 0.8, fontWeight: 950, width: 42 }}>{side === "L" ? "Left" : "Right"}</span>
-                      {entries.length === 0 ? (
-                        <span style={{ opacity: 0.7 }}>—</span>
-                      ) : (
-                        entries.map(([lt, c]) => (
-                          <span key={`${L}-${side}-${lt}`} style={{ padding: "3px 8px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.06)", fontWeight: 950, fontSize: 12 }}>
-                            {lt}: {c}
-                          </span>
-                        ))
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  
-    
-</div>
-</div>
-
-  <style>{`
-    @media (max-width: 860px) {
-      .abcGrid { grid-template-columns: 1fr !important; }
-    }
-  `}</style>
-</div>
-<div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.bg2, padding: 12 }}>
+    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.bg2, padding: 12 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
         <div style={{ fontWeight: 950 }}>Pitch trim (avg Δ after vs nominal)</div>
         <div style={{ opacity: 0.75, fontSize: 12 }}>Per row average — L and R</div>
