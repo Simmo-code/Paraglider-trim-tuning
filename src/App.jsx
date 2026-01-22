@@ -6,7 +6,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 
-const SITE_VERSION = "Trim Tuning v1.2";
+const SITE_VERSION = "Trim Tuning v1.3";
 
 
 // Step 3 – Loop sizes (mm) are wing-specific and must be set before baseline loops
