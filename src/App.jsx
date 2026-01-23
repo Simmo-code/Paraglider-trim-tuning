@@ -634,7 +634,7 @@ function BlockTable({ title, rows, theme, th, td, showCorrected, tolerance = 10,
         </div>
       </div>
 
-      <div style={{ marginTop: 10, overflow: "hidden", width: "100%", maxWidth: "100%",
+      <div style={{ marginTop: 10, overflow: "auto", width: "100%", maxWidth: "100%",
           minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 12 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
           <thead>
@@ -3022,7 +3022,7 @@ function setRange(letter, bucket, field, value) {
                   <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
                     <div style={{ fontWeight: 950 }}>Line grouping overrides</div>
 
-                    <div style={{ marginTop: 10, maxHeight: "60vh", overflow: "hidden", width: "100%", maxWidth: "100%",
+                    <div style={{ marginTop: 10, maxHeight: "60vh", overflow: "auto", width: "100%", maxWidth: "100%",
           minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 14 }}>
                       <table style={{ width: "100%", borderCollapse: "collapse" }}>
                         <thead>
@@ -3409,7 +3409,7 @@ function setRange(letter, bucket, field, value) {
                       </button>
                     </div>
 
-                    <div style={{ marginTop: 10, maxHeight: 320, overflow: "hidden", width: "100%", maxWidth: "100%",
+                    <div style={{ marginTop: 10, maxHeight: 320, overflow: "auto", width: "100%", maxWidth: "100%",
           minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 14 }}>
                       {changes.length === 0 ? (
                         <div style={{ padding: 8, opacity: 0.78, fontWeight: 900 }}>No overrides yet. Drag a line into a new bucket or use dropdowns in Step 2.</div>
@@ -3520,6 +3520,8 @@ function setRange(letter, bucket, field, value) {
                         suffix="mm"
                         width={110}
                       />
+
+                      <ControlPill label="Manual pitch tol" value={groupPitchTol} onChange={setGroupPitchTol} suffix="mm" width={110} step={1} min={0} max={20} />
                       <TogglePill label="Show corrected" checked={!!showCorrected} onChange={setShowCorrected} />
                       <TogglePill label="Brake" checked={!!includeBrakeBlock} onChange={setIncludeBrakeBlock} />
                     </div>
@@ -3669,6 +3671,98 @@ function setRange(letter, bucket, field, value) {
                     >
                       Reset all loops
                     </button>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8, width: 320, maxWidth: "100%" }}>
+                      
+                      <button
+                        type="button"
+                        onClick={() => applyAutoLoopPlan("factory")}
+                        title="Choose the closest achievable loop configuration using discrete loops (no fine-adjust)."
+                        style={{
+                          marginTop: 0,
+                          width: "100%",
+                          border: "1px solid rgba(96,165,250,0.65)",
+                          background: "rgba(0,0,0,0.45)",
+                          color: "rgba(147,197,253,0.95)",
+                          borderRadius: 999,
+                          padding: "8px 10px",
+                          fontWeight: 950,
+                          fontSize: 12,
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Closest factory loops
+                      </button>
+                      
+                      <button
+                        type="button"
+                        onClick={() => applyAutoLoopPlan("minimal")}
+                        title="Choose the smallest set of loop changes using fine-adjust where needed."
+                        style={{
+                          marginTop: 0,
+                          width: "100%",
+                          border: "1px solid rgba(96,165,250,0.65)",
+                          background: "rgba(0,0,0,0.45)",
+                          color: "rgba(147,197,253,0.95)",
+                          borderRadius: 999,
+                          padding: "8px 10px",
+                          fontWeight: 950,
+                          fontSize: 12,
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Minimal loop changes
+                      </button>
+
+                    </div>
+
+
+                    <div style={{ marginTop: 10, border: `1px solid ${theme.border}`, borderRadius: 12, background: "rgba(0,0,0,0.22)", padding: 8, width: 320, maxWidth: "100%" }}>
+                      <div style={{ fontWeight: 950, fontSize: 13, marginBottom: 8 }}>Pitch OK (factory)</div>
+                      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 0, tableLayout: "fixed" }}>
+                        <thead>
+                          <tr style={{ background: "rgba(255,255,255,0.05)" }}>
+                            <th style={Object.assign({}, th, { fontSize: 12, padding: "6px 8px" })}>Metric</th>
+                            <th style={Object.assign({}, th, { fontSize: 12, padding: "6px 8px" })}>Left</th>
+                            <th style={Object.assign({}, th, { fontSize: 12, padding: "6px 8px" })}>Right</th>
+                            <th style={Object.assign({}, th, { fontSize: 12, padding: "6px 8px" })}>Whole wing</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            { key: "avb", label: "A − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.AvB : null },
+                            { key: "cvb", label: "C − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.CvB : null },
+                            { key: "dvb", label: "D − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.DvB : null },
+                          ].map((row) => {
+                            const f1 = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Number(n).toFixed(1));
+                            const vL = row.v ? row.v.L : null;
+                            const vR = row.v ? row.v.R : null;
+                            const vB = row.v ? row.v.both : null;
+
+                            const sevL = severity(vL, groupPitchTol);
+                            const sevR = severity(vR, groupPitchTol);
+                            const sevB = severity(vB, groupPitchTol);
+
+                            const colFor = (sev) => {
+                              if (sev === "red") return "rgba(255,90,90,1)";
+                              if (sev === "yellow") return "rgba(255,215,90,1)";
+                              return "rgba(140,255,190,1)";
+                            };
+
+                            return (
+                              <tr key={row.key} style={{ borderTop: `1px solid ${theme.border}` }}>
+                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 12, padding: "7px 8px" })}>{row.label}</td>
+                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 12, padding: "7px 8px", color: colFor(sevL) })}>{f1(vL)}</td>
+                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 12, padding: "7px 8px", color: colFor(sevR) })}>{f1(vR)}</td>
+                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 12, padding: "7px 8px", color: colFor(sevB) })}>{f1(vB)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
 </div>
                 </div>
 
@@ -3679,7 +3773,7 @@ function setRange(letter, bucket, field, value) {
                     background: theme.panel2,
                     padding: 8,
                     minWidth: 0,
-                    overflow: "hidden",
+                    overflow: "auto",
                   }}
                 >
                   <div style={{ fontWeight: 950 }}>A/B/C/D — Factory vs Left/Right (Step 4 data)</div>
@@ -3830,43 +3924,30 @@ function setRange(letter, bucket, field, value) {
 
 
 
-                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.25fr) minmax(0, 1fr)", gap: 10, alignItems: "start" }}>
-<div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: theme.panel2, padding: 6 }}>
+                <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
                   <div style={{ fontWeight: 950 }}>Trim adjustments per maillon group (mm)</div>
-                  <div style={{ opacity: 0.78, fontSize: 11, marginTop: 4 }}>
+                  <div style={{ opacity: 0.78, fontSize: 12, marginTop: 4 }}>
                     Uses <b>frozen baseline</b> from Step 3. Step 3 edits will not affect this page until you Reset all.
                   </div>
 
                   {groupsInUse.length === 0 ? (
                     <div style={{ marginTop: 10, opacity: 0.75 }}>No groups detected. Complete Step 2 mapping first.</div>
                   ) : (() => { try { return (
-                    <div style={{ marginTop: 8, overflow: "hidden", width: "100%", maxWidth: "100%",
+                    <div style={{ marginTop: 10, overflow: "auto", width: "100%", maxWidth: "100%",
           minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 12 }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 0, tableLayout: "fixed" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 0 }}>
                         <thead>
                           <tr>
-                            <th rowSpan={2} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2, padding: "6px 6px", fontSize: 11, lineHeight: 1.1, whiteSpace: "normal" })}>Group</th>
-                            <th colSpan={5} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2, textAlign: "center", padding: "6px 6px", fontSize: 11, lineHeight: 1.1, whiteSpace: "normal" })}>Left</th>
-                            <th colSpan={5} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2, textAlign: "center", padding: "6px 6px", fontSize: 11, lineHeight: 1.1, whiteSpace: "normal" })}>Right</th>
+                            <th rowSpan={2} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2 })}>Group</th>
+                            <th colSpan={5} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2, textAlign: "center" })}>Left</th>
+                            <th colSpan={5} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2, textAlign: "center" })}>Right</th>
                           </tr>
                           <tr>
-                            {[
-                              <>Baseline<br />loop</>,
-                              <>Override<br />loop</>,
-                              <>Loop Δ<br />(mm)</>,
-                              <>Adjust<br />(mm)</>,
-                              <>Total Δ<br />(mm)</>,
-                            ].map((h, i) => (
-                              <th key={"L-h"+i} style={Object.assign({}, th, { position: "sticky", top: 34, background: theme.panel2, zIndex: 2, padding: "6px 6px", fontSize: 11, lineHeight: 1.1, whiteSpace: "normal" })}>{h}</th>
+                            {["Baseline loop", "Override loop", "Loop Δ (mm)", "Adjust (mm)", "Total Δ (mm)"].map((h) => (
+                              <th key={"L-"+h} style={Object.assign({}, th, { position: "sticky", top: 34, background: theme.panel2, zIndex: 2 })}>{h}</th>
                             ))}
-                            {[
-                              <>Baseline<br />loop</>,
-                              <>Override<br />loop</>,
-                              <>Loop Δ<br />(mm)</>,
-                              <>Adjust<br />(mm)</>,
-                              <>Total Δ<br />(mm)</>,
-                            ].map((h, i) => (
-                              <th key={"R-h"+i} style={Object.assign({}, th, { position: "sticky", top: 34, background: theme.panel2, zIndex: 2, padding: "6px 6px", fontSize: 11, lineHeight: 1.1, whiteSpace: "normal" })}>{h}</th>
+                            {["Baseline loop", "Override loop", "Loop Δ (mm)", "Adjust (mm)", "Total Δ (mm)"].map((h) => (
+                              <th key={"R-"+h} style={Object.assign({}, th, { position: "sticky", top: 34, background: theme.panel2, zIndex: 2 })}>{h}</th>
                             ))}
                           </tr>
                         </thead>
@@ -3946,7 +4027,7 @@ function setRange(letter, bucket, field, value) {
                                   <td style={td}>
                                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                                       <select
-                                        style={Object.assign({}, miniInput, { width: 64, padding: "3px 6px", background: theme.panel2, color: theme.text })}
+                                        style={Object.assign({}, miniInput, { width: 86, padding: "4px 8px", background: theme.panel2, color: theme.text })}
                                         disabled={!row.L}
                                         value={(row.L && groupLoopChange && groupLoopChange[row.L]) ? groupLoopChange[row.L] : ""}
                                         onChange={(e) => {
@@ -3998,7 +4079,7 @@ function setRange(letter, bucket, field, value) {
                                   <td style={td}>{Number.isFinite(L.loopDelta) ? Math.round(L.loopDelta) : ""}</td>
                                   <td style={td}>
                                     <input
-                                      style={Object.assign({}, miniInput, { width: 52, padding: "3px 6px" })}
+                                      style={miniInput}
                                       value={Number.isFinite(L.adj) ? String(L.adj) : ""}
                                       onChange={(e) => {
                                         const v = Number(e.target.value);
@@ -4007,14 +4088,14 @@ function setRange(letter, bucket, field, value) {
                                       }}
                                     />
                                   </td>
-                                  <td style={Object.assign({}, td, { textAlign: "center" })}><div style={{ display: "inline-block", minWidth: 38, padding: "3px 8px", borderRadius: 999, border: `1px solid ${theme.border}`, background: L.totalColor, fontWeight: 950, lineHeight: 1 }}>{Number.isFinite(L.total) ? Math.round(L.total) : ""}</div></td>
+                                  <td style={Object.assign({}, td, { textAlign: "center" })}><div style={{ display: "inline-block", minWidth: 46, padding: "4px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: L.totalColor, fontWeight: 950, lineHeight: 1 }}>{Number.isFinite(L.total) ? Math.round(L.total) : ""}</div></td>
 
                                   {/* Right */}
                                   <td style={td}>{R.baseLoop}</td>
                                   <td style={td}>
                                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                                       <select
-                                        style={Object.assign({}, miniInput, { width: 64, padding: "3px 6px", background: theme.panel2, color: theme.text })}
+                                        style={Object.assign({}, miniInput, { width: 86, padding: "4px 8px", background: theme.panel2, color: theme.text })}
                                         disabled={!row.R}
                                         value={(row.R && groupLoopChange && groupLoopChange[row.R]) ? groupLoopChange[row.R] : ""}
                                         onChange={(e) => {
@@ -4066,7 +4147,7 @@ function setRange(letter, bucket, field, value) {
                                   <td style={td}>{Number.isFinite(R.loopDelta) ? Math.round(R.loopDelta) : ""}</td>
                                   <td style={td}>
                                     <input
-                                      style={Object.assign({}, miniInput, { width: 52, padding: "3px 6px" })}
+                                      style={miniInput}
                                       value={Number.isFinite(R.adj) ? String(R.adj) : ""}
                                       onChange={(e) => {
                                         const v = Number(e.target.value);
@@ -4075,7 +4156,7 @@ function setRange(letter, bucket, field, value) {
                                       }}
                                     />
                                   </td>
-                                  <td style={Object.assign({}, td, { textAlign: "center" })}><div style={{ display: "inline-block", minWidth: 38, padding: "3px 8px", borderRadius: 999, border: `1px solid ${theme.border}`, background: R.totalColor, fontWeight: 950, lineHeight: 1 }}>{Number.isFinite(R.total) ? Math.round(R.total) : ""}</div></td>
+                                  <td style={Object.assign({}, td, { textAlign: "center" })}><div style={{ display: "inline-block", minWidth: 46, padding: "4px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: R.totalColor, fontWeight: 950, lineHeight: 1 }}>{Number.isFinite(R.total) ? Math.round(R.total) : ""}</div></td>
                                 </tr>
                               );
                             });
@@ -4091,250 +4172,6 @@ function setRange(letter, bucket, field, value) {
 
 
 
-
-
-
-<div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: theme.panel, padding: 8, minWidth: 0, width: "100%" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-          <div style={{ fontWeight: 950 }}>Pitch OK (factory): A vs B, C vs B, D vs B</div>
-          <div style={{ opacity: 0.78, fontSize: 12 }}>
-            Pitch OK is judged by A−B, C−B, and D−B (vs B), not whole-wing pitch. Default tolerance ±{Number.isFinite(Number(groupPitchTol)) ? Number(groupPitchTol) : 4}mm.
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10, marginTop: 10 }}>
-          <div style={{ border: `1px solid ${theme.border}`, borderRadius: 12, background: "rgba(0,0,0,0.22)", padding: 8, overflow: "hidden" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 0 }}>
-              <thead>
-                <tr style={{ background: "rgba(255,255,255,0.05)" }}>
-                  <th style={th}>Metric</th>
-                  <th style={th}>Left</th>
-                  <th style={th}>Right</th>
-                  <th style={th}>Whole wing</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { key: "avb", label: "A − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.AvB : null },
-                  { key: "cvb", label: "C − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.CvB : null },
-                  { key: "dvb", label: "D − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.DvB : null },
-                ].map((row) => {
-                  const f1 = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Number(n).toFixed(1));
-                  const vL = row.v ? row.v.L : null;
-                  const vR = row.v ? row.v.R : null;
-                  const vB = row.v ? row.v.both : null;
-
-                  const sevL = severity(vL, groupPitchTol);
-                  const sevR = severity(vR, groupPitchTol);
-                  const sevB = severity(vB, groupPitchTol);
-
-                  const colFor = (sev) => {
-                    if (sev === "red") return "rgba(255,90,90,1)";
-                    if (sev === "yellow") return "rgba(255,215,90,1)";
-                    return "rgba(140,255,190,1)";
-                  };
-
-                  return (
-                    <tr key={row.key} style={{ borderTop: `1px solid ${theme.border}` }}>
-                      <td style={Object.assign({}, td, { fontWeight: 950 })}>{row.label}</td>
-                      <td style={Object.assign({}, td, { fontWeight: 950, color: colFor(sevL) })}>{f1(vL)}</td>
-                      <td style={Object.assign({}, td, { fontWeight: 950, color: colFor(sevR) })}>{f1(vR)}</td>
-                      <td style={Object.assign({}, td, { fontWeight: 950, color: colFor(sevB) })}>{f1(vB)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-
-            <div style={{ marginTop: 8, opacity: 0.78, fontSize: 12 }}>
-              Interpretation tip: if A/B averages are relatively longer than C/D, the wing tends to fly “faster / lower AoA”; if A/B are shorter relative to C/D, it tends to fly “slower / higher AoA”.
-            </div>
-          </div>
-
-          
-        </div>
-
-        <div style={{ marginTop: 10 }}>
-          <div style={{ fontWeight: 950, marginBottom: 6 }}>Row averages overlaid (A/B/C/D)</div>
-          <PitchTrimChart rows={step4LineRows} tolerance={groupPitchTol} height={200} />
-        </div>
-
-        <div style={{ marginTop: 10, border: `2px solid rgba(99,102,241,0.45)`, borderRadius: 16, background: `rgba(99,102,241,0.10)`, padding: 12 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ fontWeight: 950, fontSize: 15 }}>Extra view — Pitch / Brake / Speed (Spreadsheet-style)</div>
-            <div style={{ opacity: 0.78, fontSize: 12 }}>
-              Read-only: derived from Step 4 “after vs nominal” deltas. Does not change trimming math.
-            </div>
-          </div>
-
-          {(function () {
-            const tol = Number.isFinite(Number(groupPitchTol)) ? Number(groupPitchTol) : 4;
-            const rows = Array.isArray(step4LineRows) ? step4LineRows : [];
-            const letters = includeBrakeBlock ? ["A", "B", "C", "D", "BR"] : ["A", "B", "C", "D"];
-
-            const sums = {};
-            const counts = {};
-            const brByIdx = {};
-            for (let i = 0; i < letters.length; i++) {
-              const L = letters[i];
-              sums[L] = { L: 0, R: 0, B: 0 };
-              counts[L] = { L: 0, R: 0, B: 0 };
-            }
-
-            for (let k = 0; k < rows.length; k++) {
-              const r = rows[k];
-              if (!r) continue;
-              const letter = String(r.letter || "").toUpperCase();
-              if (letters.indexOf(letter) === -1) continue;
-
-              const side = String(r.side || "").toUpperCase();
-              const dNum = Number(r.delta);
-              if (!Number.isFinite(dNum)) continue;
-
-              if (side === "L") { sums[letter].L += dNum; counts[letter].L += 1; }
-              if (side === "R") { sums[letter].R += dNum; counts[letter].R += 1; }
-              sums[letter].B += dNum; counts[letter].B += 1;
-
-              if (letter === "BR") {
-                const idx = Number(r.idx);
-                if (!Number.isFinite(idx)) continue;
-                const slot = brByIdx[idx] || { L: null, R: null };
-                if (side === "L") slot.L = dNum;
-                if (side === "R") slot.R = dNum;
-                brByIdx[idx] = slot;
-              }
-            }
-
-            const avg = {};
-            for (let i = 0; i < letters.length; i++) {
-              const L = letters[i];
-              avg[L] = {
-                L: counts[L].L ? (sums[L].L / counts[L].L) : null,
-                R: counts[L].R ? (sums[L].R / counts[L].R) : null,
-                B: counts[L].B ? (sums[L].B / counts[L].B) : null,
-              };
-            }
-
-            const f1 = (v) => (Number.isFinite(Number(v)) ? String(Math.round(Number(v) * 10) / 10) : "—");
-            const diff = (a, b) => (Number.isFinite(Number(a)) && Number.isFinite(Number(b)) ? (Number(a) - Number(b)) : null);
-
-            const band = (v) => {
-              if (!Number.isFinite(Number(v))) return "na";
-              const x = Math.abs(Number(v));
-              if (x <= tol) return "good";
-              if (x <= tol * 2) return "warn";
-              return "bad";
-            };
-            const bgFor = (b) => {
-              if (b === "good") return "rgba(34,197,94,0.14)";
-              if (b === "warn") return "rgba(234,179,8,0.14)";
-              if (b === "bad") return "rgba(239,68,68,0.14)";
-              return "transparent";
-            };
-
-            const pitchPairs = [
-              { label: "A − B", a: "A", b: "B" },
-              { label: "C − B", a: "C", b: "B" },
-              { label: "D − B", a: "D", b: "B" },
-            ];
-
-            const frontRear = (sideKey) => {
-              const a = avg.A ? avg.A[sideKey] : null;
-              const b = avg.B ? avg.B[sideKey] : null;
-              const c = avg.C ? avg.C[sideKey] : null;
-              const d = avg.D ? avg.D[sideKey] : null;
-              if (!Number.isFinite(Number(a)) || !Number.isFinite(Number(b)) || !Number.isFinite(Number(c)) || !Number.isFinite(Number(d))) return null;
-              const front = (Number(a) + Number(b)) / 2;
-              const rear = (Number(c) + Number(d)) / 2;
-              return front - rear;
-            };
-
-            let brMax = null;
-            let brMaxIdx = null;
-            if (includeBrakeBlock) {
-              for (const key in brByIdx) {
-                if (!Object.prototype.hasOwnProperty.call(brByIdx, key)) continue;
-                const pair = brByIdx[key];
-                if (!pair) continue;
-                if (!Number.isFinite(Number(pair.L)) || !Number.isFinite(Number(pair.R))) continue;
-                const v = Math.abs(Number(pair.L) - Number(pair.R));
-                if (brMax == null || v > brMax) { brMax = v; brMaxIdx = key; }
-              }
-            }
-
-            const table = { width: "100%", borderCollapse: "collapse", marginTop: 8, fontSize: 12 };
-            const th = { textAlign: "left", padding: "7px 10px", borderBottom: `1px solid ${theme.border}`, fontWeight: 950, opacity: 0.9 };
-            const td = { padding: "7px 10px", borderBottom: `1px solid ${theme.border}`, verticalAlign: "top" };
-
-            return (
-              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-                <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: theme.panel2, padding: 8 }}>
-                  <div style={{ fontWeight: 950, marginBottom: 6 }}>Pitch check (avg Δ): A−B, C−B, D−B</div>
-                  <div style={{ opacity: 0.78, fontSize: 12, lineHeight: 1.3 }}>
-                    Pass/fail remains factory-style (A/C/D vs B) with default ±{tol}mm.
-                  </div>
-                  <table style={table}>
-                    <thead>
-                      <tr>
-                        <th style={th}>Pair</th>
-                        <th style={th}>Left</th>
-                        <th style={th}>Right</th>
-                        <th style={th}>Both</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pitchPairs.map((p) => {
-                        const vL = diff(avg[p.a].L, avg[p.b].L);
-                        const vR = diff(avg[p.a].R, avg[p.b].R);
-                        const vB = diff(avg[p.a].B, avg[p.b].B);
-                        return (
-                          <tr key={p.label}>
-                            <td style={Object.assign({}, td, { fontWeight: 950 })}>{p.label}</td>
-                            <td style={Object.assign({}, td, { background: bgFor(band(vL)) })}>{f1(vL)}</td>
-                            <td style={Object.assign({}, td, { background: bgFor(band(vR)) })}>{f1(vR)}</td>
-                            <td style={Object.assign({}, td, { background: bgFor(band(vB)) })}>{f1(vB)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: theme.panel2, padding: 8 }}>
-                  <div style={{ fontWeight: 950, marginBottom: 6 }}>Pitch speed proxy (trend only)</div>
-                  <div style={{ opacity: 0.78, fontSize: 12, lineHeight: 1.3 }}>
-                    Trend: front avg(A,B) − rear avg(C,D). Not used for Pitch OK.
-                  </div>
-                  <table style={table}>
-                    <thead>
-                      <tr>
-                        <th style={th}>Side</th>
-                        <th style={th}>Front−Rear (mm)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr><td style={td}>Left</td><td style={td}>{f1(frontRear("L"))}</td></tr>
-                      <tr><td style={td}>Right</td><td style={td}>{f1(frontRear("R"))}</td></tr>
-                      <tr><td style={td}>Both</td><td style={td}>{f1(frontRear("B"))}</td></tr>
-                    </tbody>
-                  </table>
-
-                  {includeBrakeBlock ? (
-                    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: theme.panel, padding: 8, minWidth: 0, width: "100%" }}>
-                      <div style={{ fontWeight: 950, marginBottom: 6 }}>Brake symmetry (L/R first)</div>
-                      <div style={{ opacity: 0.78, fontSize: 12, lineHeight: 1.3 }}>
-                        Max |L−R| across BR rows: {brMax != null ? f1(brMax) : "—"} mm {brMaxIdx != null ? `(worst idx ${brMaxIdx})` : ""}. Advisory only.
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })()}
-        </div>
-
-      </div>
-</div>
 
 {/* Group averages / maillon loop advisory (A/B/C/D) */}
 <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
@@ -4361,10 +4198,7 @@ function setRange(letter, bucket, field, value) {
       >
         Copy suggestions
       </button>
-
-      <ControlPill label="Manual pitch tol" value={groupPitchTol} onChange={setGroupPitchTol} suffix="mm" width={110} step={1} min={0} max={20} />
-
-      <button
+<button
         style={Object.assign({}, topBtn, { background: showLoopModeCounts ? "rgba(99,102,241,0.25)" : "rgba(255,255,255,0.06)" })}
         onClick={() => setShowLoopModeCounts((v) => !v)}
       >
@@ -4379,8 +4213,8 @@ function setRange(letter, bucket, field, value) {
 
 
 
-<div className="abcGrid" style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 10, alignItems: "start" }}>
-    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: theme.panel, padding: 8, minWidth: 0, width: "100%" }}>
+<div className="abcGrid" style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: theme.panel, padding: 8, minWidth: 0, width: "100%", flex: "1 1 640px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
         <div style={{ fontWeight: 950 }}>Suggested loop change + fine adjust (advisory)</div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -4465,7 +4299,7 @@ function setRange(letter, bucket, field, value) {
               position: "fixed",
               inset: 0,
               zIndex: 60,
-              overflow: "hidden",
+              overflow: "auto",
               background: "rgba(10,12,16,0.92)",
               padding: "28px 0 60px",
               display: "flex",
@@ -4762,7 +4596,7 @@ function setRange(letter, bucket, field, value) {
         ) : null}
 
       </div>
-      <div style={{ overflow: "hidden", border: `1px solid ${theme.border}`, borderRadius: 12 }}>
+      <div style={{ overflow: "auto", border: `1px solid ${theme.border}`, borderRadius: 12 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
           <thead>
             <tr style={{ background: "rgba(255,255,255,0.05)" }}>
@@ -4846,8 +4680,7 @@ function setRange(letter, bucket, field, value) {
         </div>
       ) : null}
     </div>
-  
-    
+
 </div>
 </div>
 
@@ -4898,7 +4731,7 @@ function setRange(letter, bucket, field, value) {
                     <div
                       style={{
                         marginTop: 10,
-                        overflow: "hidden", width: "100%", maxWidth: "100%",
+                        overflow: "auto", width: "100%", maxWidth: "100%",
           minWidth: 0, border: `1px solid ${theme.border}`,
                         borderRadius: 12,
                         maxHeight: 520,
