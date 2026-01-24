@@ -43,38 +43,21 @@ A15,6294,6779,6779,B15,6197,6702,6702,C15,6292,6777,6777,D15,6422,6922,6923
 A16,6264,6749,6749,B16,6165,6670,6671,C16,6262,6748,6748,D16,6389,6887,6887`;
 
 const theme = {
-  // Aviation Night Ops (high-contrast)
-  bg: "#0B0E11",
-  // Section surfaces
-  panel: "#121720",
-  panel2: "#121720",
-  // Buckets
-  bucketBg: "#181F2A",
-  bucketHover: "#1E2736",
-  // Shared dark pill background used by StatPill / ControlPill / TogglePill / inputs
-  bg2: "#10151D",
-  // Borders
-  border: "#2A3445",
-  pillBorderActive: "#FACC15", // aviation amber
-  pillBorderAuto: "#38BDF8",
-  // Text
-  text: "#E6EDF6",
-  textSub: "#A8B2C3",
-  textMuted: "#6B7485",
-  // Status colors
-  green: "#22C55E",
-  good: "#22C55E",
-  bad: "#EF4444",
-  warn: "#FACC15",
-  warnBg: "rgba(250,204,21,0.10)",
-  warnStroke: "rgba(250,204,21,0.55)",
-  // Diagram / charts
-  wingOutline: "rgba(148,163,184,0.30)",
-  wingCenter: "rgba(148,163,184,0.22)",
-  chartNeutral: "#64748B",
-  chartHighlight: "#38BDF8",
+  bg: "#12151b",
+  panel: "rgba(255,255,255,0.08)",
+  panel2: "rgba(0,0,0,0.22)",
+  // Shared dark pill background used by StatPill / ControlPill / TogglePill
+  bg2: "rgba(0,0,0,0.22)",
+  border: "rgba(255,255,255,0.14)",
+  text: "rgba(255,255,255,0.92)",
+  textSub: "rgba(170,177,195,0.85)",
+  green: "rgba(34,197,94,0.95)",
+  good: "rgba(34,197,94,0.95)",
+  bad: "rgba(239,68,68,0.95)",
+  warn: "rgba(245,158,11,0.95)",
+  warnBg: "rgba(245,158,11,0.10)",
+  warnStroke: "rgba(245,158,11,0.55)",
 };
-
 
 const PALETTE = {
   A: { base: "#1e6eff", s2: "#2d7fff", s3: "#5aa6ff", s4: "#86c4ff" },
@@ -530,13 +513,13 @@ function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showW
            C ${W / 2 + Math.round(740 * DIAGRAM_SCALE)} ${Math.round(860 * DIAGRAM_SCALE)}, ${W / 2 + Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(720 * DIAGRAM_SCALE)}, ${W / 2 + Math.round(1460 * DIAGRAM_SCALE)} ${Math.round(470 * DIAGRAM_SCALE)}
            C ${W / 2 + Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(260 * DIAGRAM_SCALE)}, ${W / 2 + Math.round(740 * DIAGRAM_SCALE)} ${Math.round(88 * DIAGRAM_SCALE)}, ${W / 2} ${Math.round(62 * DIAGRAM_SCALE)}`}
         fill="none"
-        stroke={theme.wingOutline}
+        stroke="rgba(255,255,255,0.18)"
         strokeWidth={Math.max(2, Math.round(4 * DIAGRAM_SCALE))}
       />
     );
   }
 
-  items.push(<line key="center" x1={cx} y1={20} x2={cx} y2={H - 20} stroke={theme.wingCenter} strokeWidth={2} />);
+  items.push(<line key="center" x1={cx} y1={20} x2={cx} y2={H - 20} stroke="rgba(255,255,255,0.14)" strokeWidth={2} />);
 
   for (const b of layout.blocks) {
     const bucketNum = Number(String(b.groupId).match(/(\d+)/)[1] || b.bucketNum || 1);
@@ -602,7 +585,7 @@ function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showW
   }
 
   return (
-    <div style={{ width: "100%", border: `1px solid ${theme.border}`, borderRadius: 18, background: "rgba(0,0,0,0.38)", overflow: "hidden" }}>
+    <div style={{ width: "100%", border: `10px solid ${theme.border}`, borderRadius: 18, background: "rgba(0,0,0,0.38)", overflow: "hidden" }}>
       <svg
         width="100%"
         viewBox={`0 0 ${W} ${H}`}
@@ -651,7 +634,7 @@ function BlockTable({ title, rows, theme, th, td, showCorrected, tolerance = 10,
   };
 
   return (
-    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
+    <div style={{ border: `10px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
         <div style={{ fontWeight: 950 }}>{title}</div>
         <div style={{ opacity: 0.78, fontSize: 12 }}>
@@ -762,7 +745,7 @@ function NumInput({ value, onChange, min = -99999, max = 99999, step = 1, width 
         padding: "7px 10px",
         borderRadius: 12,
         border: `1px solid ${theme.border}`,
-        background: theme.bg2,
+        background: "rgba(0,0,0,0.68)",
         color: theme.text,
         outline: "none",
         fontWeight: 900,
@@ -781,7 +764,7 @@ function Select({ value, onChange, options, width = 140 }) {
         padding: "7px 10px",
         borderRadius: 12,
         border: `1px solid ${theme.border}`,
-        background: theme.bg2,
+        background: "rgba(0,0,0,0.80)",
         color: theme.text,
         outline: "none",
         fontWeight: 950,
@@ -830,7 +813,7 @@ function ImportStatusRadio({ loaded, label = "Import status" }) {
   const color = loaded ? theme.good : theme.bad;
   const text = loaded ? "File loaded" : "No file loaded";
   return (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 999, border: `1px solid ${theme.border}`, background: theme.bg2 }}>
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.45)" }}>
       <span style={{ width: 14, height: 14, borderRadius: 999, background: color }} />
       <div style={{ display: "grid", lineHeight: 1.05 }}>
         <span style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>{label}</span>
@@ -899,7 +882,7 @@ function ControlPill({ label, value, onChange, suffix = "mm", width = 90, step =
         onChange={(e) => onChange(Number(e.target.value || 0))}
         style={{
           width,
-          background: "transparent",
+          background: "rgba(245, 0, 145, 0.8)",
           color: theme.text,
           border: `1px solid ${theme.border}`,
           borderRadius: 12,
@@ -938,7 +921,7 @@ function TogglePill({ label, checked, onChange }) {
           height: 20,
           borderRadius: 999,
           border: `1px solid ${theme.border}`,
-          background: checked ? "rgba(34,197,94,0.35)" : "rgba(148,163,184,0.18)",
+          background: checked ? "rgba(245, 0, 145, 0.8)" : "rgba(148,163,184,0.18)",
           position: "relative",
         }}
       >
@@ -960,7 +943,7 @@ function TogglePill({ label, checked, onChange }) {
 }
 function SegTabs({ value, onChange, tabs }) {
   return (
-    <div style={{ display: "inline-flex", border: `1px solid ${theme.border}`, borderRadius: 14, overflow: "hidden", background: "rgba(255,255,255,0.16)",
+    <div style={{ display: "inline-flex", border: `1px solid ${theme.border}`, borderRadius: 14, overflow: "hidden", background: "rgba(245, 0, 145, 0.8)",
         boxShadow: "inset 0 0 0 2px rgba(250,204,21,0.65)", flexWrap: "wrap" }}>
       {tabs.map((t) => {
         const active = value === t.value;
@@ -2496,7 +2479,7 @@ function setRange(letter, bucket, field, value) {
               padding: "7px 9px",
               borderRadius: 12,
               border: `1px solid ${theme.border}`,
-              background: theme.bg2,
+              background: "rgba(245, 0, 145, 0.8)",
               color: theme.text,
               outline: "none",
               fontWeight: 950,
@@ -2514,7 +2497,7 @@ function setRange(letter, bucket, field, value) {
     const r = rangesByLetter[L] || makeDefaultRanges(maxByLetter[L] || 1, count);
 
     return (
-      <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 8, background: "rgba(0,0,0,0.38)" }}>
+      <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 8, background: "rgba(245, 0, 145, 0.8)" }}>
         <div style={{ display: "flex", justifyContent: "flex-start", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <div style={{ fontWeight: 950, fontSize: 14 }}>
             {L} ranges <span style={{ opacity: 0.7, fontWeight: 850 }}>(max {maxByLetter[L] || 0})</span>
@@ -2693,7 +2676,7 @@ function setRange(letter, bucket, field, value) {
       {/* reduced overall width to match overrides panel */}
       <div style={step !== 4 ? { width: "100%", maxWidth: 920, margin: "0 auto", paddingLeft: 12, paddingRight: 12, display: "grid", gap: 10 } : { width: "100%", maxWidth: 1600, margin: "0 auto", paddingLeft: 12, paddingRight: 12, display: "grid", gap: 10 }}>
         {/* Header */}
-        <div style={{ border: `1px solid ${theme.border}`, borderRadius: 22, padding: 14, background: "linear-gradient(180deg, rgba(59,130,246,0.16), rgba(255,255,255,0.03))" }}>
+        <div style={{ border: `10px solid ${theme.border}`, borderRadius: 22, padding: 14, background: "linear-gradient(180deg, rgba(59,130,246,0.16), rgba(255,255,255,0.03))" }}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 36, fontWeight: 950, letterSpacing: -0.9 }}>Paraglider Trim Tuning</div>
@@ -3105,7 +3088,7 @@ function setRange(letter, bucket, field, value) {
                         value={profileName}
                         onChange={(e) => setProfileName(e.target.value)}
                         placeholder="Profile file name…"
-                        style={{ width: 240, padding: "7px 10px", borderRadius: 12, border: `1px solid ${theme.border}`, background: theme.bg2, color: theme.text, outline: "none", fontWeight: 900, fontSize: 14 }}
+                        style={{ width: 240, padding: "7px 10px", borderRadius: 12, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.68)", color: theme.text, outline: "none", fontWeight: 900, fontSize: 14 }}
                       />
                       <button style={Object.assign({}, topBtn, { background: "rgba(59,130,246,0.20)" })} onClick={exportWingProfileJSON}>
                         Export JSON
@@ -3338,10 +3321,10 @@ function setRange(letter, bucket, field, value) {
                                   <path
                                     d={`M ${DIAGRAM_W / 2} ${Math.round(62 * DIAGRAM_SCALE)} C ${DIAGRAM_W / 2 - Math.round(740 * DIAGRAM_SCALE)} ${Math.round(88 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 - Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(260 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 - Math.round(1460 * DIAGRAM_SCALE)} ${Math.round(470 * DIAGRAM_SCALE)} C ${DIAGRAM_W / 2 - Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(720 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 - Math.round(740 * DIAGRAM_SCALE)} ${Math.round(860 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2} ${Math.round(900 * DIAGRAM_SCALE)} C ${DIAGRAM_W / 2 + Math.round(740 * DIAGRAM_SCALE)} ${Math.round(860 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 + Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(720 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 + Math.round(1460 * DIAGRAM_SCALE)} ${Math.round(470 * DIAGRAM_SCALE)} C ${DIAGRAM_W / 2 + Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(260 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 + Math.round(740 * DIAGRAM_SCALE)} ${Math.round(88 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2} ${Math.round(62 * DIAGRAM_SCALE)}`}
                                     fill="none"
-                                    stroke={theme.wingOutline}
+                                    stroke="rgba(255,255,255,0.18)"
                                     strokeWidth={Math.max(2, Math.round(4 * DIAGRAM_SCALE))}
                                   />
-                                  <line x1={DIAGRAM_W / 2} y1={20} x2={DIAGRAM_W / 2} y2={DIAGRAM_H - 20} stroke={theme.wingCenter} strokeWidth={2} />
+                                  <line x1={DIAGRAM_W / 2} y1={20} x2={DIAGRAM_W / 2} y2={DIAGRAM_H - 20} stroke="rgba(255,255,255,0.14)" strokeWidth={2} />
                                 </svg>
                               ) : null}
 
@@ -3382,7 +3365,7 @@ function setRange(letter, bucket, field, value) {
                                   justifyContent: "center",
                                   borderRadius: 999,
                                   border: `1px solid ${theme.border}`,
-                                  background: theme.bg2,
+                                  background: "rgba(255,255,255,0.06)",
                                   fontWeight: 950,
                                   opacity: 0.9,
                                   padding: "0 12px",
@@ -3392,7 +3375,7 @@ function setRange(letter, bucket, field, value) {
                                   minWidth: 190,
                                   borderRadius: 16,
                                   padding: 8,
-                                  background: theme.bg2,
+                                  background: "rgba(255,255,255,0.06)",
                                   boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)",
                                 };
 
@@ -3542,7 +3525,7 @@ function setRange(letter, bucket, field, value) {
                                 max={99}
                                 value={Number(loopSizes[lt] || 0)}
                                 onChange={(e) => setLoopSizes((prev) => ({ ...(prev || {}), [lt]: Number(e.target.value || 0) }))}
-                                style={{ width: 46, padding: "6px 6px", borderRadius: 8, border: `1px solid ${theme.border}`, background: theme.bg2, color: theme.text, fontWeight: 900, textAlign: "center" }}
+                                style={{ width: 46, padding: "6px 6px", borderRadius: 8, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.45)", color: theme.text, fontWeight: 900, textAlign: "center" }}
                               />
                             </div>
                           ))}
@@ -3824,7 +3807,7 @@ function setRange(letter, bucket, field, value) {
                         marginTop: 10,
                         width: "100%",
                         border: "1px solid rgba(255,220,80,0.55)",
-                        background: theme.bg2,
+                        background: "rgba(0,0,0,0.45)",
                         color: "rgba(255,220,80,0.95)",
                         borderRadius: 999,
                         padding: "8px 10px",
@@ -3846,7 +3829,7 @@ function setRange(letter, bucket, field, value) {
                           marginTop: 0,
                           width: "100%",
                           border: "1px solid rgba(96,165,250,0.65)",
-                          background: theme.bg2,
+                          background: "rgba(0,0,0,0.45)",
                           color: "rgba(147,197,253,0.95)",
                           borderRadius: 999,
                           padding: "8px 10px",
@@ -3867,7 +3850,7 @@ function setRange(letter, bucket, field, value) {
                           marginTop: 0,
                           width: "100%",
                           border: "1px solid rgba(96,165,250,0.65)",
-                          background: theme.bg2,
+                          background: "rgba(0,0,0,0.45)",
                           color: "rgba(147,197,253,0.95)",
                           borderRadius: 999,
                           padding: "8px 10px",
@@ -4350,7 +4333,7 @@ function setRange(letter, bucket, field, value) {
 
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
       <button
-        style={Object.assign({}, topBtn, { background: theme.bg2 })}
+        style={Object.assign({}, topBtn, { background: "rgba(255,255,255,0.06)" })}
         onClick={async () => {
           try {
             const payload = { schema: "abc-loop-suggestions-v1", exportedAt: new Date().toISOString(), wing: { make: meta.make || "", model: meta.model || "" }, suggestions: abcSuggestions, averages: abcAverages };
@@ -4543,7 +4526,7 @@ function setRange(letter, bucket, field, value) {
                               style={{
                                 borderRadius: 999,
                                 border: `1px solid ${theme.border}`,
-                                background: theme.bg2,
+                                background: "rgba(255,255,255,0.06)",
                                 color: theme.text,
                                 padding: "6px 10px",
                                 fontWeight: 950,
@@ -4606,7 +4589,7 @@ function setRange(letter, bucket, field, value) {
                           style={{
                             borderRadius: 999,
                             border: `1px solid ${theme.border}`,
-                            background: theme.bg2,
+                            background: "rgba(255,255,255,0.06)",
                             color: theme.text,
                             padding: "8px 10px",
                             fontWeight: 950,
@@ -4679,7 +4662,7 @@ function setRange(letter, bucket, field, value) {
                           style={{
                             borderRadius: 999,
                             border: `1px solid ${theme.border}`,
-                            background: theme.bg2,
+                            background: "rgba(255,255,255,0.06)",
                             color: theme.text,
                             padding: "8px 10px",
                             fontWeight: 950,
@@ -4752,7 +4735,7 @@ function setRange(letter, bucket, field, value) {
                           style={{
                             borderRadius: 999,
                             border: `1px solid ${theme.border}`,
-                            background: theme.bg2,
+                            background: "rgba(255,255,255,0.06)",
                             color: theme.text,
                             padding: "8px 10px",
                             fontWeight: 950,
@@ -4809,7 +4792,7 @@ function setRange(letter, bucket, field, value) {
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <button
             type="button"
-            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: theme.bg2, color: theme.text, fontWeight: 950, cursor: "pointer" }}
+            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.06)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
             onClick={() => applyAutoLoopPlan("factory")}
             title="Choose the closest achievable loop configuration using discrete loops (no fine-adjust)."
           >
@@ -4818,7 +4801,7 @@ function setRange(letter, bucket, field, value) {
 
           <button
             type="button"
-            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: theme.bg2, color: theme.text, fontWeight: 950, cursor: "pointer" }}
+            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.06)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
             onClick={() => applyAutoLoopPlan("minimal")}
             title="Bring the wing within tolerance with the least loop change, using discrete loops only (no fine-adjust)."
           >
@@ -5255,7 +5238,7 @@ function setRange(letter, bucket, field, value) {
                         <span style={{ opacity: 0.7 }}>—</span>
                       ) : (
                         entries.map(([lt, c]) => (
-                          <span key={`${L}-${side}-${lt}`} style={{ padding: "3px 8px", borderRadius: 999, border: `1px solid ${theme.border}`, background: theme.bg2, fontWeight: 950, fontSize: 12 }}>
+                          <span key={`${L}-${side}-${lt}`} style={{ padding: "3px 8px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.06)", fontWeight: 950, fontSize: 12 }}>
                             {lt}: {c}
                           </span>
                         ))
@@ -5936,7 +5919,7 @@ function groupBands(letter, side) {
                               justifyContent: "center",
                               borderRadius: 999,
                               border: "1px solid rgba(255,220,80,0.55)",
-                              background: theme.bg2,
+                              background: "rgba(0,0,0,0.45)",
                               boxSizing: "border-box",
                             }}
                             title={titleText}
@@ -6354,7 +6337,7 @@ function DeltaLineChart({ title, points, tolerance, height = 240 }) {
           ))}
           {/* Axis */}
           <line x1={pad.l} x2={w - pad.r} y1={yScale(0)} y2={yScale(0)} stroke="rgba(255,255,255,0.22)" strokeWidth={1} />
-          <line x1={pad.l} x2={pad.l} y1={pad.t} y2={height - pad.b} stroke={theme.wingOutline} strokeWidth={1} />
+          <line x1={pad.l} x2={pad.l} y1={pad.t} y2={height - pad.b} stroke="rgba(255,255,255,0.18)" strokeWidth={1} />
 
           {/* Tolerance bands */}
           {safeTol > 0 ? (
@@ -6472,7 +6455,7 @@ function WingProfileChart({ groupStats, tolerance, height = 260 }) {
         <svg viewBox={`0 0 ${w} ${height}`} style={{ width: "100%", height: "auto", display: "block" }}>
           {/* Axis */}
           <line x1={pad.l} x2={w - pad.r} y1={yScale(0)} y2={yScale(0)} stroke="rgba(255,255,255,0.22)" strokeWidth={1} />
-          <line x1={pad.l} x2={pad.l} y1={pad.t} y2={height - pad.b} stroke={theme.wingOutline} strokeWidth={1} />
+          <line x1={pad.l} x2={pad.l} y1={pad.t} y2={height - pad.b} stroke="rgba(255,255,255,0.18)" strokeWidth={1} />
 
           {/* Bands */}
           {safeTol > 0 ? (
