@@ -634,7 +634,7 @@ function BlockTable({ title, rows, theme, th, td, showCorrected, tolerance = 10,
   };
 
   return (
-    <div style={{ border: `10px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
+    <div style={{ border: `19px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
         <div style={{ fontWeight: 950 }}>{title}</div>
         <div style={{ opacity: 0.78, fontSize: 12 }}>
@@ -681,7 +681,7 @@ function BlockTable({ title, rows, theme, th, td, showCorrected, tolerance = 10,
                         const v = Number(e.target.value);
                         setStep4LineCorr((prev) => ({ ...prev, [`${r.lineBase}L`]: Number.isFinite(v) ? v : 0 }));
                       }}
-                      style={{ width: 86, padding: "6px 8px", borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.panel, color: theme.text, outline: "none" }}
+                      style={{ width: 86, padding: "6px 8px", borderRadius: 10, border: `19px solid ${theme.border}`, background: theme.panel, color: theme.text, outline: "none" }}
                     />
                   </td>
                   <td style={td}>{fmt(L.before)}</td>
@@ -697,12 +697,12 @@ function BlockTable({ title, rows, theme, th, td, showCorrected, tolerance = 10,
                         const v = Number(e.target.value);
                         setStep4LineCorr((prev) => ({ ...prev, [`${r.lineBase}R`]: Number.isFinite(v) ? v : 0 }));
                       }}
-                      style={{ width: 86, padding: "6px 8px", borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.panel, color: theme.text, outline: "none" }}
+                      style={{ width: 86, padding: "6px 8px", borderRadius: 10, border: `19px solid ${theme.border}`, background: theme.panel, color: theme.text, outline: "none" }}
                     />
                   </td>
                   <td style={td}>{fmt(R.before)}</td>
                   <td style={td}>{fmt(R.afterVal)}</td>
-                  <td style={Object.assign({}, td, cellStyle(bandFromDelta(R.delta)), { border: "1px solid " + theme.border, color: textColorForBand(bandFromDelta(R.delta)), fontWeight: 900 })}>{fmt(R.delta)}</td>
+                  <td style={Object.assign({}, td, cellStyle(bandFromDelta(R.delta)), { border: "19px solid " + theme.border, color: textColorForBand(bandFromDelta(R.delta)), fontWeight: 900 })}>{fmt(R.delta)}</td>
                 </tr>
               );
             })}
@@ -723,7 +723,7 @@ function BlockTable({ title, rows, theme, th, td, showCorrected, tolerance = 10,
 function Panel({ title, right, children, tint = false }) {
   return (
     <div style={{ border: `1px solid ${theme.border}`, borderRadius: 18, background: tint ? "linear-gradient(180deg, rgba(59,130,246,0.08), rgba(255,255,255,0.04))" : theme.panel, overflow: "visible" }}>
-      <div style={{ padding: "10px 12px", borderBottom: `1px solid ${theme.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", background: "rgba(255,255,255,0.035)" }}>
+      <div style={{ padding: "10px 12px", borderBottom: `10px solid ${theme.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", background: "rgba(255,255,255,0.035)" }}>
         <div style={{ fontWeight: 950, letterSpacing: -0.2, fontSize: 16 }}>{title}</div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>{right}</div>
       </div>
@@ -764,7 +764,7 @@ function Select({ value, onChange, options, width = 140 }) {
         padding: "7px 10px",
         borderRadius: 12,
         border: `1px solid ${theme.border}`,
-        background: "rgba(0,0,0,0.80)",
+        background: "rgba(245, 0, 145, 0.8)",
         color: theme.text,
         outline: "none",
         fontWeight: 950,
@@ -6206,7 +6206,7 @@ function PitchTrimChart({ rows, tolerance, height = 220 }) {
   };
 
   return (
-    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.bg2, padding: 12 }}>
+    <div style={{ border: `19px solid ${theme.border}`, borderRadius: 16, background: theme.bg2, padding: 12 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
         <div style={{ fontWeight: 950 }}>Pitch trim (avg Δ after vs nominal)</div>
         <div style={{ opacity: 0.75, fontSize: 12 }}>Per row average — L and R</div>
@@ -6446,8 +6446,8 @@ function WingProfileChart({ groupStats, tolerance, height = 260 }) {
   const R = seriesFor("R");
 
   return (
-    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel, overflow: "hidden" }}>
-      <div style={{ padding: 8, borderBottom: `1px solid ${theme.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div style={{ border: `19px solid ${theme.border}`, borderRadius: 16, background: theme.panel, overflow: "hidden" }}>
+      <div style={{ padding: 8, borderBottom: `19px solid ${theme.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ fontWeight: 950 }}>Δ per maillon group (After)</div>
         <div style={{ opacity: 0.75, fontSize: 12 }}>Green ≤ 4mm • Yellow &gt; 4mm • Red ≥ tolerance</div>
       </div>
