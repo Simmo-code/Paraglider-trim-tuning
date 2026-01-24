@@ -43,21 +43,38 @@ A15,6294,6779,6779,B15,6197,6702,6702,C15,6292,6777,6777,D15,6422,6922,6923
 A16,6264,6749,6749,B16,6165,6670,6671,C16,6262,6748,6748,D16,6389,6887,6887`;
 
 const theme = {
-  bg: "#12151b",
-  panel: "rgba(255,255,255,0.08)",
-  panel2: "rgba(0,0,0,0.22)",
-  // Shared dark pill background used by StatPill / ControlPill / TogglePill
-  bg2: "rgba(0,0,0,0.22)",
-  border: "rgba(255,255,255,0.14)",
-  text: "rgba(255,255,255,0.92)",
-  textSub: "rgba(170,177,195,0.85)",
-  green: "rgba(34,197,94,0.95)",
-  good: "rgba(34,197,94,0.95)",
-  bad: "rgba(239,68,68,0.95)",
-  warn: "rgba(245,158,11,0.95)",
-  warnBg: "rgba(245,158,11,0.10)",
-  warnStroke: "rgba(245,158,11,0.55)",
+  // Aviation Night Ops (high-contrast)
+  bg: "#0B0E11",
+  // Section surfaces
+  panel: "#121720",
+  panel2: "#121720",
+  // Buckets
+  bucketBg: "#181F2A",
+  bucketHover: "#1E2736",
+  // Shared dark pill background used by StatPill / ControlPill / TogglePill / inputs
+  bg2: "#10151D",
+  // Borders
+  border: "#2A3445",
+  pillBorderActive: "#FACC15", // aviation amber
+  pillBorderAuto: "#38BDF8",
+  // Text
+  text: "#E6EDF6",
+  textSub: "#A8B2C3",
+  textMuted: "#6B7485",
+  // Status colors
+  green: "#22C55E",
+  good: "#22C55E",
+  bad: "#EF4444",
+  warn: "#FACC15",
+  warnBg: "rgba(250,204,21,0.10)",
+  warnStroke: "rgba(250,204,21,0.55)",
+  // Diagram / charts
+  wingOutline: "rgba(148,163,184,0.30)",
+  wingCenter: "rgba(148,163,184,0.22)",
+  chartNeutral: "#64748B",
+  chartHighlight: "#38BDF8",
 };
+
 
 const PALETTE = {
   A: { base: "#1e6eff", s2: "#2d7fff", s3: "#5aa6ff", s4: "#86c4ff" },
@@ -115,9 +132,17 @@ function severity(delta, tolerance) {
   if (delta == null || !Number.isFinite(Number(delta))) return "na";
   const abs = Math.abs(Number(delta));
   const tol = Number.isFinite(Number(tolerance)) ? Number(tolerance) : 0;
-  if (abs <= 4) return "green";
-  if (tol > 0 && abs >= tol) return "red";
+  const t = tol > 0 ? tol : 4;
+
+  // Green when within the active tolerance (default ±4mm).
+  if (abs <= t) return "green";
+
+  // Red when exceeding the active tolerance (strictly greater than ±tol).
+  if (tol > 0 && abs > tol) return "red";
+
+  // Yellow when outside default ±4mm but still within a looser manual tolerance.
   if (tol > 0) return "yellow";
+
   // If tolerance isn't set, fall back to: green ≤4, yellow >4.
   return "yellow";
 }
@@ -505,13 +530,13 @@ function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showW
            C ${W / 2 + Math.round(740 * DIAGRAM_SCALE)} ${Math.round(860 * DIAGRAM_SCALE)}, ${W / 2 + Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(720 * DIAGRAM_SCALE)}, ${W / 2 + Math.round(1460 * DIAGRAM_SCALE)} ${Math.round(470 * DIAGRAM_SCALE)}
            C ${W / 2 + Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(260 * DIAGRAM_SCALE)}, ${W / 2 + Math.round(740 * DIAGRAM_SCALE)} ${Math.round(88 * DIAGRAM_SCALE)}, ${W / 2} ${Math.round(62 * DIAGRAM_SCALE)}`}
         fill="none"
-        stroke="rgba(255,255,255,0.18)"
+        stroke={theme.wingOutline}
         strokeWidth={Math.max(2, Math.round(4 * DIAGRAM_SCALE))}
       />
     );
   }
 
-  items.push(<line key="center" x1={cx} y1={20} x2={cx} y2={H - 20} stroke="rgba(255,255,255,0.14)" strokeWidth={2} />);
+  items.push(<line key="center" x1={cx} y1={20} x2={cx} y2={H - 20} stroke={theme.wingCenter} strokeWidth={2} />);
 
   for (const b of layout.blocks) {
     const bucketNum = Number(String(b.groupId).match(/(\d+)/)[1] || b.bucketNum || 1);
@@ -737,7 +762,7 @@ function NumInput({ value, onChange, min = -99999, max = 99999, step = 1, width 
         padding: "7px 10px",
         borderRadius: 12,
         border: `1px solid ${theme.border}`,
-        background: "rgba(0,0,0,0.68)",
+        background: theme.bg2,
         color: theme.text,
         outline: "none",
         fontWeight: 900,
@@ -756,7 +781,7 @@ function Select({ value, onChange, options, width = 140 }) {
         padding: "7px 10px",
         borderRadius: 12,
         border: `1px solid ${theme.border}`,
-        background: "rgba(0,0,0,0.80)",
+        background: theme.bg2,
         color: theme.text,
         outline: "none",
         fontWeight: 950,
@@ -805,7 +830,7 @@ function ImportStatusRadio({ loaded, label = "Import status" }) {
   const color = loaded ? theme.good : theme.bad;
   const text = loaded ? "File loaded" : "No file loaded";
   return (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.45)" }}>
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 999, border: `1px solid ${theme.border}`, background: theme.bg2 }}>
       <span style={{ width: 14, height: 14, borderRadius: 999, background: color }} />
       <div style={{ display: "grid", lineHeight: 1.05 }}>
         <span style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>{label}</span>
@@ -1008,6 +1033,16 @@ export default function App() {
   const [includeBrakeBlock, setIncludeBrakeBlock] = useState(true);
   const [showLoopModeCounts, setShowLoopModeCounts] = useState(false);
   const [groupPitchTol, setGroupPitchTol] = useState(4);
+  const [pitchAdvOpen, setPitchAdvOpen] = useState(false);
+  const [pitchAdvEnabled, setPitchAdvEnabled] = useState(false);
+  const [pitchRefRow, setPitchRefRow] = useState("B");
+  const [pitchCompare, setPitchCompare] = useState({ A: true, B: false, C: true, D: true });
+  const [pitchRowCfg, setPitchRowCfg] = useState({
+    A: { groups: [], include: [], exclude: [] },
+    B: { groups: [], include: [], exclude: [] },
+    C: { groups: [], include: [], exclude: [] },
+    D: { groups: [], include: [], exclude: [] },
+  });
   const [autoLoopStatus, setAutoLoopStatus] = useState(null); // "factory" | "minimal" | null
   const [autoDecision, setAutoDecision] = useState(null); // { mode, corr, loopChangeCount, outliers, maxOver } | null
 
@@ -1115,6 +1150,18 @@ export default function App() {
     setDiagramZoom(1.0);
     setDiagramWingOutline(true);
     setDiagramCompact(false);
+
+    // Advanced pitch config (UI only)
+    setPitchAdvOpen(false);
+    setPitchAdvEnabled(false);
+    setPitchRefRow("B");
+    setPitchCompare({ A: true, B: false, C: true, D: true });
+    setPitchRowCfg({
+      A: { groups: [], include: [], exclude: [] },
+      B: { groups: [], include: [], exclude: [] },
+      C: { groups: [], include: [], exclude: [] },
+      D: { groups: [], include: [], exclude: [] },
+    });
 
     setDefaultMappingSnapshot(null);
     setProfileName("");
@@ -1608,11 +1655,72 @@ var abcAverages = useMemo(() => {
   return out;
 }, [step4LineRows]);
 
+
+var pitchAverages = useMemo(() => {
+  if (!pitchAdvEnabled) return abcAverages;
+
+  const effectiveIds = (rowLetter) => {
+    const cfg = pitchRowCfg && pitchRowCfg[rowLetter] ? pitchRowCfg[rowLetter] : { groups: [], include: [], exclude: [] };
+    const groups = Array.isArray(cfg.groups) ? cfg.groups : [];
+    const include = Array.isArray(cfg.include) ? cfg.include : [];
+    const exclude = Array.isArray(cfg.exclude) ? cfg.exclude : [];
+
+    const hasAny = groups.length || include.length || exclude.length;
+
+    const out = [];
+    for (const r of step4LineRows) {
+      if (r.letter !== rowLetter) continue;
+      const idx = r.idx == null ? null : Number(r.idx);
+      if (!Number.isFinite(idx)) continue;
+      const side = r.side;
+      if (side !== "L" && side !== "R") continue;
+      const lineId = `${rowLetter}${idx}${side}`;
+      if (exclude.includes(lineId)) continue;
+
+      if (!hasAny) {
+        out.push(lineId);
+        continue;
+      }
+
+      const g = lineToGroup && lineToGroup[lineId] ? String(lineToGroup[lineId]) : "";
+      if ((g && groups.includes(g)) || include.includes(lineId)) out.push(lineId);
+    }
+    return out;
+  };
+
+  const letters = ["A", "B", "C", "D"];
+  const out = {};
+  for (const L of letters) {
+    out[L] = { L: { avg: null, n: 0 }, R: { avg: null, n: 0 }, sym: null };
+    const ids = new Set(effectiveIds(L));
+    for (const side of ["L", "R"]) {
+      const vals = step4LineRows
+        .filter((r) => r.letter === L && r.side === side && Number.isFinite(r.delta))
+        .filter((r) => {
+          const idx = r.idx == null ? null : Number(r.idx);
+          if (!Number.isFinite(idx)) return false;
+          const lineId = `${L}${idx}${side}`;
+          return ids.has(lineId);
+        })
+        .map((r) => Number(r.delta));
+      const n = vals.length;
+      const avg = n ? vals.reduce((a, b) => a + b, 0) / n : null;
+      out[L][side] = { avg, n };
+    }
+    const aL = out[L].L.avg;
+    const aR = out[L].R.avg;
+    out[L].sym = Number.isFinite(aL) && Number.isFinite(aR) ? aL - aR : null;
+  }
+  return out;
+}, [pitchAdvEnabled, pitchRowCfg, step4LineRows, abcAverages, lineToGroup]);
+
+
+
 const pitchStats = useMemo(() => {
   // "Pitch" here is derived from relative front-to-rear group deltas (After Δ vs nominal).
   // Larger + values generally indicate the front groups (A/B) are longer relative to rear (C/D) -> lower AoA / faster trim.
   const getAvg = (letter, side) => {
-    const g = abcAverages && abcAverages[letter] ? abcAverages[letter] : null;
+    const g = pitchAverages && pitchAverages[letter] ? pitchAverages[letter] : null;
     const s = g && g[side] ? g[side] : null;
     const v = s && Number.isFinite(Number(s.avg)) ? Number(s.avg) : null;
     return v;
@@ -1652,11 +1760,44 @@ const pitchStats = useMemo(() => {
     rows: [A, B, C, D],
     pitchWhole,
     segments: { AB: seg(A, B), BC: seg(B, C), CD: seg(C, D) },
-    comparisons: { AvB: seg(A, B), CvB: seg(C, B), DvB: seg(D, B) },
+    comparisons: (() => {
+      const refRow = pitchAdvEnabled ? pitchRefRow : "B";
+      const flags = pitchAdvEnabled ? pitchCompare : { A: true, B: false, C: true, D: true };
+      const out = {};
+      for (const k of ["A", "B", "C", "D"]) {
+        if (!flags || !flags[k]) continue;
+        if (k === refRow) continue;
+        out[`${k}v${refRow}`] = seg(row(k), row(refRow));
+      }
+      // Back-compat keys when factory mode is used
+      if (!pitchAdvEnabled || refRow === "B") {
+        out.AvB = seg(A, B);
+        out.CvB = seg(C, B);
+        out.DvB = seg(D, B);
+      }
+      return out;
+    })(),
+    comparisonsList: (() => {
+      const refRow = pitchAdvEnabled ? pitchRefRow : "B";
+      const flags = pitchAdvEnabled ? pitchCompare : { A: true, B: false, C: true, D: true };
+      const out = [];
+      for (const k of ["A", "B", "C", "D"]) {
+        if (!flags || !flags[k]) continue;
+        if (k === refRow) continue;
+        out.push({ key: `${k}v${refRow}`, label: `${k} − ${refRow}`, v: seg(row(k), row(refRow)) });
+      }
+      // Factory default fallback if none selected
+      if (!out.length && (!pitchAdvEnabled || refRow === "B")) {
+        out.push({ key: "AvB", label: "A − B", v: seg(A, B) });
+        out.push({ key: "CvB", label: "C − B", v: seg(C, B) });
+        out.push({ key: "DvB", label: "D − B", v: seg(D, B) });
+      }
+      return out;
+    })(),
     front,
     rear,
   };
-}, [abcAverages]);
+}, [pitchAverages, pitchAdvEnabled, pitchRefRow, pitchCompare]);
 
 
 
@@ -2355,7 +2496,7 @@ function setRange(letter, bucket, field, value) {
               padding: "7px 9px",
               borderRadius: 12,
               border: `1px solid ${theme.border}`,
-              background: "rgba(0,0,0,0.68)",
+              background: theme.bg2,
               color: theme.text,
               outline: "none",
               fontWeight: 950,
@@ -2964,7 +3105,7 @@ function setRange(letter, bucket, field, value) {
                         value={profileName}
                         onChange={(e) => setProfileName(e.target.value)}
                         placeholder="Profile file name…"
-                        style={{ width: 240, padding: "7px 10px", borderRadius: 12, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.68)", color: theme.text, outline: "none", fontWeight: 900, fontSize: 14 }}
+                        style={{ width: 240, padding: "7px 10px", borderRadius: 12, border: `1px solid ${theme.border}`, background: theme.bg2, color: theme.text, outline: "none", fontWeight: 900, fontSize: 14 }}
                       />
                       <button style={Object.assign({}, topBtn, { background: "rgba(59,130,246,0.20)" })} onClick={exportWingProfileJSON}>
                         Export JSON
@@ -3162,25 +3303,49 @@ function setRange(letter, bucket, field, value) {
                             ref={baselineBoxRef}
                             style={{
                               marginTop: 10,
-                              overflowX: "hidden",
+                              height: 360,
+                              overflow: "scroll",
+                              scrollbarGutter: "stable both-edges",
                               border: `2px solid rgba(255,255,255,0.18)`,
                               borderRadius: 18,
                               width: "100%",
                               maxWidth: "100%",
                               minWidth: 0,
                               background: "rgba(0,0,0,0.34)",
+                              display: "flex",
+                              justifyContent: "center",
+                              alignItems: "center",
                             }}
                           >
                             <div
                               ref={baselineInnerRef}
                               style={{
                                 padding: 8,
+                                position: "relative",
                                 minWidth: 0,
                                 transform: `scale(${baselineZoom})`,
                                 transformOrigin: "top left",
                                 display: "inline-block",
                               }}
                             >
+                              {diagramWingOutline ? (
+                                <svg
+                                  width={DIAGRAM_W}
+                                  height={DIAGRAM_H}
+                                  viewBox={`0 0 ${DIAGRAM_W} ${DIAGRAM_H}`}
+                                  style={{ position: "absolute", inset: 0, pointerEvents: "none", opacity: 0.9 }}
+                                >
+                                  <path
+                                    d={`M ${DIAGRAM_W / 2} ${Math.round(62 * DIAGRAM_SCALE)} C ${DIAGRAM_W / 2 - Math.round(740 * DIAGRAM_SCALE)} ${Math.round(88 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 - Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(260 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 - Math.round(1460 * DIAGRAM_SCALE)} ${Math.round(470 * DIAGRAM_SCALE)} C ${DIAGRAM_W / 2 - Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(720 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 - Math.round(740 * DIAGRAM_SCALE)} ${Math.round(860 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2} ${Math.round(900 * DIAGRAM_SCALE)} C ${DIAGRAM_W / 2 + Math.round(740 * DIAGRAM_SCALE)} ${Math.round(860 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 + Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(720 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 + Math.round(1460 * DIAGRAM_SCALE)} ${Math.round(470 * DIAGRAM_SCALE)} C ${DIAGRAM_W / 2 + Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(260 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 + Math.round(740 * DIAGRAM_SCALE)} ${Math.round(88 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2} ${Math.round(62 * DIAGRAM_SCALE)}`}
+                                    fill="none"
+                                    stroke={theme.wingOutline}
+                                    strokeWidth={Math.max(2, Math.round(4 * DIAGRAM_SCALE))}
+                                  />
+                                  <line x1={DIAGRAM_W / 2} y1={20} x2={DIAGRAM_W / 2} y2={DIAGRAM_H - 20} stroke={theme.wingCenter} strokeWidth={2} />
+                                </svg>
+                              ) : null}
+
+                      >
                               {(() => {
                                 // Build row prefixes (AR, BR, CR, DR, ...) from groupsInUse
                                 const rowPrefixSet = {};
@@ -3217,7 +3382,7 @@ function setRange(letter, bucket, field, value) {
                                   justifyContent: "center",
                                   borderRadius: 999,
                                   border: `1px solid ${theme.border}`,
-                                  background: "rgba(255,255,255,0.06)",
+                                  background: theme.bg2,
                                   fontWeight: 950,
                                   opacity: 0.9,
                                   padding: "0 12px",
@@ -3227,7 +3392,7 @@ function setRange(letter, bucket, field, value) {
                                   minWidth: 190,
                                   borderRadius: 16,
                                   padding: 8,
-                                  background: "rgba(255,255,255,0.06)",
+                                  background: theme.bg2,
                                   boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)",
                                 };
 
@@ -3245,11 +3410,11 @@ function setRange(letter, bucket, field, value) {
                                 const mmStyle = { fontSize: 12, fontWeight: 950, opacity: 0.85 };
 
                                 return (
-                                  <div style={{ display: "grid", gap: diagramCompact ? 8 : 12 }}>
+                                  <div style={{ display: "grid", gap: diagramCompact ? 8 : 12, justifyItems: "center" }}>
                                     {prefixes.map((prefix) => {
                                       const letter = String(prefix || "").charAt(0).toUpperCase() || "A";
                                       return (
-                                        <div key={prefix} style={{ display: "flex", gap: diagramCompact ? 8 : 12, alignItems: "flex-start", flexWrap: "nowrap" }}>
+                                        <div key={prefix} style={{ display: "flex", gap: diagramCompact ? 8 : 12, alignItems: "flex-start", flexWrap: "nowrap", justifyContent: "center" }}>
                                           <div style={{ display: "flex", gap: diagramCompact ? 8 : 12, alignItems: "flex-start", flexWrap: "nowrap" }}>
                                             {leftOrder.map((n) => {
                                               const gid = `${prefix}${n}L`;
@@ -3377,7 +3542,7 @@ function setRange(letter, bucket, field, value) {
                                 max={99}
                                 value={Number(loopSizes[lt] || 0)}
                                 onChange={(e) => setLoopSizes((prev) => ({ ...(prev || {}), [lt]: Number(e.target.value || 0) }))}
-                                style={{ width: 46, padding: "6px 6px", borderRadius: 8, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.45)", color: theme.text, fontWeight: 900, textAlign: "center" }}
+                                style={{ width: 46, padding: "6px 6px", borderRadius: 8, border: `1px solid ${theme.border}`, background: theme.bg2, color: theme.text, fontWeight: 900, textAlign: "center" }}
                               />
                             </div>
                           ))}
@@ -3659,7 +3824,7 @@ function setRange(letter, bucket, field, value) {
                         marginTop: 10,
                         width: "100%",
                         border: "1px solid rgba(255,220,80,0.55)",
-                        background: "rgba(0,0,0,0.45)",
+                        background: theme.bg2,
                         color: "rgba(255,220,80,0.95)",
                         borderRadius: 999,
                         padding: "8px 10px",
@@ -3681,7 +3846,7 @@ function setRange(letter, bucket, field, value) {
                           marginTop: 0,
                           width: "100%",
                           border: "1px solid rgba(96,165,250,0.65)",
-                          background: "rgba(0,0,0,0.45)",
+                          background: theme.bg2,
                           color: "rgba(147,197,253,0.95)",
                           borderRadius: 999,
                           padding: "8px 10px",
@@ -3702,7 +3867,7 @@ function setRange(letter, bucket, field, value) {
                           marginTop: 0,
                           width: "100%",
                           border: "1px solid rgba(96,165,250,0.65)",
-                          background: "rgba(0,0,0,0.45)",
+                          background: theme.bg2,
                           color: "rgba(147,197,253,0.95)",
                           borderRadius: 999,
                           padding: "8px 10px",
@@ -3730,11 +3895,11 @@ function setRange(letter, bucket, field, value) {
                           </tr>
                         </thead>
                         <tbody>
-                          {[
+                          {(pitchStats && pitchStats.comparisonsList ? pitchStats.comparisonsList : [
                             { key: "avb", label: "A − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.AvB : null },
                             { key: "cvb", label: "C − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.CvB : null },
                             { key: "dvb", label: "D − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.DvB : null },
-                          ].map((row) => {
+                          ]).map((row) => {
                             const f1 = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Number(n).toFixed(1));
                             const vL = row.v ? row.v.L : null;
                             const vR = row.v ? row.v.R : null;
@@ -4185,7 +4350,7 @@ function setRange(letter, bucket, field, value) {
 
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
       <button
-        style={Object.assign({}, topBtn, { background: "rgba(255,255,255,0.06)" })}
+        style={Object.assign({}, topBtn, { background: theme.bg2 })}
         onClick={async () => {
           try {
             const payload = { schema: "abc-loop-suggestions-v1", exportedAt: new Date().toISOString(), wing: { make: meta.make || "", model: meta.model || "" }, suggestions: abcSuggestions, averages: abcAverages };
@@ -4207,6 +4372,430 @@ function setRange(letter, bucket, field, value) {
     </div>
   </div>
 
+  
+  <div style={{ marginTop: 10 }}>
+    <div
+      style={{
+        border: `1px solid ${theme.border}`,
+        borderRadius: 16,
+        background: theme.panel2,
+        padding: 10,
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => setPitchAdvOpen((v) => !v)}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          border: "none",
+          background: "transparent",
+          color: theme.text,
+          cursor: "pointer",
+          padding: 0,
+        }}
+      >
+        <div>
+          <div style={{ fontWeight: 950 }}>Advanced</div>
+          <div style={{ opacity: 0.78, fontSize: 12, marginTop: 4 }}>Pitch configuration (rows, groups, and lines)</div>
+        </div>
+        <div style={{ opacity: 0.85, fontWeight: 950 }}>{pitchAdvOpen ? "▾" : "▸"}</div>
+      </button>
+
+      {pitchAdvOpen ? (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${theme.border}` }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <div style={{ fontWeight: 950, fontSize: 13, opacity: 0.9 }}>Reference row</div>
+              <select
+                value={pitchRefRow}
+                onChange={(e) => setPitchRefRow(e.target.value)}
+                style={{
+                  borderRadius: 12,
+                  border: `1px solid ${theme.border}`,
+                  background: "rgba(0,0,0,0.35)",
+                  color: theme.text,
+                  padding: "8px 10px",
+                  outline: "none",
+                  fontWeight: 950,
+                }}
+              >
+                {["A", "B", "C", "D"].map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button
+                type="button"
+                onClick={() => setPitchAdvEnabled((v) => !v)}
+                style={{
+                  borderRadius: 999,
+                  border: pitchAdvEnabled
+                    ? "1px solid rgba(34,197,94,0.9)"   // bright green when enabled
+                    : "1px solid rgba(250,204,21,0.9)", // yellow when disabled
+                  background: pitchAdvEnabled
+                    ? "rgba(34,197,94,0.22)"
+                    : "rgba(0,0,0,0.35)",
+                  color: theme.text,
+                  padding: "7px 10px",
+                  fontWeight: 950,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                  fontSize: 12,
+                }}
+                title="When disabled, the app uses the standard pitch calculation (factory defaults)."
+              >
+                {pitchAdvEnabled ? "Enabled" : "Disabled"}
+              </button>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              {["A", "B", "C", "D"].map((r) => {
+                const disabled = r === pitchRefRow;
+                const checked = !!pitchCompare[r];
+                return (
+                  <button
+                    key={r}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => !disabled && setPitchCompare((p) => ({ ...p, [r]: !p[r] }))}
+                    style={{
+                      borderRadius: 999,
+                      border: `1px solid ${theme.border}`,
+                      background: disabled ? "rgba(255,255,255,0.04)" : checked ? "rgba(59,130,246,0.22)" : "rgba(0,0,0,0.35)",
+                      color: disabled ? "rgba(170,177,195,0.45)" : theme.text,
+                      padding: "7px 10px",
+                      fontWeight: 950,
+                      cursor: disabled ? "not-allowed" : "pointer",
+                      whiteSpace: "nowrap",
+                      fontSize: 12,
+                    }}
+                    title={disabled ? "Reference row cannot be compared to itself" : "Toggle comparison"}
+                  >
+                    {r} − {pitchRefRow}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.78 }}>
+            Select which groups and individual lines are included in each row aggregation. Exclusions override group inclusion.
+            <span style={{ marginLeft: 8, opacity: 0.9 }}>Enable to apply these selections.</span>
+          <datalist id="pitchAllLines">
+            {(() => {
+              const out = [];
+              for (const r of wideRows || []) {
+                const letter = String(r.letter || "").toUpperCase();
+                const idx = r.idx == null ? null : Number(r.idx);
+                if (!letter || !Number.isFinite(idx)) continue;
+                const base = `${letter}${idx}`;
+                out.push(`${base}L`);
+                out.push(`${base}R`);
+              }
+              const seen = new Set();
+              const uniq = [];
+              for (const x of out) if (!seen.has(x)) { seen.add(x); uniq.push(x); }
+              uniq.sort((a, b) => a.localeCompare(b));
+              return uniq.map((id) => <option key={id} value={id} />);
+            })()}
+          </datalist>
+
+          </div>
+
+          <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+            {["A", "B", "C", "D"].map((row) => {
+              const cfg = pitchRowCfg[row] || { groups: [], include: [], exclude: [] };
+              return (
+                <div key={row} style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: "rgba(0,0,0,0.22)", padding: 10 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div style={{ fontWeight: 950 }}>Row {row}</div>
+                    <div style={{ fontSize: 12, opacity: 0.78 }}>
+                      Groups: {cfg.groups.length} • Included lines: {cfg.include.length} • Excluded: {cfg.exclude.length}
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+                    <div>
+                      <div style={{ fontWeight: 900, fontSize: 12, opacity: 0.9, marginBottom: 6 }}>Included groups</div>
+                      <div style={{ fontSize: 12, opacity: 0.72, marginBottom: 8 }}>Suggested (from current mapping)</div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                        {(() => {
+                          const prefix = String(prefixByLetter[row] || "");
+                          const vals = Object.values(lineToGroup || {}).filter((v) => v && String(v).startsWith(prefix));
+                          const seen = new Set();
+                          const uniq = [];
+                          for (const v of vals) { const s = String(v); if (!seen.has(s)) { seen.add(s); uniq.push(s); } }
+                          uniq.sort();
+                          return uniq.slice(0, 12).map((g) => (
+                            <button
+                              key={g}
+                              type="button"
+                              onClick={() => setPitchRowCfg((p) => ({ ...p, [row]: { ...cfg, groups: cfg.groups.includes(g) ? cfg.groups : [...cfg.groups, g] } }))}
+                              style={{
+                                borderRadius: 999,
+                                border: `1px solid ${theme.border}`,
+                                background: theme.bg2,
+                                color: theme.text,
+                                padding: "6px 10px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                                fontSize: 12,
+                              }}
+                              title="Add suggested group"
+                            >
+                              {g}
+                            </button>
+                          ));
+                        })()}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                        <input
+                          value={cfg._groupDraft || ""}
+                          onChange={(e) =>
+                            setPitchRowCfg((p) => ({
+                              ...p,
+                              [row]: { ...cfg, _groupDraft: e.target.value },
+                            }))
+                          }
+                          placeholder="Add group…"
+                          list={`pitchGroups_${row}`}
+                          style={{
+                            borderRadius: 12,
+                            border: `1px solid ${theme.border}`,
+                            background: "rgba(0,0,0,0.35)",
+                            color: theme.text,
+                            padding: "8px 10px",
+                            outline: "none",
+                            fontWeight: 900,
+                            fontSize: 12,
+                            width: 220,
+                            maxWidth: "100%",
+                          }}
+                        />
+                        <datalist id={`pitchGroups_${row}`}>
+                          {(() => {
+                            const prefix = String(prefixByLetter[row] || "");
+                            const count = Number(groupCountByLetter[row] || 0);
+                            const out = [];
+                            for (const side of ["L", "R"]) {
+                              for (let b = 1; b <= count; b++) out.push(`${prefix}${b}${side}`);
+                            }
+                            return out.sort().map((g) => <option key={g} value={g} />);
+                          })()}
+                        </datalist>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const v = String(cfg._groupDraft || "").trim();
+                            if (!v) return;
+                            setPitchRowCfg((p) => ({
+                              ...p,
+                              [row]: { ...cfg, groups: cfg.groups.includes(v) ? cfg.groups : [...cfg.groups, v], _groupDraft: "" },
+                            }));
+                          }}
+                          style={{
+                            borderRadius: 999,
+                            border: `1px solid ${theme.border}`,
+                            background: theme.bg2,
+                            color: theme.text,
+                            padding: "8px 10px",
+                            fontWeight: 950,
+                            cursor: "pointer",
+                            fontSize: 12,
+                          }}
+                        >
+                          Add group
+                        </button>
+
+                        {cfg.groups.map((g) => (
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={() => setPitchRowCfg((p) => ({ ...p, [row]: { ...cfg, groups: cfg.groups.filter((x) => x !== g) } }))}
+                            style={{
+                              borderRadius: 999,
+                              border: `1px solid ${theme.border}`,
+                              background: "rgba(59,130,246,0.14)",
+                              color: theme.text,
+                              padding: "6px 10px",
+                              fontWeight: 950,
+                              cursor: "pointer",
+                              fontSize: 12,
+                            }}
+                            title="Remove group"
+                          >
+                            {g} ×
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontWeight: 900, fontSize: 12, opacity: 0.9, marginBottom: 6 }}>Include individual lines</div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                        <input
+                          value={cfg._lineDraft || ""}
+                          onChange={(e) =>
+                            setPitchRowCfg((p) => ({
+                              ...p,
+                              [row]: { ...cfg, _lineDraft: e.target.value },
+                            }))
+                          }
+                          placeholder="Add line…"
+                          list="pitchAllLines"
+                          style={{
+                            borderRadius: 12,
+                            border: `1px solid ${theme.border}`,
+                            background: "rgba(0,0,0,0.35)",
+                            color: theme.text,
+                            padding: "8px 10px",
+                            outline: "none",
+                            fontWeight: 900,
+                            fontSize: 12,
+                            width: 220,
+                            maxWidth: "100%",
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const v = String(cfg._lineDraft || "").trim();
+                            if (!v) return;
+                            setPitchRowCfg((p) => ({
+                              ...p,
+                              [row]: { ...cfg, include: cfg.include.includes(v) ? cfg.include : [...cfg.include, v], _lineDraft: "" },
+                            }));
+                          }}
+                          style={{
+                            borderRadius: 999,
+                            border: `1px solid ${theme.border}`,
+                            background: theme.bg2,
+                            color: theme.text,
+                            padding: "8px 10px",
+                            fontWeight: 950,
+                            cursor: "pointer",
+                            fontSize: 12,
+                          }}
+                        >
+                          Add line
+                        </button>
+
+                        {cfg.include.map((id) => (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => setPitchRowCfg((p) => ({ ...p, [row]: { ...cfg, include: cfg.include.filter((x) => x !== id) } }))}
+                            style={{
+                              borderRadius: 999,
+                              border: `1px solid ${theme.border}`,
+                              background: "rgba(34,197,94,0.14)",
+                              color: theme.text,
+                              padding: "6px 10px",
+                              fontWeight: 950,
+                              cursor: "pointer",
+                              fontSize: 12,
+                            }}
+                            title="Remove included line"
+                          >
+                            {id} ×
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontWeight: 900, fontSize: 12, opacity: 0.9, marginBottom: 6 }}>Exclude lines (override)</div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                        <input
+                          value={cfg._exDraft || ""}
+                          onChange={(e) =>
+                            setPitchRowCfg((p) => ({
+                              ...p,
+                              [row]: { ...cfg, _exDraft: e.target.value },
+                            }))
+                          }
+                          placeholder="Exclude line…"
+                          list="pitchAllLines"
+                          style={{
+                            borderRadius: 12,
+                            border: `1px solid ${theme.border}`,
+                            background: "rgba(0,0,0,0.35)",
+                            color: theme.text,
+                            padding: "8px 10px",
+                            outline: "none",
+                            fontWeight: 900,
+                            fontSize: 12,
+                            width: 220,
+                            maxWidth: "100%",
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const v = String(cfg._exDraft || "").trim();
+                            if (!v) return;
+                            setPitchRowCfg((p) => ({
+                              ...p,
+                              [row]: { ...cfg, exclude: cfg.exclude.includes(v) ? cfg.exclude : [...cfg.exclude, v], _exDraft: "" },
+                            }));
+                          }}
+                          style={{
+                            borderRadius: 999,
+                            border: `1px solid ${theme.border}`,
+                            background: theme.bg2,
+                            color: theme.text,
+                            padding: "8px 10px",
+                            fontWeight: 950,
+                            cursor: "pointer",
+                            fontSize: 12,
+                          }}
+                        >
+                          Exclude
+                        </button>
+
+                        {cfg.exclude.map((id) => (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => setPitchRowCfg((p) => ({ ...p, [row]: { ...cfg, exclude: cfg.exclude.filter((x) => x !== id) } }))}
+                            style={{
+                              borderRadius: 999,
+                              border: `1px solid ${theme.border}`,
+                              background: "rgba(250,204,21,0.12)",
+                              color: theme.text,
+                              padding: "6px 10px",
+                              fontWeight: 950,
+                              cursor: "pointer",
+                              fontSize: 12,
+                            }}
+                            title="Remove excluded line"
+                          >
+                            {id} ×
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  </div>
+
+
   <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
     {/* Averages */}
     
@@ -4220,7 +4809,7 @@ function setRange(letter, bucket, field, value) {
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <button
             type="button"
-            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.06)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
+            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: theme.bg2, color: theme.text, fontWeight: 950, cursor: "pointer" }}
             onClick={() => applyAutoLoopPlan("factory")}
             title="Choose the closest achievable loop configuration using discrete loops (no fine-adjust)."
           >
@@ -4229,7 +4818,7 @@ function setRange(letter, bucket, field, value) {
 
           <button
             type="button"
-            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.06)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
+            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: theme.bg2, color: theme.text, fontWeight: 950, cursor: "pointer" }}
             onClick={() => applyAutoLoopPlan("minimal")}
             title="Bring the wing within tolerance with the least loop change, using discrete loops only (no fine-adjust)."
           >
@@ -4666,7 +5255,7 @@ function setRange(letter, bucket, field, value) {
                         <span style={{ opacity: 0.7 }}>—</span>
                       ) : (
                         entries.map(([lt, c]) => (
-                          <span key={`${L}-${side}-${lt}`} style={{ padding: "3px 8px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.06)", fontWeight: 950, fontSize: 12 }}>
+                          <span key={`${L}-${side}-${lt}`} style={{ padding: "3px 8px", borderRadius: 999, border: `1px solid ${theme.border}`, background: theme.bg2, fontWeight: 950, fontSize: 12 }}>
                             {lt}: {c}
                           </span>
                         ))
@@ -5347,7 +5936,7 @@ function groupBands(letter, side) {
                               justifyContent: "center",
                               borderRadius: 999,
                               border: "1px solid rgba(255,220,80,0.55)",
-                              background: "rgba(0,0,0,0.45)",
+                              background: theme.bg2,
                               boxSizing: "border-box",
                             }}
                             title={titleText}
@@ -5765,7 +6354,7 @@ function DeltaLineChart({ title, points, tolerance, height = 240 }) {
           ))}
           {/* Axis */}
           <line x1={pad.l} x2={w - pad.r} y1={yScale(0)} y2={yScale(0)} stroke="rgba(255,255,255,0.22)" strokeWidth={1} />
-          <line x1={pad.l} x2={pad.l} y1={pad.t} y2={height - pad.b} stroke="rgba(255,255,255,0.18)" strokeWidth={1} />
+          <line x1={pad.l} x2={pad.l} y1={pad.t} y2={height - pad.b} stroke={theme.wingOutline} strokeWidth={1} />
 
           {/* Tolerance bands */}
           {safeTol > 0 ? (
@@ -5883,7 +6472,7 @@ function WingProfileChart({ groupStats, tolerance, height = 260 }) {
         <svg viewBox={`0 0 ${w} ${height}`} style={{ width: "100%", height: "auto", display: "block" }}>
           {/* Axis */}
           <line x1={pad.l} x2={w - pad.r} y1={yScale(0)} y2={yScale(0)} stroke="rgba(255,255,255,0.22)" strokeWidth={1} />
-          <line x1={pad.l} x2={pad.l} y1={pad.t} y2={height - pad.b} stroke="rgba(255,255,255,0.18)" strokeWidth={1} />
+          <line x1={pad.l} x2={pad.l} y1={pad.t} y2={height - pad.b} stroke={theme.wingOutline} strokeWidth={1} />
 
           {/* Bands */}
           {safeTol > 0 ? (
