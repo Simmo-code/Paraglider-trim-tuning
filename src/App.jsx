@@ -1083,7 +1083,7 @@ export default function App() {
   const diagramBoxRef = useRef(null);
 
   // Step 3 baseline (installed loops by group) view controls (cosmetic only)
-  const [baselineZoom, setBaselineZoom] = useState(1.0);
+  const [baselineZoom, setBaselineZoom] = useState(0.65);
   const baselineBoxRef = useRef(null);
   const baselineInnerRef = useRef(null);
 
@@ -2382,11 +2382,34 @@ function setRange(letter, bucket, field, value) {
     const outer = baselineBoxRef.current;
     const inner = baselineInnerRef.current;
     if (!outer || !inner) return;
-    const available = Math.max(320, outer.clientWidth - 24);
+    const availableW = Math.max(320, outer.clientWidth - 24);
+    const availableH = Math.max(240, outer.clientHeight - 24);
     const contentW = Math.max(1, inner.scrollWidth || inner.clientWidth || 1);
-    const z = clamp(available / contentW, 0.4, 2.0);
+    const contentH = Math.max(1, inner.scrollHeight || inner.clientHeight || 1);
+    const z = clamp(Math.min(availableW / contentW, availableH / contentH), 0.4, 2.0);
     setBaselineZoom(Number(z.toFixed(2)));
   }
+  useEffect(() => {
+    if (step !== 3) return;
+
+    // Default baseline view on entry: 65% zoom and scroll positioned so buckets are visible.
+    setBaselineZoom(0.65);
+
+    const t = setTimeout(() => {
+      const el = baselineBoxRef.current;
+      if (!el) return;
+
+      // Center horizontally; start at top vertically.
+ const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+const maxTop  = Math.max(0, el.scrollHeight - el.clientHeight);
+
+el.scrollLeft = Math.round(maxLeft / 2) - 585;
+el.scrollTop  = Math.round(maxTop / 2) - 60;
+
+    }, 80);
+
+    return () => clearTimeout(t);
+  }, [step, diagramWingOutline, diagramCompact]);
   useEffect(() => {
     if (step !== 3) return;
     const t = setTimeout(() => fitDiagramToScreen(), 80);
@@ -3310,7 +3333,8 @@ function setRange(letter, bucket, field, value) {
                             style={{
                               marginTop: 10,
                               height: 360,
-                              overflow: "scroll",
+                              overflowX: "auto",
+                              overflowY: "scroll",
                               scrollbarGutter: "stable both-edges",
                               border: `2px solid rgba(255,255,255,0.18)`,
                               borderRadius: 18,
@@ -3319,8 +3343,13 @@ function setRange(letter, bucket, field, value) {
                               minWidth: 0,
                               background: "rgba(0,0,0,0.34)",
                               display: "flex",
-                              justifyContent: "center",
-                              alignItems: "center",
+                              justifyContent: "flex-start",
+                              alignItems: "flex-start",
+                              paddingTop: 240,
+                              paddingBottom: 80,
+                              paddingLeft: 80,
+                              paddingRight: 80,
+                              boxSizing: "border-box",
                             }}
                           >
                             <div
@@ -3328,7 +3357,9 @@ function setRange(letter, bucket, field, value) {
                               style={{
                                 padding: 8,
                                 position: "relative",
-                                minWidth: 0,
+                                width: DIAGRAM_W + 1200,
+                                height: DIAGRAM_H,
+                                minWidth: DIAGRAM_W + 1200,
                                 transform: `scale(${baselineZoom})`,
                                 transformOrigin: "top left",
                                 display: "inline-block",
@@ -3339,7 +3370,7 @@ function setRange(letter, bucket, field, value) {
                                   width={DIAGRAM_W}
                                   height={DIAGRAM_H}
                                   viewBox={`0 0 ${DIAGRAM_W} ${DIAGRAM_H}`}
-                                  style={{ position: "absolute", inset: 0, pointerEvents: "none", opacity: 0.9 }}
+                                  style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%) scale(0.529)", transformOrigin: "center", pointerEvents: "none", opacity: 0.9 }}
                                 >
                                   <path
                                     d={`M ${DIAGRAM_W / 2} ${Math.round(62 * DIAGRAM_SCALE)} C ${DIAGRAM_W / 2 - Math.round(740 * DIAGRAM_SCALE)} ${Math.round(88 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 - Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(260 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 - Math.round(1460 * DIAGRAM_SCALE)} ${Math.round(470 * DIAGRAM_SCALE)} C ${DIAGRAM_W / 2 - Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(720 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 - Math.round(740 * DIAGRAM_SCALE)} ${Math.round(860 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2} ${Math.round(900 * DIAGRAM_SCALE)} C ${DIAGRAM_W / 2 + Math.round(740 * DIAGRAM_SCALE)} ${Math.round(860 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 + Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(720 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 + Math.round(1460 * DIAGRAM_SCALE)} ${Math.round(470 * DIAGRAM_SCALE)} C ${DIAGRAM_W / 2 + Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(260 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 + Math.round(740 * DIAGRAM_SCALE)} ${Math.round(88 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2} ${Math.round(62 * DIAGRAM_SCALE)}`}
@@ -3351,7 +3382,6 @@ function setRange(letter, bucket, field, value) {
                                 </svg>
                               ) : null}
 
-                      >
                               {(() => {
                                 // Build row prefixes (AR, BR, CR, DR, ...) from groupsInUse
                                 const rowPrefixSet = {};
@@ -3416,7 +3446,7 @@ function setRange(letter, bucket, field, value) {
                                 const mmStyle = { fontSize: 12, fontWeight: 950, opacity: 0.85 };
 
                                 return (
-                                  <div style={{ display: "grid", gap: diagramCompact ? 8 : 12, justifyItems: "center" }}>
+                                  <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)", display: "grid", gap: diagramCompact ? 8 : 12, justifyItems: "center" }}>
                                     {prefixes.map((prefix) => {
                                       const letter = String(prefix || "").charAt(0).toUpperCase() || "A";
                                       return (
