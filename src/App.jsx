@@ -43,21 +43,72 @@ A15,6294,6779,6779,B15,6197,6702,6702,C15,6292,6777,6777,D15,6422,6922,6923
 A16,6264,6749,6749,B16,6165,6670,6671,C16,6262,6748,6748,D16,6389,6887,6887`;
 
 const theme = {
-  bg: "#12151b",
-  panel: "rgba(255,255,255,0.08)",
-  panel2: "rgba(0,0,0,0.22)",
+  bg: "var(--tt-bg)",
+  panel: "var(--tt-panel)",
+  panel2: "var(--tt-panel2)",
   // Shared dark pill background used by StatPill / ControlPill / TogglePill
-  bg2: "rgba(0,0,0,0.22)",
-  border: "rgba(255,255,255,0.14)",
-  text: "rgba(255,255,255,0.92)",
-  textSub: "rgba(170,177,195,0.85)",
-  green: "rgba(34,197,94,0.95)",
-  good: "rgba(34,197,94,0.95)",
-  bad: "rgba(239,68,68,0.95)",
-  warn: "rgba(245,158,11,0.95)",
-  warnBg: "rgba(245,158,11,0.10)",
-  warnStroke: "rgba(245,158,11,0.55)",
+  bg2: "var(--tt-bg2)",
+  border: "var(--tt-border)",
+  text: "var(--tt-text)",
+  textSub: "var(--tt-textSub)",
+  green: "var(--tt-green)",
+  good: "var(--tt-good)",
+  bad: "var(--tt-bad)",
+  warn: "var(--tt-warn)",
+  warnBg: "var(--tt-warnBg)",
+  warnStroke: "var(--tt-warnStroke)",
 };
+
+const THEMES = {
+  dark: {
+    bg: "#12151b",
+    panel: "#1b2230",
+    panel2: "#151b26",
+    bg2: "#151b26",
+    border: "rgba(255,255,255,0.18)",
+    text: "rgba(255,255,255,0.92)",
+    textSub: "rgba(170,177,195,0.85)",
+    green: "rgba(34,197,94,0.95)",
+    good: "rgba(34,197,94,0.95)",
+    bad: "rgba(239,68,68,0.95)",
+    warn: "rgba(245,158,11,0.95)",
+    warnBg: "rgba(245,158,11,0.10)",
+    warnStroke: "rgba(245,158,11,0.55)",
+  },
+  aviation: {
+    bg: "#0f141d",
+    panel: "#182131",
+    panel2: "#121a28",
+    bg2: "#121a28",
+    border: "rgba(210,220,235,0.22)",
+    text: "rgba(245,248,255,0.94)",
+    textSub: "rgba(185,196,214,0.88)",
+    green: "rgba(34,197,94,0.95)",
+    good: "rgba(34,197,94,0.95)",
+    bad: "rgba(239,68,68,0.95)",
+    warn: "rgba(245,158,11,0.95)",
+    warnBg: "rgba(245,158,11,0.10)",
+    warnStroke: "rgba(245,158,11,0.55)",
+  },
+  light: {
+    // intentionally not white: reduced glare
+    bg: "#cfd4dc",
+    panel: "#b9c0cb",
+    panel2: "#b3bac5",
+    bg2: "#b3bac5",
+    border: "#4b5563",
+    text: "#111827",
+    textSub: "#374151",
+    green: "rgba(22,163,74,0.95)",
+    good: "rgba(22,163,74,0.95)",
+    bad: "rgba(220,38,38,0.95)",
+    warn: "rgba(217,119,6,0.95)",
+    warnBg: "rgba(217,119,6,0.10)",
+    warnStroke: "rgba(217,119,6,0.55)",
+  },
+
+};
+
 
 const PALETTE = {
   A: { base: "#1e6eff", s2: "#2d7fff", s3: "#5aa6ff", s4: "#86c4ff" },
@@ -585,7 +636,7 @@ function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showW
   }
 
   return (
-    <div style={{ width: "100%", border: `10px solid ${theme.border}`, borderRadius: 18, background: "rgba(0,0,0,0.38)", overflow: "hidden" }}>
+    <div style={{ width: "100%", border: `1px solid ${theme.border}`, borderRadius: 18, background: theme.panel2, overflow: "hidden" }}>
       <svg
         width="100%"
         viewBox={`0 0 ${W} ${H}`}
@@ -634,7 +685,7 @@ function BlockTable({ title, rows, theme, th, td, showCorrected, tolerance = 10,
   };
 
   return (
-    <div style={{ border: `19px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
+    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
         <div style={{ fontWeight: 950 }}>{title}</div>
         <div style={{ opacity: 0.78, fontSize: 12 }}>
@@ -681,7 +732,7 @@ function BlockTable({ title, rows, theme, th, td, showCorrected, tolerance = 10,
                         const v = Number(e.target.value);
                         setStep4LineCorr((prev) => ({ ...prev, [`${r.lineBase}L`]: Number.isFinite(v) ? v : 0 }));
                       }}
-                      style={{ width: 86, padding: "6px 8px", borderRadius: 10, border: `19px solid ${theme.border}`, background: theme.panel, color: theme.text, outline: "none" }}
+                      style={{ width: 86, padding: "6px 8px", borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.panel, color: theme.text, outline: "none" }}
                     />
                   </td>
                   <td style={td}>{fmt(L.before)}</td>
@@ -697,12 +748,12 @@ function BlockTable({ title, rows, theme, th, td, showCorrected, tolerance = 10,
                         const v = Number(e.target.value);
                         setStep4LineCorr((prev) => ({ ...prev, [`${r.lineBase}R`]: Number.isFinite(v) ? v : 0 }));
                       }}
-                      style={{ width: 86, padding: "6px 8px", borderRadius: 10, border: `19px solid ${theme.border}`, background: theme.panel, color: theme.text, outline: "none" }}
+                      style={{ width: 86, padding: "6px 8px", borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.panel, color: theme.text, outline: "none" }}
                     />
                   </td>
                   <td style={td}>{fmt(R.before)}</td>
                   <td style={td}>{fmt(R.afterVal)}</td>
-                  <td style={Object.assign({}, td, cellStyle(bandFromDelta(R.delta)), { border: "19px solid " + theme.border, color: textColorForBand(bandFromDelta(R.delta)), fontWeight: 900 })}>{fmt(R.delta)}</td>
+                  <td style={Object.assign({}, td, cellStyle(bandFromDelta(R.delta)), { border: "1px solid " + theme.border, color: textColorForBand(bandFromDelta(R.delta)), fontWeight: 900 })}>{fmt(R.delta)}</td>
                 </tr>
               );
             })}
@@ -723,7 +774,7 @@ function BlockTable({ title, rows, theme, th, td, showCorrected, tolerance = 10,
 function Panel({ title, right, children, tint = false }) {
   return (
     <div style={{ border: `1px solid ${theme.border}`, borderRadius: 18, background: tint ? "linear-gradient(180deg, rgba(59,130,246,0.08), rgba(255,255,255,0.04))" : theme.panel, overflow: "visible" }}>
-      <div style={{ padding: "10px 12px", borderBottom: `10px solid ${theme.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", background: "rgba(255,255,255,0.035)" }}>
+      <div style={{ padding: "10px 12px", borderBottom: `1px solid ${theme.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", background: theme.panel2 }}>
         <div style={{ fontWeight: 950, letterSpacing: -0.2, fontSize: 16 }}>{title}</div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>{right}</div>
       </div>
@@ -764,7 +815,7 @@ function Select({ value, onChange, options, width = 140 }) {
         padding: "7px 10px",
         borderRadius: 12,
         border: `1px solid ${theme.border}`,
-        background: "rgba(245, 0, 145, 0.8)",
+        background: "rgba(0,0,0,0.80)",
         color: theme.text,
         outline: "none",
         fontWeight: 950,
@@ -882,7 +933,7 @@ function ControlPill({ label, value, onChange, suffix = "mm", width = 90, step =
         onChange={(e) => onChange(Number(e.target.value || 0))}
         style={{
           width,
-          background: "rgba(245, 0, 145, 0.8)",
+          background: "transparent",
           color: theme.text,
           border: `1px solid ${theme.border}`,
           borderRadius: 12,
@@ -921,7 +972,7 @@ function TogglePill({ label, checked, onChange }) {
           height: 20,
           borderRadius: 999,
           border: `1px solid ${theme.border}`,
-          background: checked ? "rgba(245, 0, 145, 0.8)" : "rgba(148,163,184,0.18)",
+          background: checked ? "rgba(34,197,94,0.35)" : "rgba(148,163,184,0.18)",
           position: "relative",
         }}
       >
@@ -943,7 +994,7 @@ function TogglePill({ label, checked, onChange }) {
 }
 function SegTabs({ value, onChange, tabs }) {
   return (
-    <div style={{ display: "inline-flex", border: `1px solid ${theme.border}`, borderRadius: 14, overflow: "hidden", background: "rgba(245, 0, 145, 0.8)",
+    <div style={{ display: "inline-flex", border: `1px solid ${theme.border}`, borderRadius: 14, overflow: "hidden", background: "rgba(255,255,255,0.16)",
         boxShadow: "inset 0 0 0 2px rgba(250,204,21,0.65)", flexWrap: "wrap" }}>
       {tabs.map((t) => {
         const active = value === t.value;
@@ -989,6 +1040,7 @@ async function readFileText(file) {
 
 export default function App() {
   const [step, setStep] = useState(1);
+  const [themeName, setThemeName] = useState("dark");
 
   // Report (A4 preview) — generated from Step 4 data (no step navigation)
   const [showReport, setShowReport] = useState(false);
@@ -2461,7 +2513,7 @@ function setRange(letter, bucket, field, value) {
           padding: 8,
           borderRadius: 12,
           border: `1px solid ${theme.border}`,
-          background: "rgba(255,255,255,0.03)",
+          background: theme.panel2,
           // snug: avoid fixed widths that can overlap on smaller screens
           width: "fit-content",
           minWidth: 140,
@@ -2479,7 +2531,7 @@ function setRange(letter, bucket, field, value) {
               padding: "7px 9px",
               borderRadius: 12,
               border: `1px solid ${theme.border}`,
-              background: "rgba(245, 0, 145, 0.8)",
+              background: "rgba(0,0,0,0.68)",
               color: theme.text,
               outline: "none",
               fontWeight: 950,
@@ -2497,7 +2549,7 @@ function setRange(letter, bucket, field, value) {
     const r = rangesByLetter[L] || makeDefaultRanges(maxByLetter[L] || 1, count);
 
     return (
-      <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 8, background: "rgba(245, 0, 145, 0.8)" }}>
+      <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 8, background: theme.panel2 }}>
         <div style={{ display: "flex", justifyContent: "flex-start", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <div style={{ fontWeight: 950, fontSize: 14 }}>
             {L} ranges <span style={{ opacity: 0.7, fontWeight: 850 }}>(max {maxByLetter[L] || 0})</span>
@@ -2540,7 +2592,7 @@ function setRange(letter, bucket, field, value) {
                   padding: 8,
                   borderRadius: 12,
                   border: `1px solid ${theme.border}`,
-                  background: "rgba(255,255,255,0.03)",
+                  background: theme.panel2,
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 8, justifySelf: "start" }}>
@@ -2616,7 +2668,7 @@ function setRange(letter, bucket, field, value) {
           width: width || "100%",
           maxWidth: "100%",
           minWidth: 0,
-          background: "rgba(0,0,0,0.34)",
+          background: theme.panel2,
           boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.10)",
         }}
       >
@@ -2656,8 +2708,25 @@ function setRange(letter, bucket, field, value) {
     { value: 4, label: "Step 4 (Trim)" },
   ];
 
+  const activeTheme = THEMES[themeName] || THEMES.dark;
+  const themeVars = {
+    "--tt-bg": activeTheme.bg,
+    "--tt-panel": activeTheme.panel,
+    "--tt-panel2": activeTheme.panel2,
+    "--tt-bg2": activeTheme.bg2,
+    "--tt-border": activeTheme.border,
+    "--tt-text": activeTheme.text,
+    "--tt-textSub": activeTheme.textSub,
+    "--tt-green": activeTheme.green,
+    "--tt-good": activeTheme.good,
+    "--tt-bad": activeTheme.bad,
+    "--tt-warn": activeTheme.warn,
+    "--tt-warnBg": activeTheme.warnBg,
+    "--tt-warnStroke": activeTheme.warnStroke,
+  };
+
   return (
-    <div style={{ minHeight: "100vh", overflowX: "hidden", background: theme.bg, color: theme.text, padding: 16, fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial' }}>
+    <div style={{ ...themeVars, minHeight: "100vh", overflowX: "hidden", background: theme.bg, color: theme.text, padding: 16, fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial' }}>
       {/* scrollbars styling */}
       <style>{`
         .diagramScrollBox { scrollbar-width: auto; scrollbar-color: rgba(255,255,255,0.55) rgba(0,0,0,0.35); }
@@ -2676,7 +2745,7 @@ function setRange(letter, bucket, field, value) {
       {/* reduced overall width to match overrides panel */}
       <div style={step !== 4 ? { width: "100%", maxWidth: 920, margin: "0 auto", paddingLeft: 12, paddingRight: 12, display: "grid", gap: 10 } : { width: "100%", maxWidth: 1600, margin: "0 auto", paddingLeft: 12, paddingRight: 12, display: "grid", gap: 10 }}>
         {/* Header */}
-        <div style={{ border: `10px solid ${theme.border}`, borderRadius: 22, padding: 14, background: "linear-gradient(180deg, rgba(59,130,246,0.16), rgba(255,255,255,0.03))" }}>
+        <div style={{ border: `1px solid ${theme.border}`, borderRadius: 22, padding: 14, background: "linear-gradient(180deg, rgba(59,130,246,0.16), rgba(255,255,255,0.03))" }}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 36, fontWeight: 950, letterSpacing: -0.9 }}>Paraglider Trim Tuning</div>
@@ -2709,6 +2778,18 @@ function setRange(letter, bucket, field, value) {
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
               <button style={Object.assign({}, topBtn, { opacity: 0, padding: "2px 6px", fontSize: 10, minHeight: 0 })} onClick={() => setStep(2)}>← Back to Step 2</button>
               <ImportStatusRadio loaded={loaded} />
+              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                {Object.keys(THEMES).map((k) => (
+                  <button
+                    key={k}
+                    style={k === themeName ? topBtnActive : topBtn}
+                    onClick={() => setThemeName(k)}
+                    title={"Theme: " + k}
+                  >
+                    {k}
+                  </button>
+                ))}
+              </div>
               {/* Step navigation buttons removed from the header (non-destructive). */}
               {false ? (
                 stepTabs.map((t) => {
@@ -3026,7 +3107,7 @@ function setRange(letter, bucket, field, value) {
                 </div>
               </div>
 
-              <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, background: "rgba(0,0,0,0.22)" }}>
+              <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, background: theme.panel2 }}>
                 <div style={{ fontWeight: 950, marginBottom: 6 }}>Import file format (CSV / XLSX)</div>
                 <div style={{ opacity: 0.9, fontWeight: 850, lineHeight: 1.35 }}>
                   <div style={{ marginBottom: 8 }}>
@@ -3294,7 +3375,7 @@ function setRange(letter, bucket, field, value) {
                               width: "100%",
                               maxWidth: "100%",
                               minWidth: 0,
-                              background: "rgba(0,0,0,0.34)",
+                              background: theme.panel2,
                               display: "flex",
                               justifyContent: "center",
                               alignItems: "center",
@@ -3731,7 +3812,7 @@ function setRange(letter, bucket, field, value) {
                       <div style={{ display: "grid", gridTemplateRows: "1fr 1fr", gap: 4 }}>
                         <button
                           type="button"
-                          style={{ width: 28, height: 18, borderRadius: 8, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.08)", color: theme.text, cursor: "pointer", fontWeight: 950, lineHeight: 1 }}
+                          style={{ width: 28, height: 18, borderRadius: 8, border: `1px solid ${theme.border}`, background: theme.panel2, color: theme.text, cursor: "pointer", fontWeight: 950, lineHeight: 1 }}
                           onClick={() => {
                             setMeta((p) => {
                               var vRaw = (p && p.correction != null) ? p.correction : 0;
@@ -3750,7 +3831,7 @@ function setRange(letter, bucket, field, value) {
                         </button>
                         <button
                           type="button"
-                          style={{ width: 28, height: 18, borderRadius: 8, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.08)", color: theme.text, cursor: "pointer", fontWeight: 950, lineHeight: 1 }}
+                          style={{ width: 28, height: 18, borderRadius: 8, border: `1px solid ${theme.border}`, background: theme.panel2, color: theme.text, cursor: "pointer", fontWeight: 950, lineHeight: 1 }}
                           onClick={() => {
                             setMeta((p) => {
                               var vRaw = (p && p.correction != null) ? p.correction : 0;
@@ -3866,7 +3947,7 @@ function setRange(letter, bucket, field, value) {
                     </div>
 
 
-                    <div style={{ marginTop: 10, border: `1px solid ${theme.border}`, borderRadius: 12, background: "rgba(0,0,0,0.22)", padding: 8, width: 320, maxWidth: "100%" }}>
+                    <div style={{ marginTop: 10, border: `1px solid ${theme.border}`, borderRadius: 12, background: theme.panel2, padding: 8, width: 320, maxWidth: "100%" }}>
                       <div style={{ fontWeight: 950, fontSize: 13, marginBottom: 8 }}>Pitch OK (factory)</div>
                       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 0, tableLayout: "fixed" }}>
                         <thead>
@@ -3986,7 +4067,7 @@ function setRange(letter, bucket, field, value) {
                           <tr>
                             <th style={Object.assign({}, headerCell, { textAlign: "left", position: "sticky", left: 0, background: theme.panel2, zIndex: 2 })}>#</th>
                             {letters.map((L) => (
-                              <th key={L} colSpan={6} style={Object.assign({}, headerCell, { textAlign: "center", background: "rgba(255,255,255,0.03)" })}>
+                              <th key={L} colSpan={6} style={Object.assign({}, headerCell, { textAlign: "center", background: theme.panel2 })}>
                                 {L}
                               </th>
                             ))}
@@ -4498,7 +4579,7 @@ function setRange(letter, bucket, field, value) {
             {["A", "B", "C", "D"].map((row) => {
               const cfg = pitchRowCfg[row] || { groups: [], include: [], exclude: [] };
               return (
-                <div key={row} style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: "rgba(0,0,0,0.22)", padding: 10 }}>
+                <div key={row} style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: theme.panel2, padding: 10 }}>
                   <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                     <div style={{ fontWeight: 950 }}>Row {row}</div>
                     <div style={{ fontSize: 12, opacity: 0.78 }}>
@@ -5090,7 +5171,7 @@ function setRange(letter, bucket, field, value) {
           </details>
         ) : null}
         {autoDecision ? (
-          <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.03)" }}>
+          <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, border: `1px solid ${theme.border}`, background: theme.panel2 }}>
             <div style={{ fontWeight: 950, marginBottom: 6 }}>Actionable plan</div>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12, lineHeight: 1.35 }}>
               <div style={{ minWidth: 260 }}>
@@ -5415,7 +5496,7 @@ function setRange(letter, bucket, field, value) {
 const th = { textAlign: "left", padding: "8px 8px", fontSize: 12, fontWeight: 950, color: "rgba(255,255,255,0.82)", whiteSpace: "nowrap" };
 const td = { padding: "8px 8px", fontSize: 12, fontWeight: 850, color: "rgba(255,255,255,0.90)", whiteSpace: "nowrap" };
 
-const card = { border: `1px solid ${theme.border}`, borderRadius: 16, background: "linear-gradient(180deg, rgba(0,0,0,0.38), rgba(255,255,255,0.03))", padding: 8 };
+const card = { border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 };
 const cardLabel = { opacity: 0.78, fontWeight: 900, fontSize: 12 };
 const cardValue = { marginTop: 4, fontWeight: 950, fontSize: 14 };
 
@@ -5423,7 +5504,7 @@ const topBtn = {
   padding: "9px 12px",
   borderRadius: 12,
   border: `1px solid ${theme.border}`,
-  background: "rgba(255,255,255,0.08)",
+  background: theme.panel2,
   color: theme.text,
   cursor: "pointer",
   fontWeight: 950,
@@ -5445,7 +5526,7 @@ const miniBtn = {
   height: 34,
   borderRadius: 10,
   border: `1px solid ${theme.border}`,
-  background: "rgba(255,255,255,0.08)",
+  background: theme.panel2,
   color: theme.text,
   cursor: "pointer",
   fontWeight: 950,
@@ -5457,7 +5538,7 @@ const miniInput = {
   padding: "6px 8px",
   borderRadius: 10,
   border: `1px solid ${theme.border}`,
-  background: "rgba(255,255,255,0.08)",
+  background: theme.panel2,
   color: theme.text,
   fontSize: 12,
   textAlign: "center",
@@ -6206,7 +6287,7 @@ function PitchTrimChart({ rows, tolerance, height = 220 }) {
   };
 
   return (
-    <div style={{ border: `19px solid ${theme.border}`, borderRadius: 16, background: theme.bg2, padding: 12 }}>
+    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.bg2, padding: 12 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
         <div style={{ fontWeight: 950 }}>Pitch trim (avg Δ after vs nominal)</div>
         <div style={{ opacity: 0.75, fontSize: 12 }}>Per row average — L and R</div>
@@ -6446,8 +6527,8 @@ function WingProfileChart({ groupStats, tolerance, height = 260 }) {
   const R = seriesFor("R");
 
   return (
-    <div style={{ border: `19px solid ${theme.border}`, borderRadius: 16, background: theme.panel, overflow: "hidden" }}>
-      <div style={{ padding: 8, borderBottom: `19px solid ${theme.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel, overflow: "hidden" }}>
+      <div style={{ padding: 8, borderBottom: `1px solid ${theme.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ fontWeight: 950 }}>Δ per maillon group (After)</div>
         <div style={{ opacity: 0.75, fontSize: 12 }}>Green ≤ 4mm • Yellow &gt; 4mm • Red ≥ tolerance</div>
       </div>
