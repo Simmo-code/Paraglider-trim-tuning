@@ -684,7 +684,7 @@ function BlockTable({ title, rows, theme, th, td, showCorrected, tolerance = 10,
                         const v = Number(e.target.value);
                         setStep4LineCorr((prev) => ({ ...prev, [`${r.lineBase}L`]: Number.isFinite(v) ? v : 0 }));
                       }}
-                      style={{ width: 86, padding: "6px 8px", borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.panel, color: theme.text, outline: "none" }}
+                      style={{ width: 86, padding: "6px 8px", borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.panel, color: measureTextColor, outline: "none" }}
                     />
                   </td>
                   <td style={td}>{fmt(L.before)}</td>
@@ -827,7 +827,7 @@ function ImportStatusRadio({ loaded, label = "Import status" }) {
 }
 function WarningBanner({ title, children }) {
   return (
-    <div style={{ border: `1px solid ${theme.warnStroke}`, background: theme.warnBg, borderRadius: 16, padding: 8 }}>
+    <div style={{ border: `0.1px solid ${theme.warnStroke}`, background: theme.warnBg, borderRadius: 16, padding: 8 }}>
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
         <div style={{ width: 10, height: 10, borderRadius: 999, background: theme.warnStroke, marginTop: 5 }} />
         <div style={{ display: "grid", gap: 6 }}>
@@ -901,7 +901,7 @@ function ControlPill({ label, value, onChange, suffix = "mm", width = 90, step =
 
 function TogglePill({ label, checked, onChange }) {
   return (
-    <button
+<button
       type="button"
       onClick={() => onChange(!checked)}
       style={{
@@ -995,6 +995,414 @@ export default function App() {
 
   // Report (A4 preview) — generated from Step 4 data (no step navigation)
   const [showReport, setShowReport] = useState(false);
+
+
+  // Step 1 manual entry grid (wide CSV-style). UI-only; does not affect import or Step 3/4.
+  const MANUAL_DEFAULT_ROWS = 16;
+  const MANUAL_DEFAULT_GROUPS = ["A", "B", "C", "D"];
+
+  const [showManualGrid, setShowManualGrid] = useState(false);
+  const [manualPasteBox, setManualPasteBox] = useState("");
+  const [showMeasureMode, setShowMeasureMode] = useState(false);
+  const [measureCorrection, setMeasureCorrection] = useState(0);
+  const [measureTolerance, setMeasureTolerance] = useState(10);
+  const [manualRowCount, setManualRowCount] = useState(MANUAL_DEFAULT_ROWS);
+  const [manualGroups, setManualGroups] = useState(MANUAL_DEFAULT_GROUPS);
+  const MANUAL_SUBCOLS = [
+    { key: "line", labelA: "Line", labelBD: "Line" },
+    { key: "soll", labelA: "Factory", labelBD: "Factory" },
+    { key: "l", labelA: "Ist L", labelBD: "L" },
+    { key: "r", labelA: "Ist R", labelBD: "R" },
+  ];
+
+  const [manualGrid, setManualGrid] = useState(() => ({}));
+  const manualGridRefs = useRef({});
+  const manualActiveRef = useRef({ row: 0, col: 0 });
+  const measureInputRef = useRef(null);
+  const [manualActivePos, setManualActivePos] = useState({ row: 0, col: 0 });
+
+  const manualColCount = manualGroups.length * MANUAL_SUBCOLS.length;
+
+
+  const manualColMeta = (colIdx) => {
+    const g = Math.floor(colIdx / MANUAL_SUBCOLS.length);
+    const s = colIdx % MANUAL_SUBCOLS.length;
+    const groupLetter = manualGroups[g] || "A";
+    const sub = MANUAL_SUBCOLS[s]?.key || "soll";
+    const label = MANUAL_SUBCOLS[s]?.labelA || sub;
+    return { groupLetter, sub, label, groupIndex: g, subIndex: s };
+  };
+
+  const manualCellKey = (rowIdx, colIdx) => {
+    const meta = manualColMeta(colIdx);
+    const groupLetter = meta && meta.groupLetter ? meta.groupLetter : "A";
+    const sub = meta && meta.sub ? meta.sub : "soll";
+    return `${groupLetter}${rowIdx + 1}_${sub}`;
+  };
+
+  const manualFocusCell = (r, c) => {
+    manualActiveRef.current = { row: r, col: c };
+    setManualActivePos({ row: r, col: c });
+    setTimeout(() => {
+      const el = document.getElementById(`manualCell_${r}_${c}`);
+      if (el && el.focus) el.focus();
+      if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }, 0);
+  };
+
+  const manualSetCell = (r, c, v) => {
+    const k = manualCellKey(r, c);
+    setManualGrid((prev) => {
+      // avoid state updates if unchanged
+      const cur = prev[k] ?? "";
+      const nextVal = v ?? "";
+      if (cur === nextVal) return prev;
+      return { ...prev, [k]: nextVal };
+    });
+  };
+
+
+
+
+  const manualPosLabel = (rowIdx, colIdx) => {
+    const meta = manualColMeta(colIdx);
+    const side = meta.sub === "l" ? "Left" : meta.sub === "r" ? "Right" : "";
+    return `${meta.groupLetter}${rowIdx + 1} ${meta.label}${side ? ` (${side})` : ""}`;
+  };
+
+  const manualNextPos = (rowIdx, colIdx) => {
+    const nextRow = rowIdx + 1;
+    if (nextRow < manualRowCount) return { row: nextRow, col: colIdx };
+    const nextCol = colIdx + 1;
+    if (nextCol < manualColCount) return { row: 0, col: nextCol };
+    return { row: rowIdx, col: colIdx };
+  };
+
+  const manualPrevPos = (rowIdx, colIdx) => {
+    const prevRow = rowIdx - 1;
+    if (prevRow >= 0) return { row: prevRow, col: colIdx };
+    const prevCol = colIdx - 1;
+    if (prevCol >= 0) return { row: manualRowCount - 1, col: prevCol };
+    return { row: rowIdx, col: colIdx };
+  };
+
+    const manualMeasureRowHasLineAndFactory = (groupLetter, rowIdx) => {
+    const lineKey = `${groupLetter}${rowIdx + 1}_line`;
+    const factoryKey = `${groupLetter}${rowIdx + 1}_soll`;
+    const lineVal = manualGrid[lineKey];
+    const factoryNum = Number(manualGrid[factoryKey]);
+    return Boolean(String(lineVal ?? "").trim()) && Number.isFinite(factoryNum);
+  };
+
+  const manualMeasureNextPos = (rowIdx, colIdx) => {
+    const stepOnce = (r0, c0) => {
+      const meta = manualColMeta(c0);
+      const groupIndex = meta.groupIndex;
+      const sub = meta.sub;
+
+      const colFor = (gIndex, subKey) => {
+        const sIndex = MANUAL_SUBCOLS.findIndex((s) => s.key === subKey);
+        return gIndex * MANUAL_SUBCOLS.length + (sIndex >= 0 ? sIndex : 0);
+      };
+
+      // Measurement mode order:
+      // A Left down rows -> A Right down rows -> B Left down rows -> B Right down rows -> ...
+      if (sub === "l") {
+        const nextRow = r0 + 1;
+        if (nextRow < manualRowCount) return { row: nextRow, col: colFor(groupIndex, "l") };
+        return { row: 0, col: colFor(groupIndex, "r") };
+      }
+
+      if (sub === "r") {
+        const nextRow = r0 + 1;
+        if (nextRow < manualRowCount) return { row: nextRow, col: colFor(groupIndex, "r") };
+        const nextGroup = groupIndex + 1;
+        if (nextGroup < manualGroups.length) return { row: 0, col: colFor(nextGroup, "l") };
+        return { row: r0, col: c0 };
+      }
+
+      return { row: r0, col: colFor(groupIndex, "l") };
+    };
+
+    let cur = { row: rowIdx, col: colIdx };
+    let guard = 0;
+    const guardMax = Math.max(1, manualRowCount * manualGroups.length * 4);
+
+    while (guard < guardMax) {
+      const cand = stepOnce(cur.row, cur.col);
+      const meta = manualColMeta(cand.col);
+      const subKey = meta.sub;
+      const groupLetter = meta.groupLetter;
+
+      // Only validate measurement cells (L/R). Non L/R shouldn't be target here; if it is, just keep stepping.
+      if ((subKey === "l" || subKey === "r") && manualMeasureRowHasLineAndFactory(groupLetter, cand.row)) {
+        return cand;
+      }
+
+      // If missing line/factory, skip ahead (effectively jumps through empty sections until a valid row is found)
+      cur = cand;
+      guard += 1;
+    }
+
+    return { row: rowIdx, col: colIdx };
+  };
+
+  function manualMeasurePrevPos(rowIdx, colIdx) {
+    const stepOnce = (r0, c0) => {
+      const meta = manualColMeta(c0);
+      const groupIndex = meta.groupIndex;
+      const sub = meta.sub;
+
+      const colFor = (gIndex, subKey) => {
+        const sIndex = MANUAL_SUBCOLS.findIndex((s) => s.key === subKey);
+        return gIndex * MANUAL_SUBCOLS.length + (sIndex >= 0 ? sIndex : 0);
+      };
+
+      // Reverse of measurement mode order:
+      // ... -> B Right up rows -> B Left up rows -> A Right up rows -> A Left up rows
+      if (sub === "r") {
+        const prevRow = r0 - 1;
+        if (prevRow >= 0) return { row: prevRow, col: colFor(groupIndex, "r") };
+        return { row: manualRowCount - 1, col: colFor(groupIndex, "l") };
+      }
+
+      if (sub === "l") {
+        const prevRow = r0 - 1;
+        if (prevRow >= 0) return { row: prevRow, col: colFor(groupIndex, "l") };
+        const prevGroup = groupIndex - 1;
+        if (prevGroup >= 0) return { row: manualRowCount - 1, col: colFor(prevGroup, "r") };
+        return { row: r0, col: c0 };
+      }
+
+      return { row: r0, col: colFor(groupIndex, "l") };
+    };
+
+    let cur = { row: rowIdx, col: colIdx };
+    let guard = 0;
+    const guardMax = Math.max(1, manualRowCount * manualGroups.length * 4);
+
+    while (guard < guardMax) {
+      const cand = stepOnce(cur.row, cur.col);
+      const meta = manualColMeta(cand.col);
+      const subKey = meta.sub;
+      const groupLetter = meta.groupLetter;
+
+      if ((subKey === "l" || subKey === "r") && manualMeasureRowHasLineAndFactory(groupLetter, cand.row)) {
+        return cand;
+      }
+
+      cur = cand;
+      guard += 1;
+    }
+
+    return { row: rowIdx, col: colIdx };
+  };
+
+  const manualEnsureLineLabels = () => {
+    setManualGrid((prev) => {
+      let next = prev;
+      for (let r = 0; r < manualRowCount; r++) {
+        for (let g = 0; g < manualGroups.length; g++) {
+          const lineKey = `${manualGroups[g]}${r + 1}_line`;
+          // Only set if truly unset (undefined). If blank string exists, treat as intentionally blank.
+          if (next[lineKey] === undefined) {
+            next = { ...next, [lineKey]: `${manualGroups[g]}${r + 1}` };
+          }
+        }
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!showManualGrid) return;
+    manualEnsureLineLabels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showManualGrid, manualRowCount, manualGroups]);
+
+
+  useEffect(() => {
+    if (!showMeasureMode) return;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setShowMeasureMode(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showMeasureMode, manualActivePos.row, manualActivePos.col]);
+
+
+  useEffect(() => {
+    if (!showMeasureMode) return;
+    const t = setTimeout(() => {
+      try {
+        if (measureInputRef.current) measureInputRef.current.focus();
+      } catch (e) {}
+    }, 0);
+    return () => clearTimeout(t);
+  }, [showMeasureMode]);
+
+
+
+  const manualPasteIntoGrid = (startRow, startCol, textValue) => {
+    const raw0 = `${textValue ?? ""}`.replace(/\r\n?/g, "\n").trimEnd();
+    if (!raw0) return;
+
+    // Detect delimiter-based blocks (TSV/CSV) vs a vertical "token stream" (one value per line),
+    // which is common when copying from some CSV viewers/editors.
+    const linesAll = raw0.split("\n").map((l) => l.trim());
+    const lines = linesAll.filter((l) => l.length > 0);
+    if (lines.length === 0) return;
+
+    const sample = lines[0] ?? "";
+    const hasTabs = raw0.includes("\t");
+    const hasComma = sample.includes(",");
+    const hasSemi = sample.includes(";");
+    const isTokenStream = !hasTabs && !hasComma && !hasSemi;
+
+    // Helper: get group + subcol from a flat col index.
+    const colToGroupAndSub = (colIdx) => {
+      const g = Math.floor(colIdx / MANUAL_SUBCOLS.length);
+      const s = colIdx % MANUAL_SUBCOLS.length;
+      return { groupIndex: g, subIndex: s };
+    };
+
+    // TOKEN STREAM MODE:
+    // Example token sequence:
+    //  6717, 7240, 7232, B1, 6635, 7132, 7145, C1, ...
+    // We interpret:
+    //  - Row markers like B12 / C3 / D1 reset the current target (group letter + row number) and subcol to 0.
+    //  - Numeric values fill Factory, L, R in order for the current group+row.
+    //  - A-rows are often missing explicit A1/A2 markers; when we finish a D-row triplet and see the next number,
+    //    we infer the next row starts at group A.
+    if (isTokenStream) {
+      const { groupIndex: baseGroupIndex, subIndex: baseSubIndex } = colToGroupAndSub(startCol);
+      const baseGroupLetter = manualGroups[baseGroupIndex] || "A";
+      const baseRowOffset = startRow;
+
+      const markerRe = /^[A-Za-z]\d+$/;
+      const numRe = /^-?\d+(?:\.\d+)?$/;
+
+      let curGroupLetter = baseGroupLetter;
+      let curRowIdx = baseRowOffset; // 0-based
+      let curSub = Math.max(baseSubIndex, 1); // start subcol within group (skip Line for numeric stream)
+
+      const setFromMarker = (tok) => {
+        const letter = tok[0].toUpperCase();
+        const n = parseInt(tok.slice(1), 10);
+        if (!Number.isFinite(n)) return false;
+        curGroupLetter = letter;
+        curRowIdx = baseRowOffset + (n - 1);
+        curSub = 1;
+        return true;
+      };
+
+      setManualGrid((prev) => {
+        let next = prev;
+
+        for (let i = 0; i < lines.length; i++) {
+          const tok = lines[i];
+
+          if (markerRe.test(tok) && !numRe.test(tok)) {
+            // Only treat as marker if it has a valid group letter we currently have.
+            const letter = tok[0].toUpperCase();
+            if (manualGroups.includes(letter)) {
+              setFromMarker(tok);
+
+              // Write the line marker into the dedicated Line column for this group+row.
+              const gIndex = manualGroups.indexOf(letter);
+              if (gIndex >= 0) {
+                const lineColIdx = gIndex * MANUAL_SUBCOLS.length + 0;
+                if (curRowIdx >= 0 && curRowIdx < manualRowCount && lineColIdx >= 0 && lineColIdx < manualColCount) {
+                  const lk = manualCellKey(curRowIdx, lineColIdx);
+                  if (next[lk] !== tok) next = { ...next, [lk]: tok };
+                }
+              }
+
+              continue;
+            }
+          }
+
+          // Numeric payload
+          if (numRe.test(tok)) {
+            // If we've run past row bounds, stop.
+            if (curRowIdx < 0 || curRowIdx >= manualRowCount) break;
+
+            // Ensure current group exists in our column groups.
+            if (!manualGroups.includes(curGroupLetter)) continue;
+
+            const gIndex = manualGroups.indexOf(curGroupLetter);
+            const colIdx = gIndex * MANUAL_SUBCOLS.length + curSub;
+
+            if (colIdx >= 0 && colIdx < manualColCount) {
+              const lk = manualCellKey(curRowIdx, gIndex * MANUAL_SUBCOLS.length + 0);
+              if (next[lk] === "") {
+                // Blank Line cell means "no data" for this group+row; skip numeric values.
+              } else {
+                const v = tok.trim();
+                const k = manualCellKey(curRowIdx, colIdx);
+                if (next[k] !== v) next = { ...next, [k]: v };
+              }
+            }
+
+            curSub += 1;
+
+            // After Factory/L/R, advance within row:
+            if (curSub >= MANUAL_SUBCOLS.length) {
+              curSub = 1;
+
+              // If we just finished a D-row (common in the pasted token stream),
+              // and the next token is a number (meaning next row begins) without an explicit marker,
+              // infer next row starts at group A.
+              if (curGroupLetter === "D") {
+                curGroupLetter = "A";
+                curRowIdx += 1;
+                curSub = 1;
+              } else {
+                // Otherwise, keep the same group and wait for a marker, OR advance group if next token isn't a marker.
+                // We do NOT auto-advance group here because the stream usually includes Bx/Cx/Dx markers.
+              }
+            }
+
+            continue;
+          }
+
+          // Unknown token: ignore
+        }
+
+        return next;
+      });
+
+      return;
+    }
+
+    // DELIMITER MODE (TSV/CSV): fill a matrix starting at the active cell.
+    let delim = "";
+    if (hasTabs) delim = "\t";
+    else if (hasComma) delim = ",";
+    else if (hasSemi) delim = ";";
+
+    const rows = raw0
+      .split("\n")
+      .filter((l) => l.trim().length > 0)
+      .map((ln) => (delim ? ln.split(delim) : [ln]));
+
+    setManualGrid((prev) => {
+      let next = prev;
+      for (let r = 0; r < rows.length; r++) {
+        const rowIdx = startRow + r;
+        if (rowIdx < 0 || rowIdx >= manualRowCount) break;
+        for (let c = 0; c < rows[r].length; c++) {
+          const colIdx = startCol + c;
+          if (colIdx < 0 || colIdx >= manualColCount) break;
+          const v = `${rows[r][c] ?? ""}`.trim();
+          const k = manualCellKey(rowIdx, colIdx);
+          if (next[k] !== v) next = { ...next, [k]: v };
+        }
+      }
+      return next;
+    });
+  };
+
 
   // Step 3 sub-page view (keeps Step 3 from getting too busy)
   const [step3View, setStep3View] = useState("diagram");
@@ -2769,7 +3177,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
             style={{
               position: "fixed",
               inset: 0,
-              background: "rgba(0,0,0,0.62)",
+              background: theme.bg,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -2839,7 +3247,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
             style={{
               position: "fixed",
               inset: 0,
-              background: "rgba(0,0,0,0.62)",
+              background: theme.bg,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -2922,6 +3330,21 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                     Choose file…
                   </button>
 
+                  <button
+                    type="button"
+                    onClick={() => setShowManualGrid(true)}
+                    style={{
+                      ...chooseBtn,
+                      background: "rgba(19,41,112,0.95)",
+                      border: "1px solid rgba(147,197,253,0.95)",
+                      color: "rgba(255,255,255,0.98)",
+                      opacity: 0.98,
+                    }}
+                    title="Open manual entry grid (wide format)"
+                  >
+                    Manual entry…
+                  </button>
+
                   <div style={{ opacity: 0.85, fontWeight: 900 }}>
                     Imported rows: <b>{wideRows.length}</b> • Lines total (L+R): <b>{summary.totalLines}</b>
                   </div>
@@ -2934,7 +3357,932 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                     <div style={{ color: theme.bad, fontWeight: 950 }}>{importStatus.err}</div>
                   ) : null}
 
-                  {loaded ? (
+{/* Manual entry grid popout (wide CSV-style) */}
+                  {showManualGrid ? (
+                    <div
+                      onClick={() => { setShowMeasureMode(false); setShowManualGrid(false); }}
+                      style={{
+                        position: "fixed",
+                        inset: 0,
+                        zIndex: 9999,
+                        background: theme.bg,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 18,
+                      }}
+                    >
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          width: "100%",
+                          maxWidth: "92vw",
+                          maxHeight: "88vh",
+                          borderRadius: 18,
+                          border: `2px solid ${theme.border}`,
+                          background: theme.panel,
+                          boxShadow: "0 24px 80px rgba(0,0,0,0.55)",
+                          overflow: "hidden",
+                          display: "flex",
+                          flexDirection: "column",
+                        }}
+                      >
+
+                        {showMeasureMode ? (
+                          <div
+                            onClick={() => setShowMeasureMode(false)}
+                            style={{
+                              position: "fixed",
+                              inset: 0,
+                              zIndex: 10010,
+                              background: theme.bg,
+                              color: theme.text,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              padding: 18,
+                            }}
+                          >
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                width: "100%",
+                                maxWidth: 980,
+                                borderRadius: 26,
+                                border: `3px solid ${theme.border}`,
+                                background: theme.panel,
+                                boxShadow: "0 30px 120px rgba(0,0,0,0.65)",
+                                padding: 18,
+                                display: "grid",
+                                gap: 14,
+                              }}
+                            >
+                              {(() => {
+                                const cur = manualActivePos;
+                                const prev = manualMeasurePrevPos(cur.row, cur.col);
+                                const next = manualMeasureNextPos(cur.row, cur.col);
+
+                                const curMeta = manualColMeta(cur.col);
+                                const curLineKey = `${curMeta.groupLetter}${cur.row + 1}_line`;
+                                const curFactoryKey = `${curMeta.groupLetter}${cur.row + 1}_soll`;
+                                const curSide = curMeta.sub === "l" ? "LEFT" : curMeta.sub === "r" ? "RIGHT" : "";
+
+                                const curValueKey = manualCellKey(cur.row, cur.col);
+                                const curValue = manualGrid[curValueKey] ?? "";
+
+                                const prevValue = manualGrid[manualCellKey(prev.row, prev.col)] ?? "";
+                                const nextValue = manualGrid[manualCellKey(next.row, next.col)] ?? "";
+
+
+                                const factoryRaw = manualGrid[curFactoryKey];
+                                const factoryNum = factoryRaw === "" || factoryRaw == null ? NaN : Number(factoryRaw);
+                                const measuredNum = curValue === "" || curValue == null ? NaN : Number(curValue);
+                                const corrNum = Number(measureCorrection || 0);
+                                const tolNum = Number(measureTolerance || 0);
+
+                                const delta = !Number.isFinite(factoryNum) || !Number.isFinite(measuredNum) ? NaN : (measuredNum + corrNum) - factoryNum;
+                                const absDelta = Number.isFinite(delta) ? Math.abs(delta) : NaN;
+
+                                let measureTextColor = theme.text;
+                                if (Number.isFinite(absDelta)) {
+                                  if (absDelta <= 4) measureTextColor = theme.good;
+                                  else if (Number.isFinite(tolNum) && tolNum > 0 && absDelta <= tolNum) measureTextColor = theme.warn;
+                                  else measureTextColor = theme.bad;
+                                }
+
+                                return (
+<>
+                                  <>
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                                      <div>
+                                        <div style={{ fontSize: 22, fontWeight: 950, letterSpacing: -0.3 }}>Measurement mode</div>
+                                        <div style={{ marginTop: 6, fontSize: 14, fontWeight: 900, opacity: 0.85 }}>
+                                          Current cell: <span style={{ fontWeight: 950 }}>{manualPosLabel(cur.row, cur.col)}</span>{" "}
+                                          {curSide ? (
+                                            <span style={{ marginLeft: 10, padding: "3px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: theme.bg2, fontWeight: 950 }}>
+                                              {curSide}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                        <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", fontWeight: 900 }}>
+                                          <div style={{ padding: "8px 12px", borderRadius: 14, border: `1px solid ${theme.border}`, background: theme.bg2 }}>
+                                            Line: <span style={{ fontWeight: 950 }}>{manualGrid[curLineKey] ?? "—"}</span>
+                                          </div>
+                                          <div style={{ padding: "8px 12px", borderRadius: 14, border: `1px solid ${theme.border}`, background: theme.bg2 }}>
+                                            Factory: <span style={{ fontWeight: 950 }}>{manualGrid[curFactoryKey] ?? "—"}</span>
+                                          </div>
+
+                                          <div style={{ padding: "8px 12px", borderRadius: 14, border: `1px solid ${theme.border}`, background: theme.bg2, display: "flex", alignItems: "center", gap: 8 }}>
+                                            <span style={{ fontWeight: 950 }}>Correction</span>
+                                            <input
+                                              value={String(measureCorrection)}
+                                              onChange={(e) => {
+                                                const v = e.target.value;
+                                                const n = Number(v);
+                                                setMeasureCorrection(Number.isFinite(n) ? n : 0);
+                                              }}
+                                              style={{
+                                                width: 90,
+                                                padding: "6px 8px",
+                                                borderRadius: 10,
+                                                border: `1px solid ${theme.border}`,
+                                                background: theme.panel2,
+                                                color: theme.text,
+                                                fontWeight: 950,
+                                                outline: "none",
+                                                textAlign: "right",
+                                              }}
+                                              inputMode="numeric"
+                                            />
+                                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                              <button
+                                                type="button"
+                                                onClick={() => setMeasureCorrection((v) => Number(v || 0) + 1)}
+                                                style={{
+                                                  width: 28,
+                                                  height: 18,
+                                                  borderRadius: 8,
+                                                  border: `1px solid ${theme.border}`,
+                                                  background: theme.panel2,
+                                                  color: theme.text,
+                                                  fontWeight: 950,
+                                                  cursor: "pointer",
+                                                  lineHeight: "16px",
+                                                }}
+                                                title="Increase"
+                                              >
+                                                ▲
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => setMeasureCorrection((v) => Number(v || 0) - 1)}
+                                                style={{
+                                                  width: 28,
+                                                  height: 18,
+                                                  borderRadius: 8,
+                                                  border: `1px solid ${theme.border}`,
+                                                  background: theme.panel2,
+                                                  color: theme.text,
+                                                  fontWeight: 950,
+                                                  cursor: "pointer",
+                                                  lineHeight: "16px",
+                                                }}
+                                                title="Decrease"
+                                              >
+                                                ▼
+                                              </button>
+                                            </div>
+
+                                            <span style={{ opacity: 0.8, fontWeight: 900 }}>mm</span>
+                                          </div>
+
+                                          <div style={{ padding: "8px 12px", borderRadius: 14, border: `1px solid ${theme.border}`, background: theme.bg2, display: "flex", alignItems: "center", gap: 8 }}>
+                                            <span style={{ fontWeight: 950 }}>Tolerance</span>
+                                            <input
+                                              value={String(measureTolerance)}
+                                              onChange={(e) => {
+                                                const v = e.target.value;
+                                                const n = Number(v);
+                                                setMeasureTolerance(Number.isFinite(n) ? n : 0);
+                                              }}
+                                              style={{
+                                                width: 90,
+                                                padding: "6px 8px",
+                                                borderRadius: 10,
+                                                border: `1px solid ${theme.border}`,
+                                                background: theme.panel2,
+                                                color: theme.text,
+                                                fontWeight: 950,
+                                                outline: "none",
+                                                textAlign: "right",
+                                              }}
+                                              inputMode="numeric"
+                                            />
+                                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                              <button
+                                                type="button"
+                                                onClick={() => setMeasureTolerance((v) => Math.max(0, Number(v || 0) + 1))}
+                                                style={{
+                                                  width: 28,
+                                                  height: 18,
+                                                  borderRadius: 8,
+                                                  border: `1px solid ${theme.border}`,
+                                                  background: theme.panel2,
+                                                  color: theme.text,
+                                                  fontWeight: 950,
+                                                  cursor: "pointer",
+                                                  lineHeight: "16px",
+                                                }}
+                                                title="Increase"
+                                              >
+                                                ▲
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => setMeasureTolerance((v) => Math.max(0, Number(v || 0) - 1))}
+                                                style={{
+                                                  width: 28,
+                                                  height: 18,
+                                                  borderRadius: 8,
+                                                  border: `1px solid ${theme.border}`,
+                                                  background: theme.panel2,
+                                                  color: theme.text,
+                                                  fontWeight: 950,
+                                                  cursor: "pointer",
+                                                  lineHeight: "16px",
+                                                }}
+                                                title="Decrease"
+                                              >
+                                                ▼
+                                              </button>
+                                            </div>
+
+                                            <span style={{ opacity: 0.8, fontWeight: 900 }}>mm</span>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setShowMeasureMode(false);
+                                            manualFocusCell(manualActiveRef.current.row, manualActiveRef.current.col);
+                                          }}
+                                          style={{
+                                            border: `1px solid ${theme.border}`,
+                                            background: theme.bg2,
+                                            color: theme.text,
+                                            borderRadius: 999,
+                                            padding: "12px 16px",
+                                            fontWeight: 950,
+                                            cursor: "pointer",
+                                            fontSize: 21,
+                                          }}
+                                        >
+                                          Stop
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    <div style={{ display: "grid", gap: 10 }}>
+                                      <div style={{ border: `2px solid ${theme.border}`, borderRadius: 20, background: theme.panel2, padding: 16 }}>
+                                        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "nowrap" }}>
+                                          <div style={{ fontSize: 21, fontWeight: 950, opacity: 0.8, whiteSpace: "nowrap" }}>Previous</div>
+                                          <div style={{ fontSize: 49, fontWeight: 950, opacity: 0.95, whiteSpace: "nowrap" }}>{manualPosLabel(prev.row, prev.col)}</div>
+                                          <div style={{ fontSize: 51, fontWeight: 950, letterSpacing: -0.6, whiteSpace: "nowrap" }}>{prevValue || "—"}</div>
+                                        </div>
+                                      </div>
+
+                                      <div style={{ border: `3px solid ${theme.good}`, borderRadius: 22, background: theme.panel2, padding: 18 }}>
+                                        <div style={{ fontSize: 21, fontWeight: 950, opacity: 0.85 }}>Current</div>
+                                        <div style={{ marginTop: 6, fontSize: 33, fontWeight: 950 }}>{manualPosLabel(cur.row, cur.col)}</div>
+                                        <div style={{ marginTop: 10, fontSize: 81, fontWeight: 950, letterSpacing: -1.0, color: measureTextColor }}>{curValue || "—"}</div>
+
+                                        <input
+                                          ref={measureInputRef}
+                                          autoFocus
+                                          value={String(curValue)}
+                                          onChange={(e) => {
+                                            const v = e.target.value;
+                                            manualSetCell(cur.row, cur.col, v);
+                                          }}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              e.preventDefault();
+                                              const next = manualMeasureNextPos(cur.row, cur.col);
+                                              manualFocusCell(next.row, next.col);
+                                              setTimeout(() => {
+                                                try {
+                                                  if (measureInputRef.current) measureInputRef.current.focus();
+                                                } catch (err) {}
+                                              }, 0);
+                                              return;
+                                            }
+
+                                            if (e.key === "Backspace" || e.key === "Delete") {
+                                              // Allow normal single-digit editing. If the cell is empty, move backward.
+                                              const curStr = String(curValue ?? "");
+                                              if (curStr) return;
+
+                                              e.preventDefault();
+                                              manualSetCell(cur.row, cur.col, "");
+                                              const prev = manualMeasurePrevPos(cur.row, cur.col);
+                                              manualFocusCell(prev.row, prev.col);
+                                              setTimeout(() => {
+                                                try {
+                                                  if (measureInputRef.current) measureInputRef.current.focus();
+                                                } catch (err) {}
+                                              }, 0);
+                                              return;
+                                            }
+}}
+                                          style={{
+                                            marginTop: 10,
+                                            width: "100%",
+                                            padding: "14px 16px",
+                                            fontSize: 33,
+                                            fontWeight: 950,
+                                            borderRadius: 16,
+                                            border: `2px solid ${theme.border}`,
+                                            background: theme.bg2,
+                                            color: theme.text,
+                                            outline: "none",
+                                            textAlign: "center",
+                                          }}
+                                          placeholder="Type measurement here (laser/keyboard)…"
+                                        />
+
+                                        <div style={{ marginTop: 10, fontSize: 14, fontWeight: 900, opacity: 0.8 }}>
+                                          Tip: click the target cell in the grid, then type/measure. Press Enter to advance down the column. Press Esc to stop.
+                                        </div>
+                                      </div>
+
+                                      <div style={{ border: `2px solid ${theme.border}`, borderRadius: 20, background: theme.panel2, padding: 16 }}>
+                                        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "nowrap" }}>
+                                          <div style={{ fontSize: 21, fontWeight: 950, opacity: 0.8, whiteSpace: "nowrap" }}>Next</div>
+                                          <div style={{ fontSize: 49, fontWeight: 950, opacity: 0.95, whiteSpace: "nowrap" }}>{manualPosLabel(next.row, next.col)}</div>
+                                          <div style={{ fontSize: 51, fontWeight: 950, letterSpacing: -0.4, whiteSpace: "nowrap" }}>{nextValue || "—"}</div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </>
+                                
+</>
+);
+})()}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        <div
+                          style={{
+                            padding: 12,
+                            borderBottom: `1px solid ${theme.border}`,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 10,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 950, letterSpacing: -0.2, fontSize: 21 }}>Manual entry (wide grid)</div>
+
+                            <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: theme.bg2 }}>
+                                <span style={{ fontWeight: 950 }}>Correction</span>
+                                <input
+                                  value={measureCorrection}
+                                  onChange={(e) => setMeasureCorrection(e.target.value)}
+                                  inputMode="numeric"
+                                  style={{
+                                    width: 90,
+                                    padding: "6px 10px",
+                                    borderRadius: 12,
+                                    border: `1px solid ${theme.border}`,
+                                    background: theme.panel2,
+                                    color: theme.text,
+                                    fontWeight: 950,
+                                    outline: "none",
+                                  }}
+                                />
+                                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMeasureCorrection((v) => Number(v || 0) + 1)}
+                                    style={{
+                                      width: 28,
+                                      height: 18,
+                                      borderRadius: 8,
+                                      border: `1px solid ${theme.border}`,
+                                      background: theme.panel2,
+                                      color: theme.text,
+                                      fontWeight: 950,
+                                      cursor: "pointer",
+                                      lineHeight: "16px",
+                                    }}
+                                    title="Increase"
+                                  >
+                                    ▲
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMeasureCorrection((v) => Number(v || 0) - 1)}
+                                    style={{
+                                      width: 28,
+                                      height: 18,
+                                      borderRadius: 8,
+                                      border: `1px solid ${theme.border}`,
+                                      background: theme.panel2,
+                                      color: theme.text,
+                                      fontWeight: 950,
+                                      cursor: "pointer",
+                                      lineHeight: "16px",
+                                    }}
+                                    title="Decrease"
+                                  >
+                                    ▼
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: theme.bg2 }}>
+                                <span style={{ fontWeight: 950 }}>Tolerance</span>
+                                <input
+                                  value={measureTolerance}
+                                  onChange={(e) => setMeasureTolerance(e.target.value)}
+                                  inputMode="numeric"
+                                  style={{
+                                    width: 90,
+                                    padding: "6px 10px",
+                                    borderRadius: 12,
+                                    border: `1px solid ${theme.border}`,
+                                    background: theme.panel2,
+                                    color: theme.text,
+                                    fontWeight: 950,
+                                    outline: "none",
+                                  }}
+                                />
+                                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMeasureTolerance((v) => Math.max(0, Number(v || 0) + 1))}
+                                    style={{
+                                      width: 28,
+                                      height: 18,
+                                      borderRadius: 8,
+                                      border: `1px solid ${theme.border}`,
+                                      background: theme.panel2,
+                                      color: theme.text,
+                                      fontWeight: 950,
+                                      cursor: "pointer",
+                                      lineHeight: "16px",
+                                    }}
+                                    title="Increase"
+                                  >
+                                    ▲
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMeasureTolerance((v) => Math.max(0, Number(v || 0) - 1))}
+                                    style={{
+                                      width: 28,
+                                      height: 18,
+                                      borderRadius: 8,
+                                      border: `1px solid ${theme.border}`,
+                                      background: theme.panel2,
+                                      color: theme.text,
+                                      fontWeight: 950,
+                                      cursor: "pointer",
+                                      lineHeight: "16px",
+                                    }}
+                                    title="Decrease"
+                                  >
+                                    ▼
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.85 }}>
+                                Cell colors compare (value + correction) vs Factory using ±4mm (green), up to tolerance (yellow), beyond tolerance (red).
+                              </div>
+                            </div>
+
+                            <div style={{ marginTop: 4, opacity: 0.82, fontSize: 12, fontWeight: 850 }}>
+                              Type directly into cells. Paste from Excel/Sheets (tab-separated) or CSV text. Enter moves down the column.
+                            </div>
+
+                            <div style={{ marginTop: 10 }}>
+                              <div style={{ fontSize: 12, fontWeight: 950, opacity: 0.92 }}>Paste box</div>
+                              <div style={{ marginTop: 4, fontSize: 12, fontWeight: 850, opacity: 0.78 }}>
+                                Paste CSV/Excel content here if pasting directly into cells collapses into one field. The grid will fill starting from the currently focused cell.
+                              </div>
+                              <textarea
+                                onPaste={(e) => {
+                                  const cd = e.clipboardData;
+                                  const raw =
+                                    (cd && cd.getData("text/plain")) ||
+                                    (cd && cd.getData("text")) ||
+                                    (cd && cd.getData("Text")) ||
+                                    "";
+                                  // If we can't access clipboardData, let the browser paste normally.
+                                  if (!raw) return;
+                                  e.preventDefault();
+                                  const tNorm = String(raw).replace(/\r\n?/g, "\n");
+                                  manualPasteIntoGrid(manualActivePos.row, manualActivePos.col, tNorm);
+                                  setManualPasteBox("");
+                                }}
+                                value={manualPasteBox}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  setManualPasteBox(v);
+                                  // Auto-apply when it looks like a paste (multi-cell content)
+                                  if (v && (v.includes("\n") || v.includes("\t") || v.includes(",") || v.includes(";"))) {
+                                    manualPasteIntoGrid(manualActivePos.row, manualActivePos.col, String(v).replace(/\r\n?/g, "\n"));
+                                    setManualPasteBox("");
+                                  }
+                                }}
+                                placeholder="Click a target cell in the grid, then paste here…"
+                                style={{
+                                  marginTop: 8,
+                                  width: "100%",
+                                  minHeight: 76,
+                                  resize: "vertical",
+                                  padding: 10,
+                                  borderRadius: 12,
+                                  border: `1px solid ${theme.border}`,
+                                  background: theme.bg2,
+                                  color: theme.text,
+                                  fontWeight: 850,
+                                  outline: "none",
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                            <button
+                              type="button"
+                              onClick={() => setManualGrid({})}
+                              style={{
+                                border: `1px solid ${theme.border}`,
+                                background: theme.bg2,
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title="Clear manual grid values"
+                            >
+                              Clear
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setManualRowCount((n) => n + 1)}
+                              style={{
+                                border: `1px solid ${theme.border}`,
+                                background: theme.bg2,
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title="Add a row"
+                            >
+                              + Row
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setManualRowCount((n) => Math.max(1, n - 1))}
+                              style={{
+                                border: `1px solid ${theme.border}`,
+                                background: theme.bg2,
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title="Remove last row"
+                            >
+                              − Row
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setManualGroups((prev) => {
+                                  const last = prev[prev.length - 1] || "D";
+                                  const next = String.fromCharCode(last.charCodeAt(0) + 1);
+                                  return [...prev, next];
+                                })
+                              }
+                              style={{
+                                border: `1px solid ${theme.border}`,
+                                background: theme.bg2,
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title="Add a column group"
+                            >
+                              + Col
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setManualGroups((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev))}
+                              style={{
+                                border: `1px solid ${theme.border}`,
+                                background: theme.bg2,
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title="Remove last column group"
+                            >
+                              − Col
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const cur = manualActiveRef.current;
+                                const meta = manualColMeta(cur.col);
+                                const sIndexL = MANUAL_SUBCOLS.findIndex((s) => s.key === "l");
+                                const lCol = meta.groupIndex * MANUAL_SUBCOLS.length + (sIndexL >= 0 ? sIndexL : 0);
+                                setShowMeasureMode(true);
+                                const safeCol = meta.sub === "line" || meta.sub === "soll" ? lCol : cur.col;
+                                manualFocusCell(cur.row, safeCol);
+                              }}
+                              style={{
+                                border: `1px solid ${theme.border}`,
+                                background: theme.bg2,
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title="Open large measurement view (for laser measure entry)"
+                            >
+                              Start measurement
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => { setShowMeasureMode(false); setShowManualGrid(false); }}
+                              style={{
+                                border: "2px solid rgba(255,0,0,0.95)",
+                                background: "rgba(153,27,27,0.95)",
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title="Close"
+                            >
+                              Close
+                            </button>
+                          </div>
+                        </div>
+
+                        <div
+                          onPasteCapture={(e) => {
+                            const cd = e.clipboardData;
+                            const t =
+                              cd && cd.getData("text/plain") ||
+                              cd && cd.getData("text") ||
+                              cd && cd.getData("Text") ||
+                              "";
+                            const tNorm = `${t}`.replace(/\r\n?/g, "\n");
+                            if (!t) return;
+                            if (tNorm.includes("\n") || tNorm.includes("\t") || tNorm.includes(",") || tNorm.includes(";")) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              manualPasteIntoGrid(manualActiveRef.current.row, manualActiveRef.current.col, tNorm);
+                            }
+                          }}
+                          style={{ padding: 12, overflow: "auto" }}
+                        >
+                          <div style={{ border: `1px solid ${theme.border}`, borderRadius: 12, background: theme.panel2 }}>
+                            <table style={{ width: "max-content", borderCollapse: "separate", borderSpacing: 0, fontSize: 12 }}>
+                              <thead>
+                                <tr>
+                                  <th
+                                    style={{
+                                      position: "sticky",
+                                      left: 0,
+                                      zIndex: 3,
+                                      background: theme.panel2,
+                                      padding: "10px 10px",
+                                      textAlign: "left",
+                                      fontWeight: 950,
+                                      borderBottom: `1px solid ${theme.border}`,
+                                    }}
+                                  >
+                                    Line
+                                  </th>
+                                  {manualGroups.map((g) => (
+                                    <th
+                                      key={g}
+                                      colSpan={MANUAL_SUBCOLS.length}
+                                      style={{
+                                        padding: "10px 10px",
+                                        textAlign: "center",
+                                        fontWeight: 950,
+                                        borderBottom: `1px solid ${theme.border}`,
+                                        borderLeft: `1px solid ${theme.border}`,
+                                      }}
+                                    >
+                                      {g}
+                                    </th>
+                                  ))}
+                                </tr>
+                                <tr>
+                                  <th
+                                    style={{
+                                      position: "sticky",
+                                      left: 0,
+                                      zIndex: 3,
+                                      background: theme.panel2,
+                                      padding: "8px 10px",
+                                      textAlign: "left",
+                                      fontWeight: 900,
+                                      opacity: 0.9,
+                                      borderBottom: `1px solid ${theme.border}`,
+                                    }}
+                                  >
+                                    #
+                                  </th>
+                                  {manualGroups.flatMap((g) =>
+                                    MANUAL_SUBCOLS.map((s, i) => (
+                                      <th
+                                        key={`${g}_${s.key}`}
+                                        style={{
+                                          padding: "8px 10px",
+                                          textAlign: "center",
+                                          fontWeight: 900,
+                                          opacity: 0.9,
+                                          borderBottom: `1px solid ${theme.border}`,
+                                          borderLeft: i === 0 ? `1px solid ${theme.border}` : undefined,
+                                        }}
+                                      >
+                                        {s.labelA}
+                                      </th>
+                                    ))
+                                  )}
+                                </tr>
+                              </thead>
+
+                              <tbody>
+                                {Array.from({ length: manualRowCount }).map((_, r) => (
+                                  <tr key={r}>
+                                    <td
+                                      style={{
+                                        position: "sticky",
+                                        left: 0,
+                                        zIndex: 2,
+                                        background: theme.panel2,
+                                        padding: "8px 10px",
+                                        fontWeight: 950,
+                                        borderBottom: `1px solid ${theme.border}`,
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      {r + 1}
+                                    </td>
+
+                                    {Array.from({ length: manualColCount }).map((_, c) => {
+                                      const k = manualCellKey(r, c);
+                                      return (
+                                        <td
+                                          key={k}
+                                          style={{
+                                            padding: "6px 8px",
+                                            borderBottom: `1px solid ${theme.border}`,
+                                            borderLeft: c % MANUAL_SUBCOLS.length === 0 ? `1px solid ${theme.border}` : undefined,
+                                          }}
+                                        >
+                                          <input
+                                            id={`manualCell_${r}_${c}`}
+                                            value={manualGrid[k] ?? ""}
+                                            readOnly={showMeasureMode && ((MANUAL_SUBCOLS[c % MANUAL_SUBCOLS.length]?.key === "line") || (MANUAL_SUBCOLS[c % MANUAL_SUBCOLS.length]?.key === "soll"))}
+                                            onChange={(e) => manualSetCell(r, c, e.target.value)}
+                                            onFocus={() => {
+                                              manualActiveRef.current = { row: r, col: c };
+                                              setManualActivePos({ row: r, col: c });
+                                            }}
+                                            onPaste={(e) => {
+                                              const cd = e.clipboardData;
+                                              const t =
+                                                cd && cd.getData("text/plain") ||
+                                                cd && cd.getData("text") ||
+                                                cd && cd.getData("Text") ||
+                                                "";
+                                              const tNorm = `${t}`.replace(/\r\n?/g, "\n");
+                                              if (!t) return;
+                                              // Handle multi-cell blocks here; allow single-value paste to fall back normally.
+                                              if (tNorm.includes("\n") || tNorm.includes("\t") || tNorm.includes(",") || tNorm.includes(";")) {
+                                                e.preventDefault();
+                                                manualPasteIntoGrid(manualActiveRef.current.row, manualActiveRef.current.col, tNorm);
+                                              }
+                                            }}
+                                            onKeyDown={(e) => {
+                                              const subKey = MANUAL_SUBCOLS[c % MANUAL_SUBCOLS.length]?.key;
+
+                                              // Arrow key navigation
+                                              if (e.key === "ArrowUp") {
+                                                e.preventDefault();
+                                                manualFocusCell(Math.max(0, r - 1), c);
+                                                return;
+                                              }
+                                              if (e.key === "ArrowDown") {
+                                                e.preventDefault();
+                                                manualFocusCell(Math.min(manualRowCount - 1, r + 1), c);
+                                                return;
+                                              }
+                                              if (e.key === "ArrowLeft") {
+                                                e.preventDefault();
+                                                manualFocusCell(r, Math.max(0, c - 1));
+                                                return;
+                                              }
+                                              if (e.key === "ArrowRight") {
+                                                e.preventDefault();
+                                                manualFocusCell(r, Math.min(manualColCount - 1, c + 1));
+                                                return;
+                                              }
+
+                                              // Delete backwards through the sheet
+                                              if (e.key === "Backspace" || e.key === "Delete") {
+                                                // In measurement mode, Line/Factory are frozen.
+                                                if (showMeasureMode && (subKey === "line" || subKey === "soll")) return;
+
+                                                e.preventDefault();
+                                                manualSetCell(r, c, "");
+                                                const prev = showMeasureMode ? manualMeasurePrevPos(r, c) : manualPrevPos(r, c);
+                                                manualFocusCell(prev.row, prev.col);
+                                                return;
+                                              }
+
+                                              // Enter advances
+                                              if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                if (showMeasureMode) {
+                                                  const next = manualMeasureNextPos(r, c);
+                                                  manualFocusCell(next.row, next.col);
+                                                } else {
+                                                  const nextRow = r + 1;
+                                                  if (nextRow < manualRowCount) {
+                                                    manualFocusCell(nextRow, c);
+                                                  } else {
+                                                    const nextCol = c + 1;
+                                                    if (nextCol < manualColCount) manualFocusCell(0, nextCol);
+                                                  }
+                                                }
+                                              }
+                                            }}
+                                            ref={(el) => {
+                                              if (el) manualGridRefs.current[k] = el;
+                                            }}
+                                            inputMode="decimal"
+                                            style={{
+                                              width: 92,
+                                              padding: "8px 8px",
+                                              borderRadius: 10,
+                                              border: `1px solid ${theme.border}`,
+                                              background: theme.bg2,
+                                              color: (() => {
+                                                  const subKey = MANUAL_SUBCOLS[c % MANUAL_SUBCOLS.length]?.key;
+                                                  if (showMeasureMode && (subKey === "line" || subKey === "soll")) return "rgba(147,197,253,0.95)";
+                                                  if (subKey !== "l" && subKey !== "r") return theme.text;
+
+                                                  const meta = manualColMeta(c);
+                                                  const factoryKey = `${meta.groupLetter}${r + 1}_soll`;
+                                                  const factoryNum = Number(manualGrid[factoryKey]);
+                                                  const measNum = Number(manualGrid[k]);
+
+                                                  if (!Number.isFinite(factoryNum) || !Number.isFinite(measNum)) return theme.text;
+
+                                                  const corrNum = Number(measureCorrection);
+                                                  const tolNum = Number(measureTolerance);
+                                                  const delta = (measNum + (Number.isFinite(corrNum) ? corrNum : 0)) - factoryNum;
+                                                  const absDelta = Math.abs(delta);
+
+                                                  if (absDelta <= 4) return theme.good;
+                                                  if (Number.isFinite(tolNum) && tolNum > 0 && absDelta <= tolNum) return theme.warn;
+                                                  return theme.bad;
+                                                })(),
+                                              fontWeight: 900,
+                                              outline: "none",
+                                            }}
+                                            placeholder="mm"
+                                            title="Paste columns/blocks from Excel/Sheets. Press Enter to advance down the column."
+                                          />
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
+{loaded ? (
                     <div style={{ marginLeft: "auto" }}>
                       <button style={{ ...topBtn, background: "rgba(34,197,94,0.25)", border: "1px solid rgba(34,197,94,0.55)" }} onClick={() => setStep(2)}>
                         Go to Step 2 →
@@ -3093,11 +4441,13 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
   >
     Download example CSV file
   </a>
-</div>
 
-                </div>
+
+                
+              </div>
               </div>
 
+            </div>
             </div>
           </Panel>
         ) : null}
@@ -4545,6 +5895,149 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
             })()}
           </datalist>
 
+          </div>
+
+          {/* Step 0: Graphical Advanced Pitch Config (preview only — no logic yet) */}
+          {/* Step 0.5: Graphical Advanced Pitch Config — static preview layout (no logic yet) */}
+          <div
+            style={{
+              marginTop: 12,
+              border: `1px dashed ${theme.border}`,
+              borderRadius: 16,
+              padding: 12,
+              background: "rgba(0,0,0,0.14)",
+            }}
+          >
+            <div style={{ fontWeight: 950, display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <div>Graphical Advanced Pitch Config</div>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>Preview</div>
+            </div>
+
+            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8, fontWeight: 850, lineHeight: 1.35 }}>
+              Static layout preview only (no selection yet). Target layout: L on the left, R on the right, with bucket headers (A1, A2, …) and stabilo chips (A3L/A3R, A4L/A4R).
+            </div>
+
+            <div
+              style={{
+                marginTop: 12,
+                border: `1px solid ${theme.border}`,
+                borderRadius: 14,
+                padding: 10,
+                background: "rgba(255,255,255,0.03)",
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              {/* wing outline (simple preview) */}
+              <svg
+                viewBox="0 0 1200 520"
+                preserveAspectRatio="xMidYMid meet"
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.22, pointerEvents: "none" }}
+              >
+                <path d="M70,360 C260,190 430,145 600,145 C770,145 940,190 1130,360" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="2" />
+                <path d="M120,370 C300,265 455,230 600,230 C745,230 900,265 1080,370" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="2" />
+                <line x1="600" y1="120" x2="600" y2="450" stroke="rgba(255,255,255,0.30)" strokeWidth="2" />
+              </svg>
+
+              {/* Layout preview: same overall structure as Live grouping diagram (L on left, R on right, 4 row bands) */}
+              <div style={{ position: "relative", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0, alignItems: "stretch" }}>
+                <div style={{ borderRight: `2px solid ${theme.border}`, paddingRight: 10, marginRight: 10 }}>
+                  <div style={{ fontWeight: 950, marginBottom: 8, opacity: 0.9 }}>Left (L)</div>
+
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {[
+                      { row: "A", tint: "rgba(59,130,246,0.12)" },
+                      { row: "B", tint: "rgba(167,139,250,0.12)" },
+                      { row: "C", tint: "rgba(245,158,11,0.10)" },
+                      { row: "D", tint: "rgba(234,179,8,0.10)" },
+                    ].map(({ row, tint }) => (
+                      <div key={`pitchPrevL_band_${row}`} style={{ borderRadius: 14, padding: 10, background: tint, border: `1px solid ${theme.border}` }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+                          <div style={{ fontWeight: 950 }}>{row} buckets</div>
+                          <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>click headers (preview)</div>
+                        </div>
+
+                        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
+                          {["1", "2", "3"].map((n) => (
+                            <div key={`pitchPrevL_${row}${n}`} style={{ minWidth: 160, borderRadius: 12, padding: 10, background: "rgba(0,0,0,0.18)", border: `1px solid ${theme.border}` }}>
+                              <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+                                <div style={{ padding: "4px 10px", borderRadius: 999, background: theme.bg2, border: `1px solid ${theme.border}`, fontWeight: 950, fontSize: 12 }}>
+                                  {row}{n}
+                                </div>
+                              </div>
+
+                              {/* stabilo chips only for A3 / A4 buckets (preview) */}
+                                                            {(row === "A" && n === "3") ? (
+                                <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
+                                  <div style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(59,130,246,0.18)", fontWeight: 950, fontSize: 12 }}>
+                                    A3L
+                                  </div>
+                                </div>
+                              ) : null}
+                              {(row === "A" && n === "2") ? (
+                                <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", opacity: 0.55 }}>
+                                  <div style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.05)", fontWeight: 950, fontSize: 12 }}>
+                                    …
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ paddingLeft: 10 }}>
+                  <div style={{ fontWeight: 950, marginBottom: 8, opacity: 0.9 }}>Right (R)</div>
+
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {[
+                      { row: "A", tint: "rgba(59,130,246,0.12)" },
+                      { row: "B", tint: "rgba(167,139,250,0.12)" },
+                      { row: "C", tint: "rgba(245,158,11,0.10)" },
+                      { row: "D", tint: "rgba(234,179,8,0.10)" },
+                    ].map(({ row, tint }) => (
+                      <div key={`pitchPrevR_band_${row}`} style={{ borderRadius: 14, padding: 10, background: tint, border: `1px solid ${theme.border}` }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+                          <div style={{ fontWeight: 950 }}>{row} buckets</div>
+                          <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>click headers (preview)</div>
+                        </div>
+
+                        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
+                          {["1", "2", "3"].map((n) => (
+                            <div key={`pitchPrevR_${row}${n}`} style={{ minWidth: 160, borderRadius: 12, padding: 10, background: "rgba(0,0,0,0.18)", border: `1px solid ${theme.border}` }}>
+                              <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+                                <div style={{ padding: "4px 10px", borderRadius: 999, background: theme.bg2, border: `1px solid ${theme.border}`, fontWeight: 950, fontSize: 12 }}>
+                                  {row}{n}
+                                </div>
+                              </div>
+
+                              {(row === "A" && n === "3") ? (
+                                <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
+                                  <div style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(59,130,246,0.18)", fontWeight: 950, fontSize: 12 }}>
+                                    A3R
+                                  </div>
+                                </div>
+                              ) : null}
+                              {(row === "A" && n === "2") ? (
+                                <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", opacity: 0.55 }}>
+                                  <div style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.05)", fontWeight: 950, fontSize: 12 }}>
+                                    …
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+</div>
+            </div>
           </div>
 
           <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
