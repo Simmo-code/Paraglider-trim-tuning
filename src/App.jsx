@@ -845,7 +845,7 @@ function StatPill({ label, value, n }) {
     <div
       style={{
         border: `1px solid ${theme.border}`,
-        background: theme.bg2,
+        background: "rgba(0,0,0,0.55)",
         borderRadius: 999,
         padding: "8px 10px",
         display: "flex",
@@ -867,7 +867,7 @@ function ControlPill({ label, value, onChange, suffix = "mm", width = 90, step =
     <div
       style={{
         border: `1px solid ${theme.border}`,
-        background: theme.bg2,
+        background: "rgba(0,0,0,0.55)",
         borderRadius: 999,
         padding: "8px 10px",
         display: "flex",
@@ -906,7 +906,7 @@ function TogglePill({ label, checked, onChange }) {
       onClick={() => onChange(!checked)}
       style={{
         border: `1px solid ${theme.border}`,
-        background: theme.bg2,
+        background: "rgba(0,0,0,0.55)",
         borderRadius: 999,
         padding: "8px 10px",
         display: "flex",
@@ -2901,7 +2901,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
           minWidth: 140,
         }}
       >
-        <div style={{ fontWeight: 950, fontSize: 12 }}>
+        <div style={{ fontWeight: 950, fontSize: 11 }}>
           {letter} prefix <span style={{ opacity: 0.7, fontWeight: 850 }}>({(prefixByLetter[letter] || "") + "1L"} / {(prefixByLetter[letter] || "") + "1R"})</span>
         </div>
         <div style={{ marginTop: 6 }}>
@@ -3459,20 +3459,20 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                         <div style={{ marginTop: 6, fontSize: 14, fontWeight: 900, opacity: 0.85 }}>
                                           Current cell: <span style={{ fontWeight: 950 }}>{manualPosLabel(cur.row, cur.col)}</span>{" "}
                                           {curSide ? (
-                                            <span style={{ marginLeft: 10, padding: "3px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: theme.bg2, fontWeight: 950 }}>
+                                            <span style={{ marginLeft: 10, padding: "3px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.55)", fontWeight: 950 }}>
                                               {curSide}
                                             </span>
                                           ) : null}
                                         </div>
                                         <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", fontWeight: 900 }}>
-                                          <div style={{ padding: "8px 12px", borderRadius: 14, border: `1px solid ${theme.border}`, background: theme.bg2 }}>
+                                          <div style={{ padding: "8px 12px", borderRadius: 14, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.55)" }}>
                                             Line: <span style={{ fontWeight: 950 }}>{manualGrid[curLineKey] ?? "—"}</span>
                                           </div>
-                                          <div style={{ padding: "8px 12px", borderRadius: 14, border: `1px solid ${theme.border}`, background: theme.bg2 }}>
+                                          <div style={{ padding: "8px 12px", borderRadius: 14, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.55)" }}>
                                             Factory: <span style={{ fontWeight: 950 }}>{manualGrid[curFactoryKey] ?? "—"}</span>
                                           </div>
 
-                                          <div style={{ padding: "8px 12px", borderRadius: 14, border: `1px solid ${theme.border}`, background: theme.bg2, display: "flex", alignItems: "center", gap: 8 }}>
+                                          <div style={{ padding: "8px 12px", borderRadius: 14, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", gap: 8 }}>
                                             <span style={{ fontWeight: 950 }}>Correction</span>
                                             <input
                                               value={String(measureCorrection)}
@@ -3536,7 +3536,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                             <span style={{ opacity: 0.8, fontWeight: 900 }}>mm</span>
                                           </div>
 
-                                          <div style={{ padding: "8px 12px", borderRadius: 14, border: `1px solid ${theme.border}`, background: theme.bg2, display: "flex", alignItems: "center", gap: 8 }}>
+                                          <div style={{ padding: "8px 12px", borderRadius: 14, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", gap: 8 }}>
                                             <span style={{ fontWeight: 950 }}>Tolerance</span>
                                             <input
                                               value={String(measureTolerance)}
@@ -3611,7 +3611,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                           }}
                                           style={{
                                             border: `1px solid ${theme.border}`,
-                                            background: theme.bg2,
+                                            background: "rgba(0,0,0,0.55)",
                                             color: theme.text,
                                             borderRadius: 999,
                                             padding: "12px 16px",
@@ -3685,7 +3685,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                             fontWeight: 950,
                                             borderRadius: 16,
                                             border: `2px solid ${theme.border}`,
-                                            background: theme.bg2,
+                                            background: "rgba(0,0,0,0.55)",
                                             color: theme.text,
                                             outline: "none",
                                             textAlign: "center",
@@ -3730,7 +3730,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                             <div style={{ fontWeight: 950, letterSpacing: -0.2, fontSize: 21 }}>Manual entry (wide grid)</div>
 
                             <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: theme.bg2 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.55)" }}>
                                 <span style={{ fontWeight: 950 }}>Correction</span>
                                 <input
                                   value={measureCorrection}
@@ -3787,7 +3787,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                 </div>
                               </div>
 
-                              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: theme.bg2 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.55)" }}>
                                 <span style={{ fontWeight: 950 }}>Tolerance</span>
                                 <input
                                   value={measureTolerance}
@@ -3892,7 +3892,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                   padding: 10,
                                   borderRadius: 12,
                                   border: `1px solid ${theme.border}`,
-                                  background: theme.bg2,
+                                  background: "rgba(0,0,0,0.55)",
                                   color: theme.text,
                                   fontWeight: 850,
                                   outline: "none",
@@ -3907,7 +3907,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                               onClick={() => setManualGrid({})}
                               style={{
                                 border: `1px solid ${theme.border}`,
-                                background: theme.bg2,
+                                background: "rgba(0,0,0,0.55)",
                                 color: theme.text,
                                 borderRadius: 999,
                                 padding: "8px 12px",
@@ -3924,7 +3924,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                               onClick={() => setManualRowCount((n) => n + 1)}
                               style={{
                                 border: `1px solid ${theme.border}`,
-                                background: theme.bg2,
+                                background: "rgba(0,0,0,0.55)",
                                 color: theme.text,
                                 borderRadius: 999,
                                 padding: "8px 12px",
@@ -3941,7 +3941,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                               onClick={() => setManualRowCount((n) => Math.max(1, n - 1))}
                               style={{
                                 border: `1px solid ${theme.border}`,
-                                background: theme.bg2,
+                                background: "rgba(0,0,0,0.55)",
                                 color: theme.text,
                                 borderRadius: 999,
                                 padding: "8px 12px",
@@ -3964,7 +3964,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                               }
                               style={{
                                 border: `1px solid ${theme.border}`,
-                                background: theme.bg2,
+                                background: "rgba(0,0,0,0.55)",
                                 color: theme.text,
                                 borderRadius: 999,
                                 padding: "8px 12px",
@@ -3981,7 +3981,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                               onClick={() => setManualGroups((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev))}
                               style={{
                                 border: `1px solid ${theme.border}`,
-                                background: theme.bg2,
+                                background: "rgba(0,0,0,0.55)",
                                 color: theme.text,
                                 borderRadius: 999,
                                 padding: "8px 12px",
@@ -4006,7 +4006,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                               }}
                               style={{
                                 border: `1px solid ${theme.border}`,
-                                background: theme.bg2,
+                                background: "rgba(0,0,0,0.55)",
                                 color: theme.text,
                                 borderRadius: 999,
                                 padding: "8px 12px",
@@ -4241,7 +4241,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                               padding: "8px 8px",
                                               borderRadius: 10,
                                               border: `1px solid ${theme.border}`,
-                                              background: theme.bg2,
+                                              background: "rgba(0,0,0,0.55)",
                                               color: (() => {
                                                   const subKey = MANUAL_SUBCOLS[c % MANUAL_SUBCOLS.length]?.key;
                                                   if (showMeasureMode && (subKey === "line" || subKey === "soll")) return "rgba(147,197,253,0.95)";
@@ -4768,7 +4768,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                   justifyContent: "center",
                                   borderRadius: 999,
                                   border: `1px solid ${theme.border}`,
-                                  background: "rgba(255,255,255,0.06)",
+                                  background: "rgba(0,0,0,0.35)",
                                   fontWeight: 950,
                                   opacity: 0.9,
                                   padding: "0 12px",
@@ -4778,7 +4778,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                   minWidth: 190,
                                   borderRadius: 16,
                                   padding: 8,
-                                  background: "rgba(255,255,255,0.06)",
+                                  background: "rgba(0,0,0,0.35)",
                                   boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)",
                                 };
 
@@ -5120,7 +5120,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                     <div
                       style={{
                         border: `1px solid ${theme.border}`,
-                        background: theme.bg2,
+                        background: "rgba(0,0,0,0.55)",
                         borderRadius: 999,
                         padding: "8px 10px",
                         display: "flex",
@@ -5303,10 +5303,10 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
 
                             return (
                               <tr key={row.key} style={{ borderTop: `1px solid ${theme.border}` }}>
-                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 12, padding: "7px 8px" })}>{row.label}</td>
-                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 12, padding: "7px 8px", color: colFor(sevL) })}>{f1(vL)}</td>
-                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 12, padding: "7px 8px", color: colFor(sevR) })}>{f1(vR)}</td>
-                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 12, padding: "7px 8px", color: colFor(sevB) })}>{f1(vB)}</td>
+                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 11, padding: "7px 8px" })}>{row.label}</td>
+                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 11, padding: "7px 8px", color: colFor(sevL) })}>{f1(vL)}</td>
+                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 11, padding: "7px 8px", color: colFor(sevR) })}>{f1(vR)}</td>
+                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 11, padding: "7px 8px", color: colFor(sevB) })}>{f1(vB)}</td>
                               </tr>
                             );
                           })}
@@ -5736,7 +5736,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
 
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
       <button
-        style={Object.assign({}, topBtn, { background: "rgba(255,255,255,0.06)" })}
+        style={Object.assign({}, topBtn, { background: "rgba(0,0,0,0.35)" })}
         onClick={async () => {
           try {
             const payload = { schema: "abc-loop-suggestions-v1", exportedAt: new Date().toISOString(), wing: { make: meta.make || "", model: meta.model || "" }, suggestions: abcSuggestions, averages: abcAverages };
@@ -5942,7 +5942,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
               {/* Layout preview: same overall structure as Live grouping diagram (L on left, R on right, 4 row bands) */}
               <div style={{ position: "relative", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0, alignItems: "stretch" }}>
                 <div style={{ borderRight: `2px solid ${theme.border}`, paddingRight: 10, marginRight: 10 }}>
-                  <div style={{ fontWeight: 950, marginBottom: 8, opacity: 0.9 }}>Left (L)</div>
+                  
 
                   <div style={{ display: "grid", gap: 10 }}>
                     {[
@@ -5952,45 +5952,78 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                       { row: "D", tint: "rgba(234,179,8,0.10)" },
                     ].map(({ row, tint }) => (
                       <div key={`pitchPrevL_band_${row}`} style={{ borderRadius: 14, padding: 10, background: tint, border: `1px solid ${theme.border}` }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
-                          <div style={{ fontWeight: 950 }}>{row} buckets</div>
-                          <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>click headers (preview)</div>
-                        </div>
-
-                        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
-                          {["1", "2", "3"].map((n) => (
-                            <div key={`pitchPrevL_${row}${n}`} style={{ minWidth: 160, borderRadius: 12, padding: 10, background: "rgba(0,0,0,0.18)", border: `1px solid ${theme.border}` }}>
+                        <div style={{ display: "flex", gap: 4, flexWrap: "nowrap", alignItems: "flex-start", justifyContent: "flex-end" }}>
+                          {["3", "2", "1"].map((n, i, arr) => (
+                            <div key={`pitchPrevL_${row}_${n}`} style={{
+                                  width: "fit-content", minWidth: 110, maxWidth: 240,
+                                  borderRadius: 12,
+                                  padding: 7,
+                                  background: ((pitchRowCfg[row]?.groups || []).includes(`${row}R${n}L`) ? "rgba(0,0,0,0.30)" : "rgba(0,0,0,0.18)"),
+                                  border: `1px solid ${theme.border}`,
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  justifyContent: "flex-start",
+                                  gap: 5,
+                                  flex: "0 0 auto"
+                                }}>
                               <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
-                                <div style={{ padding: "4px 10px", borderRadius: 999, background: theme.bg2, border: `1px solid ${theme.border}`, fontWeight: 950, fontSize: 12 }}>
-                                  {row}{n}
-                                </div>
+                                <button type="button"
+                                    onClick={() => {
+                                      const gid = `${row}R${n}L`;
+                                      setPitchRowCfg((p) => {
+                                        const cur = p[row] || { groups: [], include: [], exclude: [] };
+                                        const has = (cur.groups || []).includes(gid);
+                                        const nextGroups = has ? (cur.groups || []).filter((x) => x !== gid) : [...(cur.groups || []), gid];
+                                        return { ...p, [row]: { ...cur, groups: nextGroups } };
+                                      });
+                                    }}
+                                    style={{ padding: "4px 10px", borderRadius: 999, background: ((pitchRowCfg[row]?.groups || []).includes(`${row}R${n}L`) ? "rgba(0,0,0,0.82)" : "rgba(0,0,0,0.58)"), border: `1px solid ${groupColor(row, Number(n))}`, color: groupColor(row, Number(n)), fontWeight: 950, fontSize: 11, cursor: "pointer" }}>
+                                    {`${row}R${n}L`}
+                                  </button>
                               </div>
-
-                              {/* stabilo chips only for A3 / A4 buckets (preview) */}
-                                                            {(row === "A" && n === "3") ? (
-                                <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
-                                  <div style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(59,130,246,0.18)", fontWeight: 950, fontSize: 12 }}>
-                                    A3L
-                                  </div>
-                                </div>
-                              ) : null}
-                              {(row === "A" && n === "2") ? (
-                                <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", opacity: 0.55 }}>
-                                  <div style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.05)", fontWeight: 950, fontSize: 12 }}>
-                                    …
-                                  </div>
-                                </div>
-                              ) : null}
+                              <div style={{ display: "flex", flexWrap: "nowrap", gap: 3, justifyContent: "center", maxWidth: "100%", overflowX: "hidden", overflowY: "hidden", alignSelf: "stretch" }}>
+                                {(() => {
+                                  const gid = `${row}R${n}L`;
+                                  const ents = Object.entries(lineToGroup || {});
+                                  const out = [];
+                                  const seen = new Set();
+                                  for (const [k, v] of ents) {
+                                    if (v === gid && !seen.has(k)) {
+                                      seen.add(k);
+                                      out.push(k);
+                                    }
+                                  }
+                                  out.sort((a, b) => String(b).localeCompare(String(a), undefined, { numeric: true }));
+                                  return out.map((ln) => (
+                                    <button type="button" key={`${gid}_${ln}`}
+                                      onClick={() => {
+                                        const cur = pitchRowCfg[row] || { groups: [], include: [], exclude: [] };
+                                        const groupOn = (cur.groups || []).includes(gid);
+                                        if (groupOn) return;
+                                        setPitchRowCfg((p) => {
+                                          const cur2 = p[row] || { groups: [], include: [], exclude: [] };
+                                          const has = (cur2.include || []).includes(ln);
+                                          const nextInc = has ? (cur2.include || []).filter((x) => x !== ln) : [...(cur2.include || []), ln];
+                                          return { ...p, [row]: { ...cur2, include: nextInc } };
+                                        });
+                                      }}
+                                      style={{ padding: "1px 4px", borderRadius: 999, border: `1px solid ${chipColorFromLineId(ln)}`, background: ((pitchRowCfg[row]?.include || []).includes(ln) ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.10)"), color: "rgba(255,255,255,0.93)", fontWeight: 650, fontSize: 8, whiteSpace: "nowrap", cursor: (((pitchRowCfg[row]?.groups || []).includes(gid)) ? "not-allowed" : "pointer"), opacity: (((pitchRowCfg[row]?.groups || []).includes(gid)) ? 0.45 : 1) }}>
+                                      {ln}
+                                    </button>
+                                  ));
+                                })()}
+                              </div>
                             </div>
                           ))}
                         </div>
                       </div>
                     ))}
                   </div>
+
                 </div>
 
                 <div style={{ paddingLeft: 10 }}>
-                  <div style={{ fontWeight: 950, marginBottom: 8, opacity: 0.9 }}>Right (R)</div>
+                  
 
                   <div style={{ display: "grid", gap: 10 }}>
                     {[
@@ -6000,43 +6033,76 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                       { row: "D", tint: "rgba(234,179,8,0.10)" },
                     ].map(({ row, tint }) => (
                       <div key={`pitchPrevR_band_${row}`} style={{ borderRadius: 14, padding: 10, background: tint, border: `1px solid ${theme.border}` }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
-                          <div style={{ fontWeight: 950 }}>{row} buckets</div>
-                          <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>click headers (preview)</div>
-                        </div>
-
-                        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
-                          {["1", "2", "3"].map((n) => (
-                            <div key={`pitchPrevR_${row}${n}`} style={{ minWidth: 160, borderRadius: 12, padding: 10, background: "rgba(0,0,0,0.18)", border: `1px solid ${theme.border}` }}>
+                        <div style={{ display: "flex", gap: 4, flexWrap: "nowrap", alignItems: "flex-start" }}>
+                          {["1", "2", "3"].map((n, i, arr) => (
+                            <div key={`pitchPrevR_${row}_${n}`} style={{
+                                  width: "fit-content", minWidth: 110, maxWidth: 240,
+                                  borderRadius: 12,
+                                  padding: 7,
+                                  background: ((pitchRowCfg[row]?.groups || []).includes(`${row}R${n}R`) ? "rgba(0,0,0,0.30)" : "rgba(0,0,0,0.18)"),
+                                  border: `1px solid ${theme.border}`,
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  justifyContent: "flex-start",
+                                  gap: 5,
+                                  flex: "0 0 auto"
+                                }}>
                               <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
-                                <div style={{ padding: "4px 10px", borderRadius: 999, background: theme.bg2, border: `1px solid ${theme.border}`, fontWeight: 950, fontSize: 12 }}>
-                                  {row}{n}
-                                </div>
+                                <button type="button"
+                                    onClick={() => {
+                                      const gid = `${row}R${n}R`;
+                                      setPitchRowCfg((p) => {
+                                        const cur = p[row] || { groups: [], include: [], exclude: [] };
+                                        const has = (cur.groups || []).includes(gid);
+                                        const nextGroups = has ? (cur.groups || []).filter((x) => x !== gid) : [...(cur.groups || []), gid];
+                                        return { ...p, [row]: { ...cur, groups: nextGroups } };
+                                      });
+                                    }}
+                                    style={{ padding: "4px 10px", borderRadius: 999, background: ((pitchRowCfg[row]?.groups || []).includes(`${row}R${n}R`) ? "rgba(0,0,0,0.82)" : "rgba(0,0,0,0.58)"), border: `1px solid ${groupColor(row, Number(n))}`, color: groupColor(row, Number(n)), fontWeight: 950, fontSize: 11, cursor: "pointer" }}>
+                                    {`${row}R${n}R`}
+                                  </button>
                               </div>
-
-                              {(row === "A" && n === "3") ? (
-                                <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
-                                  <div style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(59,130,246,0.18)", fontWeight: 950, fontSize: 12 }}>
-                                    A3R
-                                  </div>
-                                </div>
-                              ) : null}
-                              {(row === "A" && n === "2") ? (
-                                <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", opacity: 0.55 }}>
-                                  <div style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.05)", fontWeight: 950, fontSize: 12 }}>
-                                    …
-                                  </div>
-                                </div>
-                              ) : null}
+                              <div style={{ display: "flex", flexWrap: "nowrap", gap: 3, justifyContent: "center", maxWidth: "100%", overflowX: "hidden", overflowY: "hidden", alignSelf: "stretch" }}>
+                                {(() => {
+                                  const gid = `${row}R${n}R`;
+                                  const ents = Object.entries(lineToGroup || {});
+                                  const out = [];
+                                  const seen = new Set();
+                                  for (const [k, v] of ents) {
+                                    if (v === gid && !seen.has(k)) {
+                                      seen.add(k);
+                                      out.push(k);
+                                    }
+                                  }
+                                  out.sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+                                  return out.map((ln) => (
+                                    <button type="button" key={`${gid}_${ln}`}
+                                      onClick={() => {
+                                        const cur = pitchRowCfg[row] || { groups: [], include: [], exclude: [] };
+                                        const groupOn = (cur.groups || []).includes(gid);
+                                        if (groupOn) return;
+                                        setPitchRowCfg((p) => {
+                                          const cur2 = p[row] || { groups: [], include: [], exclude: [] };
+                                          const has = (cur2.include || []).includes(ln);
+                                          const nextInc = has ? (cur2.include || []).filter((x) => x !== ln) : [...(cur2.include || []), ln];
+                                          return { ...p, [row]: { ...cur2, include: nextInc } };
+                                        });
+                                      }}
+                                      style={{ padding: "1px 4px", borderRadius: 999, border: `1px solid ${chipColorFromLineId(ln)}`, background: ((pitchRowCfg[row]?.include || []).includes(ln) ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.10)"), color: "rgba(255,255,255,0.93)", fontWeight: 650, fontSize: 8, whiteSpace: "nowrap", cursor: (((pitchRowCfg[row]?.groups || []).includes(gid)) ? "not-allowed" : "pointer"), opacity: (((pitchRowCfg[row]?.groups || []).includes(gid)) ? 0.45 : 1) }}>
+                                      {ln}
+                                    </button>
+                                  ));
+                                })()}
+                              </div>
                             </div>
                           ))}
                         </div>
                       </div>
                     ))}
                   </div>
+
                 </div>
               </div>
-</div>
             </div>
           </div>
 
@@ -6059,7 +6125,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
                         {(() => {
                           const prefix = String(prefixByLetter[row] || "");
-                          const vals = Object.values(lineToGroup || {}).filter((v) => v && String(v).startsWith(prefix));
+                          const vals = Object.values(lineToGroup || {}).filter((v) => v && String(v).slice(0, prefix.length) === prefix);
                           const seen = new Set();
                           const uniq = [];
                           for (const v of vals) { const s = String(v); if (!seen.has(s)) { seen.add(s); uniq.push(s); } }
@@ -6072,7 +6138,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                               style={{
                                 borderRadius: 999,
                                 border: `1px solid ${theme.border}`,
-                                background: "rgba(255,255,255,0.06)",
+                                background: "rgba(0,0,0,0.35)",
                                 color: theme.text,
                                 padding: "6px 10px",
                                 fontWeight: 950,
@@ -6135,7 +6201,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                           style={{
                             borderRadius: 999,
                             border: `1px solid ${theme.border}`,
-                            background: "rgba(255,255,255,0.06)",
+                            background: "rgba(0,0,0,0.35)",
                             color: theme.text,
                             padding: "8px 10px",
                             fontWeight: 950,
@@ -6208,7 +6274,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                           style={{
                             borderRadius: 999,
                             border: `1px solid ${theme.border}`,
-                            background: "rgba(255,255,255,0.06)",
+                            background: "rgba(0,0,0,0.35)",
                             color: theme.text,
                             padding: "8px 10px",
                             fontWeight: 950,
@@ -6281,7 +6347,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                           style={{
                             borderRadius: 999,
                             border: `1px solid ${theme.border}`,
-                            background: "rgba(255,255,255,0.06)",
+                            background: "rgba(0,0,0,0.35)",
                             color: theme.text,
                             padding: "8px 10px",
                             fontWeight: 950,
@@ -6338,7 +6404,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <button
             type="button"
-            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.06)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
+            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.35)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
             onClick={() => applyAutoLoopPlan("factory")}
             title="Choose the closest achievable loop configuration using discrete loops (no fine-adjust)."
           >
@@ -6347,7 +6413,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
 
           <button
             type="button"
-            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.06)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
+            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.35)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
             onClick={() => applyAutoLoopPlan("minimal")}
             title="Bring the wing within tolerance with the least loop change, using discrete loops only (no fine-adjust)."
           >
@@ -6374,7 +6440,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
           </button>
 
 {autoLoopStatus && ((groupLoopChange && Object.keys(groupLoopChange).length > 0) || (groupAdjustments && Object.keys(groupAdjustments).length > 0) || (step4LineCorr && Object.keys(step4LineCorr).length > 0)) ? (
-            <div style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(34,197,94,0.25)", color: theme.text, fontWeight: 950, fontSize: 12 }}>
+            <div style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(34,197,94,0.25)", color: theme.text, fontWeight: 950, fontSize: 11 }}>
               Auto applied
             </div>
            ) : null}
@@ -6784,7 +6850,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                         <span style={{ opacity: 0.7 }}>—</span>
                       ) : (
                         entries.map(([lt, c]) => (
-                          <span key={`${L}-${side}-${lt}`} style={{ padding: "3px 8px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.06)", fontWeight: 950, fontSize: 12 }}>
+                          <span key={`${L}-${side}-${lt}`} style={{ padding: "3px 8px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.35)", fontWeight: 950, fontSize: 11 }}>
                             {lt}: {c}
                           </span>
                         ))
@@ -7752,7 +7818,7 @@ function PitchTrimChart({ rows, tolerance, height = 220 }) {
   };
 
   return (
-    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.bg2, padding: 12 }}>
+    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: "rgba(0,0,0,0.55)", padding: 12 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
         <div style={{ fontWeight: 950 }}>Pitch trim (avg Δ after vs nominal)</div>
         <div style={{ opacity: 0.75, fontSize: 12 }}>Per row average — L and R</div>
