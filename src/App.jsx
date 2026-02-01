@@ -27,45 +27,7 @@ const playBeep = () => {
     o.stop(now + 0.12);
   } catch {}
 };
-  const exportManualCSV = () => {
-    console.log("Export CSV triggered");
-    try {
-      const rows = [];
-      // Metadata rows
-      rows.push(["Make","Model","tolerance","correction"]);
-      rows.push([make || "", model || "", manualTolerance ?? "", manualCorrection ?? ""]);
-      // Header row (wide)
-      rows.push(["A","Factory","Ist L","Ist R","B","Factory","L","R","C","Factory","Ist L","Ist R","D","Factory","L","R"]);
-      // Data rows
-      const maxLen = Math.max(
-        manualGrid.A?.length || 0,
-        manualGrid.B?.length || 0,
-        manualGrid.C?.length || 0,
-        manualGrid.D?.length || 0
-      );
-      for (let i = 0; i < maxLen; i++) {
-        const r = [];
-        ["A","B","C","D"].forEach((g) => {
-          const row = manualGrid[g]?.[i] || {};
-          r.push(row.line || `${g}${i+1}`);
-          r.push(row.factory ?? "");
-          r.push(row.left ?? "");
-          r.push(row.right ?? "");
-        });
-        rows.push(r);
-      }
-      const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "manual_entry_export.csv";
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  ;
 
 
 const SITE_VERSION = "Trim Tuning v1.2";
@@ -1056,6 +1018,60 @@ async function readFileText(file) {
 }
 
 export default function App() {
+
+  const exportManualCSV = () => {
+    console.log("Export CSV triggered");
+    try {
+      const includeBR = Array.isArray(manualGrid?.BR) && manualGrid.BR.length > 0;
+      const groups = includeBR ? ["A", "B", "C", "D", "BR"] : ["A", "B", "C", "D"];
+
+      const wideHeader = [];
+      groups.forEach((g) => {
+        wideHeader.push(g, "Factory", g === "B" ? "L" : "Ist L", g === "B" ? "R" : "Ist R");
+      });
+
+      const rows = [];
+      // Metadata rows (pad to match wide header length)
+      const padCount = Math.max(0, wideHeader.length - 4);
+      rows.push(["Make ", "Model", "tolerance ", "correction", ...Array(padCount).fill("")]);
+      rows.push([make || "", model || "", measureTolerance ?? "", measureCorrection ?? "", ...Array(padCount).fill("")]);
+
+      // Header row (wide)
+      rows.push(wideHeader);
+
+      // Data rows
+      const maxLen = Math.max(...groups.map((g) => (manualGrid?.[g]?.length || 0)));
+      for (let i = 0; i < maxLen; i++) {
+        const r = [];
+        groups.forEach((g) => {
+          const row = manualGrid?.[g]?.[i] || {};
+          r.push(row.line || `${g}${i + 1}`);
+          r.push(row.factory ?? "");
+          r.push(row.left ?? "");
+          r.push(row.right ?? "");
+        });
+        rows.push(r);
+      }
+
+      const csv = rows
+        .map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
+        .join("\n");
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "manual_entry_export.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+
   const [step, setStep] = useState(1);
 
   // Report (A4 preview) — generated from Step 4 data (no step navigation)
@@ -4114,8 +4130,8 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                               type="button"
                               onClick={() => setManualGrid({})}
                               style={{
-                                border: `1px solid ${theme.border}`,
-                                background: "rgba(0,0,0,0.55)",
+                                border: "1px solid rgba(34,197,94,0.95)",
+                                background: "rgba(34,197,94,0.85)",
                                 color: theme.text,
                                 borderRadius: 999,
                                 padding: "8px 12px",
@@ -4224,6 +4240,24 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                               title="Open large measurement view (for laser measure entry)"
                             >
                               Start measurement
+                            </button>
+
+
+                            <button
+                              type="button"
+                              onClick={(e) => { e.preventDefault(); exportManualCSV(); }}
+                              style={{
+                                border: "1px solid rgba(147,197,253,0.95)",
+                                background: "rgba(37,99,235,0.95)",
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title="Export manual entry as wide CSV"
+                            >
+                              Export CSV
                             </button>
 
                             <button
