@@ -6,6 +6,68 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 
+
+const playBeep = () => {
+  try {
+    const w = window;
+    if (!w.__ttBeepCtx) {
+      w.__ttBeepCtx = new (w.AudioContext || w.webkitAudioContext)();
+    }
+    const ctx = w.__ttBeepCtx;
+    if (ctx.state === "suspended") ctx.resume();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "sine";
+    o.frequency.value = 880;
+    g.gain.value = 0.12;
+    o.connect(g);
+    g.connect(ctx.destination);
+    const now = ctx.currentTime;
+    o.start(now);
+    o.stop(now + 0.12);
+  } catch {}
+};
+  const exportManualCSV = () => {
+    console.log("Export CSV triggered");
+    try {
+      const rows = [];
+      // Metadata rows
+      rows.push(["Make","Model","tolerance","correction"]);
+      rows.push([make || "", model || "", manualTolerance ?? "", manualCorrection ?? ""]);
+      // Header row (wide)
+      rows.push(["A","Factory","Ist L","Ist R","B","Factory","L","R","C","Factory","Ist L","Ist R","D","Factory","L","R"]);
+      // Data rows
+      const maxLen = Math.max(
+        manualGrid.A?.length || 0,
+        manualGrid.B?.length || 0,
+        manualGrid.C?.length || 0,
+        manualGrid.D?.length || 0
+      );
+      for (let i = 0; i < maxLen; i++) {
+        const r = [];
+        ["A","B","C","D"].forEach((g) => {
+          const row = manualGrid[g]?.[i] || {};
+          r.push(row.line || `${g}${i+1}`);
+          r.push(row.factory ?? "");
+          r.push(row.left ?? "");
+          r.push(row.right ?? "");
+        });
+        rows.push(r);
+      }
+      const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "manual_entry_export.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+
 const SITE_VERSION = "Trim Tuning v1.2";
 
 // Bundled asset URL for the downloadable example file
@@ -751,6 +813,7 @@ function NumInput({ value, onChange, min = -99999, max = 99999, step = 1, width 
         background: "rgba(0,0,0,0.68)",
         color: theme.text,
         outline: "none",
+                                              userSelect: "auto",
         fontWeight: 900,
         fontSize: 14,
       }}
@@ -770,6 +833,7 @@ function Select({ value, onChange, options, width = 140 }) {
         background: "rgba(0,0,0,0.80)",
         color: theme.text,
         outline: "none",
+                                              userSelect: "auto",
         fontWeight: 950,
         fontSize: 14,
       }}
@@ -892,6 +956,7 @@ function ControlPill({ label, value, onChange, suffix = "mm", width = 90, step =
           padding: "6px 8px",
           fontWeight: 900,
           outline: "none",
+                                              userSelect: "auto",
         }}
       />
       <span style={{ fontSize: 12, opacity: 0.75 }}>{suffix}</span>
@@ -1003,6 +1068,7 @@ export default function App() {
 
   const [showManualGrid, setShowManualGrid] = useState(false);
   const [manualPasteBox, setManualPasteBox] = useState("");
+  const [manualPasteOpen, setManualPasteOpen] = useState(false);
   const [showMeasureMode, setShowMeasureMode] = useState(false);
   const [measureCorrection, setMeasureCorrection] = useState(0);
   const [measureTolerance, setMeasureTolerance] = useState(10);
@@ -1019,7 +1085,80 @@ export default function App() {
   const manualGridRefs = useRef({});
   const manualActiveRef = useRef({ row: 0, col: 0 });
   const measureInputRef = useRef(null);
+  const manualScrollRef = useRef(null);
   const [manualActivePos, setManualActivePos] = useState({ row: 0, col: 0 });
+
+  // Manual grid multi-cell selection (drag to select)
+  const [manualSel, setManualSel] = useState(null); // { r0,c0,r1,c1 }
+  const [manualSelecting, setManualSelecting] = useState(false);
+
+  const manualNormSel = (sel) => {
+    if (!sel) return null;
+    const r0 = Math.min(sel.r0, sel.r1);
+    const r1 = Math.max(sel.r0, sel.r1);
+    const c0 = Math.min(sel.c0, sel.c1);
+    const c1 = Math.max(sel.c0, sel.c1);
+    return { r0, c0, r1, c1 };
+  };
+
+  const manualIsSelected = (r, c) => {
+    const s = manualNormSel(manualSel);
+    if (!s) return false;
+    return r >= s.r0 && r <= s.r1 && c >= s.c0 && c <= s.c1;
+  };
+
+  const manualClearSelection = () => setManualSel(null);
+
+  const manualClearSelectedCells = () => {
+    const s = manualNormSel(manualSel);
+    if (!s) return;
+    setManualGrid((prev) => {
+      const next = { ...prev };
+      for (let rr = s.r0; rr <= s.r1; rr++) {
+        for (let cc = s.c0; cc <= s.c1; cc++) {
+          const kk = manualCellKey(rr, cc);
+          const subKey = MANUAL_SUBCOLS[cc % MANUAL_SUBCOLS.length]?.key;
+          if (showMeasureMode && (subKey === "line" || subKey === "soll")) continue;
+          delete next[kk];
+        }
+      }
+      return next;
+    });
+  };
+
+  
+  useEffect(() => {
+    if (!manualSelecting) return;
+    const el = manualScrollRef.current;
+    if (!el) return;
+
+    const EDGE = 40;
+    const SPEED = 14;
+
+    const onMove = (e) => {
+      const rect = el.getBoundingClientRect();
+      const y = e.clientY;
+      if (y < rect.top + EDGE) {
+        el.scrollTop -= SPEED;
+      } else if (y > rect.bottom - EDGE) {
+        el.scrollTop += SPEED;
+      }
+    };
+
+    window.addEventListener("pointermove", onMove);
+    return () => window.removeEventListener("pointermove", onMove);
+  }, [manualSelecting]);
+
+useEffect(() => {
+    const up = () => setManualSelecting(false);
+    window.addEventListener("mouseup", up);
+    window.addEventListener("pointerup", up);
+    return () => {
+      window.removeEventListener("mouseup", up);
+      window.removeEventListener("pointerup", up);
+    };
+  }, []);
+
 
   const manualColCount = manualGroups.length * MANUAL_SUBCOLS.length;
 
@@ -1052,12 +1191,25 @@ export default function App() {
 
   const manualSetCell = (r, c, v) => {
     const k = manualCellKey(r, c);
+    const subKey = MANUAL_SUBCOLS[c % MANUAL_SUBCOLS.length]?.key;
+
+    // Sanitize numeric measurement inputs: remove letters, trim decimals.
+    let nextVal = v ?? "";
+    if (subKey === "soll" || subKey === "l" || subKey === "r") {
+      const raw = `${nextVal ?? ""}`.trim();
+      const noDec = raw.split(".")[0].split(",")[0];
+      let cleaned = noDec.replace(/[^0-9-]/g, "");
+      // keep only a single leading minus
+      cleaned = cleaned.replace(/(?!^)-/g, "");
+      nextVal = cleaned;
+    }
+
     setManualGrid((prev) => {
       // avoid state updates if unchanged
       const cur = prev[k] ?? "";
-      const nextVal = v ?? "";
-      if (cur === nextVal) return prev;
-      return { ...prev, [k]: nextVal };
+      const nextS = nextVal ?? "";
+      if (cur === nextS) return prev;
+      return { ...prev, [k]: nextS };
     });
   };
 
@@ -1144,7 +1296,7 @@ export default function App() {
       guard += 1;
     }
 
-    return { row: rowIdx, col: colIdx };
+    return stepOnce(rowIdx, colIdx);
   };
 
   function manualMeasurePrevPos(rowIdx, colIdx) {
@@ -1511,6 +1663,9 @@ export default function App() {
 
   function resetAll() {
     setStep(1);
+    setTab("import");
+    setShowMeasureMode(false);
+    setShowManualGrid(false);
     setMeta({ make: "", model: "", tolerance: 10, correction: 0 });
     setMeasurementProtocol("preTension22kg_thenMeasure5kg");
     setBrakeConvention("knotToKnot");
@@ -1606,6 +1761,9 @@ export default function App() {
     setDefaultMappingSnapshot(deepClone(initMap));
     setRangeTab("A");
     setStep(1);
+    setTab("import");
+    setShowMeasureMode(false);
+    setShowManualGrid(false);
   }
 
   async function handleFile(file) {
@@ -2916,6 +3074,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
               background: "rgba(0,0,0,0.68)",
               color: theme.text,
               outline: "none",
+                                              userSelect: "auto",
               fontWeight: 950,
               textTransform: "uppercase",
               fontSize: 12,
@@ -3490,6 +3649,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                                 color: theme.text,
                                                 fontWeight: 950,
                                                 outline: "none",
+                                              userSelect: "auto",
                                                 textAlign: "right",
                                               }}
                                               inputMode="numeric"
@@ -3554,6 +3714,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                                 color: theme.text,
                                                 fontWeight: 950,
                                                 outline: "none",
+                                              userSelect: "auto",
                                                 textAlign: "right",
                                               }}
                                               inputMode="numeric"
@@ -3649,7 +3810,10 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                           }}
                                           onKeyDown={(e) => {
                                             if (e.key === "Enter") {
+                                              playBeep();
                                               e.preventDefault();
+                                              const rawNow = (measureInputRef.current && measureInputRef.current.value) != null ? String(measureInputRef.current.value) : String(curValue ?? "");
+                                              manualSetCell(cur.row, cur.col, rawNow);
                                               const next = manualMeasureNextPos(cur.row, cur.col);
                                               manualFocusCell(next.row, next.col);
                                               setTimeout(() => {
@@ -3688,6 +3852,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                             background: "rgba(0,0,0,0.55)",
                                             color: theme.text,
                                             outline: "none",
+                                              userSelect: "auto",
                                             textAlign: "center",
                                           }}
                                           placeholder="Type measurement here (laser/keyboard)…"
@@ -3727,7 +3892,23 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                           }}
                         >
                           <div>
-                            <div style={{ fontWeight: 950, letterSpacing: -0.2, fontSize: 21 }}>Manual entry (wide grid)</div>
+                            <div style={{ fontWeight: 950, letterSpacing: -0.2, fontSize: 21 }}>Manual entry (wide grid)
+        <button type="button"
+          
+          style={{
+            borderRadius: 999,
+            border: `1px solid ${theme.border}`,
+            background: theme.bg2,
+            color: theme.text,
+            fontWeight: 900,
+            fontSize: 12,
+            padding: "6px 10px",
+            cursor: "pointer",
+          }}
+          onClick={(e) => { e.preventDefault(); exportManualCSV(); }}>
+          Export CSV
+        </button>
+</div>
 
                             <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.55)" }}>
@@ -3745,6 +3926,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                     color: theme.text,
                                     fontWeight: 950,
                                     outline: "none",
+                                              userSelect: "auto",
                                   }}
                                 />
                                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -3802,6 +3984,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                     color: theme.text,
                                     fontWeight: 950,
                                     outline: "none",
+                                              userSelect: "auto",
                                   }}
                                 />
                                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -3854,51 +4037,76 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                             </div>
 
                             <div style={{ marginTop: 10 }}>
-                              <div style={{ fontSize: 12, fontWeight: 950, opacity: 0.92 }}>Paste box</div>
-                              <div style={{ marginTop: 4, fontSize: 12, fontWeight: 850, opacity: 0.78 }}>
-                                Paste CSV/Excel content here if pasting directly into cells collapses into one field. The grid will fill starting from the currently focused cell.
-                              </div>
-                              <textarea
-                                onPaste={(e) => {
-                                  const cd = e.clipboardData;
-                                  const raw =
-                                    (cd && cd.getData("text/plain")) ||
-                                    (cd && cd.getData("text")) ||
-                                    (cd && cd.getData("Text")) ||
-                                    "";
-                                  // If we can't access clipboardData, let the browser paste normally.
-                                  if (!raw) return;
-                                  e.preventDefault();
-                                  const tNorm = String(raw).replace(/\r\n?/g, "\n");
-                                  manualPasteIntoGrid(manualActivePos.row, manualActivePos.col, tNorm);
-                                  setManualPasteBox("");
-                                }}
-                                value={manualPasteBox}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  setManualPasteBox(v);
-                                  // Auto-apply when it looks like a paste (multi-cell content)
-                                  if (v && (v.includes("\n") || v.includes("\t") || v.includes(",") || v.includes(";"))) {
-                                    manualPasteIntoGrid(manualActivePos.row, manualActivePos.col, String(v).replace(/\r\n?/g, "\n"));
-                                    setManualPasteBox("");
-                                  }
-                                }}
-                                placeholder="Click a target cell in the grid, then paste here…"
-                                style={{
-                                  marginTop: 8,
-                                  width: "100%",
-                                  minHeight: 76,
-                                  resize: "vertical",
-                                  padding: 10,
-                                  borderRadius: 12,
-                                  border: `1px solid ${theme.border}`,
-                                  background: "rgba(0,0,0,0.55)",
-                                  color: theme.text,
-                                  fontWeight: 850,
-                                  outline: "none",
-                                }}
-                              />
-                            </div>
+  <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 10 }}>
+    <button
+      type="button"
+      onClick={() => setManualPasteOpen((v) => !v)}
+      style={{
+        borderRadius: 999,
+        border: `1px solid ${theme.border}`,
+        background: theme.bg2,
+        color: theme.text,
+        fontWeight: 900,
+        fontSize: 12,
+        padding: "6px 10px",
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {manualPasteOpen ? "Hide Paste Box" : "Show Past Box"}
+    </button>
+
+    <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.78 }}>
+      Paste CSV/Excel content here if pasting directly into cells collapses into one field. The grid will fill starting from the currently focused cell.
+    </div>
+  </div>
+
+  {manualPasteOpen ? (
+    <>
+      <textarea
+        onPaste={(e) => {
+          const cd = e.clipboardData;
+          const raw =
+            (cd && cd.getData("text/plain")) ||
+            (cd && cd.getData("text")) ||
+            (cd && cd.getData("Text")) ||
+            "";
+          // If we can't access clipboardData, let the browser paste normally.
+          if (!raw) return;
+          e.preventDefault();
+          const tNorm = String(raw).replace(/\r?\n/g, "\n");
+          manualPasteIntoGrid(manualActivePos.row, manualActivePos.col, tNorm);
+          setManualPasteBox("");
+        }}
+        value={manualPasteBox}
+        onChange={(e) => {
+          const v = e.target.value;
+          setManualPasteBox(v);
+          // Auto-apply when it looks like a paste (multi-cell content)
+          if (v && (v.includes("\n") || v.includes("\t") || v.includes(",") || v.includes(";"))) {
+            manualPasteIntoGrid(manualActivePos.row, manualActivePos.col, String(v).replace(/\r?\n/g, "\n"));
+            setManualPasteBox("");
+          }
+        }}
+        placeholder="Click a target cell in the grid, then paste here…"
+        style={{
+          marginTop: 8,
+          width: "100%",
+          minHeight: 76,
+          resize: "vertical",
+          padding: 10,
+          borderRadius: 12,
+          border: `1px solid ${theme.border}`,
+          background: "rgba(0,0,0,0.55)",
+          color: theme.text,
+          fontWeight: 850,
+          outline: "none",
+          userSelect: "auto",
+        }}
+      />
+    </>
+  ) : null}
+</div>
                           </div>
 
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -4053,7 +4261,8 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                               manualPasteIntoGrid(manualActiveRef.current.row, manualActiveRef.current.col, tNorm);
                             }
                           }}
-                          style={{ padding: 12, overflow: "auto" }}
+                          ref={manualScrollRef}
+                          style={{ padding: 12, overflow: "auto", userSelect: manualSelecting ? "none" : "auto" }}
                         >
                           <div style={{ border: `1px solid ${theme.border}`, borderRadius: 12, background: theme.panel2 }}>
                             <table style={{ width: "max-content", borderCollapse: "separate", borderSpacing: 0, fontSize: 12 }}>
@@ -4162,8 +4371,9 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                             onFocus={() => {
                                               manualActiveRef.current = { row: r, col: c };
                                               setManualActivePos({ row: r, col: c });
+                                              manualClearSelection();
                                             }}
-                                            onPaste={(e) => {
+onPaste={(e) => {
                                               const cd = e.clipboardData;
                                               const t =
                                                 cd && cd.getData("text/plain") ||
@@ -4179,6 +4389,14 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                               }
                                             }}
                                             onKeyDown={(e) => {
+                                              if (e.key === "Enter") playBeep();
+                                              if ((e.key === "Delete" || e.key === "Backspace") && manualSel && manualIsSelected(r, c)) {
+                                                e.preventDefault();
+                                                manualClearSelectedCells();
+                                                manualClearSelection();
+                                                return;
+                                              }
+
                                               const subKey = MANUAL_SUBCOLS[c % MANUAL_SUBCOLS.length]?.key;
 
                                               // Arrow key navigation
@@ -4203,13 +4421,62 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                                 return;
                                               }
 
-                                              // Delete backwards through the sheet
+                                              // Delete / Backspace (digit-by-digit; move backwards only when empty)
                                               if (e.key === "Backspace" || e.key === "Delete") {
                                                 // In measurement mode, Line/Factory are frozen.
                                                 if (showMeasureMode && (subKey === "line" || subKey === "soll")) return;
 
+                                                const curVal = `${manualGrid[k] ?? ""}`;
+                                                const el = e.target;
+                                                const selStart = typeof el?.selectionStart === "number" ? el.selectionStart : curVal.length;
+                                                const selEnd = typeof el?.selectionEnd === "number" ? el.selectionEnd : selStart;
+
+                                                // If there is content, delete one character (or selection) inside the cell.
+                                                if (curVal.length > 0) {
+                                                  let next = curVal;
+                                                  let nextCursor = selStart;
+
+                                                  if (selEnd > selStart) {
+                                                    next = curVal.slice(0, selStart) + curVal.slice(selEnd);
+                                                    nextCursor = selStart;
+                                                  } else if (e.key === "Backspace") {
+                                                    if (selStart > 0) {
+                                                      next = curVal.slice(0, selStart - 1) + curVal.slice(selStart);
+                                                      nextCursor = selStart - 1;
+                                                    } else {
+                                                      next = curVal;
+                                                      nextCursor = 0;
+                                                    }
+                                                  } else {
+                                                    // Delete key
+                                                    if (selStart < curVal.length) {
+                                                      next = curVal.slice(0, selStart) + curVal.slice(selStart + 1);
+                                                      nextCursor = selStart;
+                                                    } else {
+                                                      next = curVal;
+                                                      nextCursor = curVal.length;
+                                                    }
+                                                  }
+
+                                                  if (next !== curVal) {
+                                                    e.preventDefault();
+                                                    manualSetCell(r, c, next);
+                                                    // restore caret position after controlled update
+                                                    setTimeout(() => {
+                                                      const el2 = manualGridRefs.current[k];
+                                                      if (el2 && typeof el2.setSelectionRange === "function") {
+                                                        try {
+                                                          el2.focus();
+                                                          el2.setSelectionRange(nextCursor, nextCursor);
+                                                        } catch (e) {}
+                                                      }
+                                                    }, 0);
+                                                    return;
+                                                  }
+                                                }
+
+                                                // If empty (or nothing to delete), move to previous cell.
                                                 e.preventDefault();
-                                                manualSetCell(r, c, "");
                                                 const prev = showMeasureMode ? manualMeasurePrevPos(r, c) : manualPrevPos(r, c);
                                                 manualFocusCell(prev.row, prev.col);
                                                 return;
@@ -4232,16 +4499,26 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                                 }
                                               }
                                             }}
+                                            onPointerDown={(e) => {
+                                              e.preventDefault();
+                                              setManualSelecting(true);
+                                              setManualSel({ r0: r, c0: c, r1: r, c1: c });
+                                              try { e.currentTarget.focus(); } catch {}
+                                            }}
+                                            onPointerEnter={() => {
+                                              if (!manualSelecting) return;
+                                              setManualSel((prev) => (prev ? { ...prev, r1: r, c1: c } : { r0: r, c0: c, r1: r, c1: c }));
+                                            }}
                                             ref={(el) => {
                                               if (el) manualGridRefs.current[k] = el;
                                             }}
                                             inputMode="decimal"
                                             style={{
                                               width: 92,
+                                              background: manualIsSelected(r, c) ? "rgba(59,130,246,0.18)" : "rgba(0,0,0,0.55)",
                                               padding: "8px 8px",
                                               borderRadius: 10,
                                               border: `1px solid ${theme.border}`,
-                                              background: "rgba(0,0,0,0.55)",
                                               color: (() => {
                                                   const subKey = MANUAL_SUBCOLS[c % MANUAL_SUBCOLS.length]?.key;
                                                   if (showMeasureMode && (subKey === "line" || subKey === "soll")) return "rgba(147,197,253,0.95)";
@@ -4265,6 +4542,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                                 })(),
                                               fontWeight: 900,
                                               outline: "none",
+                                              userSelect: "auto",
                                             }}
                                             placeholder="mm"
                                             title="Paste columns/blocks from Excel/Sheets. Press Enter to advance down the column."
@@ -4300,7 +4578,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                   </div>
                   {loaded ? (
                     <div style={{ marginLeft: "auto" }}>
-                      <button style={topBtn} onClick={() => setStep(2)}>
+                      <button style={{ ...topBtn, background: "rgba(34,197,94,0.25)", border: "1px solid rgba(34,197,94,0.55)" }} onClick={() => setStep(2)}>
                         Go to Step 2 →
                       </button>
                     </div>
@@ -4484,7 +4762,8 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                         value={profileName}
                         onChange={(e) => setProfileName(e.target.value)}
                         placeholder="Profile file name…"
-                        style={{ width: 240, padding: "7px 10px", borderRadius: 12, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.68)", color: theme.text, outline: "none", fontWeight: 900, fontSize: 14 }}
+                        style={{ width: 240, padding: "7px 10px", borderRadius: 12, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.68)", color: theme.text, outline: "none",
+                                              userSelect: "auto", fontWeight: 900, fontSize: 14 }}
                       />
                       <button style={Object.assign({}, topBtn, { background: "rgba(59,130,246,0.20)" })} onClick={exportWingProfileJSON}>
                         Export JSON
@@ -5190,6 +5469,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                           padding: "6px 8px",
                           fontWeight: 900,
                           outline: "none",
+                                              userSelect: "auto",
                         }}
                       />
                       <span style={{ fontSize: 12, opacity: 0.75 }}>mm</span>
@@ -5806,6 +6086,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                   color: theme.text,
                   padding: "8px 10px",
                   outline: "none",
+                                              userSelect: "auto",
                   fontWeight: 950,
                 }}
               >
@@ -5958,7 +6239,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                   width: "fit-content", minWidth: 110, maxWidth: 240,
                                   borderRadius: 12,
                                   padding: 7,
-                                  background: ((pitchRowCfg[row]?.groups || []).includes(`${row}R${n}L`) ? "rgba(0,0,0,0.30)" : "rgba(0,0,0,0.18)"),
+                                  background: ((pitchRowCfg[row]?.groups || []).includes(`${row}R${n}L`) ? "rgba(59,130,246,0.14)" : "rgba(0,0,0,0.18)"),
                                   border: `1px solid ${theme.border}`,
                                   display: "flex",
                                   flexDirection: "column",
@@ -5977,7 +6258,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                         return { ...p, [row]: { ...cur, groups: nextGroups } };
                                       });
                                     }}
-                                    style={{ padding: "4px 10px", borderRadius: 999, background: ((pitchRowCfg[row]?.groups || []).includes(`${row}R${n}L`) ? "rgba(0,0,0,0.82)" : "rgba(0,0,0,0.58)"), border: `1px solid ${groupColor(row, Number(n))}`, color: groupColor(row, Number(n)), fontWeight: 950, fontSize: 11, cursor: "pointer" }}>
+                                    style={{ padding: "4px 10px", borderRadius: 999, background: ((pitchRowCfg[row]?.groups || []).includes(`${row}R${n}L`) ? "rgba(0,0,0,0.72)" : "rgba(0,0,0,0.58)"), border: `1px solid ${groupColor(row, Number(n))}`, color: groupColor(row, Number(n)), fontWeight: 950, fontSize: 11, cursor: "pointer" }}>
                                     {`${row}R${n}L`}
                                   </button>
                               </div>
@@ -6007,7 +6288,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                           return { ...p, [row]: { ...cur2, include: nextInc } };
                                         });
                                       }}
-                                      style={{ padding: "1px 4px", borderRadius: 999, border: `1px solid ${chipColorFromLineId(ln)}`, background: ((pitchRowCfg[row]?.include || []).includes(ln) ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.10)"), color: "rgba(255,255,255,0.93)", fontWeight: 650, fontSize: 8, whiteSpace: "nowrap", cursor: (((pitchRowCfg[row]?.groups || []).includes(gid)) ? "not-allowed" : "pointer"), opacity: (((pitchRowCfg[row]?.groups || []).includes(gid)) ? 0.45 : 1) }}>
+                                      style={{ padding: "1px 4px", borderRadius: 999, border: `1px solid ${chipColorFromLineId(ln)}`, background: ((pitchRowCfg[row]?.include || []).includes(ln) ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.10)"), color: ((pitchRowCfg[row]?.include || []).includes(ln) ? "rgba(30,64,175,0.95)" : "rgba(255,255,255,0.93)"), fontWeight: 650, fontSize: 8, whiteSpace: "nowrap", cursor: (((pitchRowCfg[row]?.groups || []).includes(gid)) ? "not-allowed" : "pointer"), opacity: (((pitchRowCfg[row]?.groups || []).includes(gid)) ? 0.45 : 1) }}>
                                       {ln}
                                     </button>
                                   ));
@@ -6039,7 +6320,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                   width: "fit-content", minWidth: 110, maxWidth: 240,
                                   borderRadius: 12,
                                   padding: 7,
-                                  background: ((pitchRowCfg[row]?.groups || []).includes(`${row}R${n}R`) ? "rgba(0,0,0,0.30)" : "rgba(0,0,0,0.18)"),
+                                  background: ((pitchRowCfg[row]?.groups || []).includes(`${row}R${n}R`) ? "rgba(59,130,246,0.14)" : "rgba(0,0,0,0.18)"),
                                   border: `1px solid ${theme.border}`,
                                   display: "flex",
                                   flexDirection: "column",
@@ -6058,7 +6339,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                         return { ...p, [row]: { ...cur, groups: nextGroups } };
                                       });
                                     }}
-                                    style={{ padding: "4px 10px", borderRadius: 999, background: ((pitchRowCfg[row]?.groups || []).includes(`${row}R${n}R`) ? "rgba(0,0,0,0.82)" : "rgba(0,0,0,0.58)"), border: `1px solid ${groupColor(row, Number(n))}`, color: groupColor(row, Number(n)), fontWeight: 950, fontSize: 11, cursor: "pointer" }}>
+                                    style={{ padding: "4px 10px", borderRadius: 999, background: ((pitchRowCfg[row]?.groups || []).includes(`${row}R${n}R`) ? "rgba(0,0,0,0.72)" : "rgba(0,0,0,0.58)"), border: `1px solid ${groupColor(row, Number(n))}`, color: groupColor(row, Number(n)), fontWeight: 950, fontSize: 11, cursor: "pointer" }}>
                                     {`${row}R${n}R`}
                                   </button>
                               </div>
@@ -6088,7 +6369,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                                           return { ...p, [row]: { ...cur2, include: nextInc } };
                                         });
                                       }}
-                                      style={{ padding: "1px 4px", borderRadius: 999, border: `1px solid ${chipColorFromLineId(ln)}`, background: ((pitchRowCfg[row]?.include || []).includes(ln) ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.10)"), color: "rgba(255,255,255,0.93)", fontWeight: 650, fontSize: 8, whiteSpace: "nowrap", cursor: (((pitchRowCfg[row]?.groups || []).includes(gid)) ? "not-allowed" : "pointer"), opacity: (((pitchRowCfg[row]?.groups || []).includes(gid)) ? 0.45 : 1) }}>
+                                      style={{ padding: "1px 4px", borderRadius: 999, border: `1px solid ${chipColorFromLineId(ln)}`, background: ((pitchRowCfg[row]?.include || []).includes(ln) ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.10)"), color: ((pitchRowCfg[row]?.include || []).includes(ln) ? "rgba(30,64,175,0.95)" : "rgba(255,255,255,0.93)"), fontWeight: 650, fontSize: 8, whiteSpace: "nowrap", cursor: (((pitchRowCfg[row]?.groups || []).includes(gid)) ? "not-allowed" : "pointer"), opacity: (((pitchRowCfg[row]?.groups || []).includes(gid)) ? 0.45 : 1) }}>
                                       {ln}
                                     </button>
                                   ));
@@ -6170,6 +6451,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                             color: theme.text,
                             padding: "8px 10px",
                             outline: "none",
+                                              userSelect: "auto",
                             fontWeight: 900,
                             fontSize: 12,
                             width: 220,
@@ -6255,6 +6537,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                             color: theme.text,
                             padding: "8px 10px",
                             outline: "none",
+                                              userSelect: "auto",
                             fontWeight: 900,
                             fontSize: 12,
                             width: 220,
@@ -6328,6 +6611,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                             color: theme.text,
                             padding: "8px 10px",
                             outline: "none",
+                                              userSelect: "auto",
                             fontWeight: 900,
                             fontSize: 12,
                             width: 220,
@@ -7303,6 +7587,7 @@ function groupBands(letter, side) {
                 color: "#eef1ff",
                 padding: "6px 10px",
                 outline: "none",
+                                              userSelect: "auto",
                 fontSize: 12,
               }}
             >
@@ -7553,6 +7838,7 @@ function groupBands(letter, side) {
                                 height: "100%",
                                 border: "none",
                                 outline: "none",
+                                              userSelect: "auto",
                                 background: "transparent",
                                 color: (cur ? "rgba(120,200,255,0.95)" : "rgba(255,220,80,0.95)"),
                                 fontSize: 11,
