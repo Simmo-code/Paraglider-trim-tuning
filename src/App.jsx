@@ -4152,21 +4152,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                         >
                           <div>
                             <div style={{ fontWeight: 950, letterSpacing: -0.2, fontSize: 21 }}>Manual entry (wide grid)
-        <button type="button"
-          
-          style={{
-            borderRadius: 999,
-            border: `1px solid ${theme.border}`,
-            background: theme.bg2,
-            color: theme.text,
-            fontWeight: 900,
-            fontSize: 12,
-            padding: "6px 10px",
-            cursor: "pointer",
-          }}
-          onClick={(e) => { e.preventDefault(); exportManualCSV(); }}>
-          Export CSV
-        </button>
+        
 </div>
 
                             <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
@@ -4485,24 +4471,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                               Start measurement
                             </button>
                             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginLeft: 10, flexWrap: "wrap" }}>
-                              <button
-                                type="button"
-                                onClick={() => glmConnect("filtered")}
-                                disabled={glmBtState === "connecting" || glmBtState === "connected"}
-                                style={{
-                                  border: "1px solid rgba(34,197,94,0.85)",
-                                  background: glmBtState === "connected" ? "rgba(34,197,94,0.25)" : "rgba(0,0,0,0.55)",
-                                  color: theme.text,
-                                  borderRadius: 999,
-                                  padding: "8px 10px",
-                                  fontWeight: 900,
-                                  cursor: glmBtState === "connecting" || glmBtState === "connected" ? "default" : "pointer",
-                                  opacity: glmBtState === "connecting" || glmBtState === "connected" ? 0.85 : 1,
-                                }}
-                                title="Connect to Bosch GLM50C x2744 (Web Bluetooth). Works in Chrome/Edge on Windows."
-                              >
-                                {glmBtState === "connecting" ? "Connecting…" : glmBtState === "connected" ? "GLM Connected" : "Connect GLM50C"}
-                              </button>
+                              
 
                               <button
                                 type="button"
