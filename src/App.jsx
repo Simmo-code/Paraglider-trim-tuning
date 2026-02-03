@@ -1,5 +1,4 @@
 // Project policy:
-
 // - Modern JS is allowed (spread, optional chaining, template literals)
 // - Build target: es2018+
 // - No ES5 hardening unless explicitly required
