@@ -1022,55 +1022,33 @@ export default function App() {
   const exportManualCSV = () => {
     console.log("Export CSV triggered");
     try {
-      const groups = Array.isArray(manualGroups) && manualGroups.length ? manualGroups : ["A", "B", "C", "D"];
+      const includeBR = Array.isArray(manualGrid?.BR) && manualGrid.BR.length > 0;
+      const groups = includeBR ? ["A", "B", "C", "D", "BR"] : ["A", "B", "C", "D"];
 
-      // Wide header row
       const wideHeader = [];
       groups.forEach((g) => {
         wideHeader.push(g, "Factory", g === "B" ? "L" : "Ist L", g === "B" ? "R" : "Ist R");
       });
 
       const rows = [];
-
       // Metadata rows (pad to match wide header length)
       const padCount = Math.max(0, wideHeader.length - 4);
       rows.push(["Make ", "Model", "tolerance ", "correction", ...Array(padCount).fill("")]);
-      rows.push([
-        (meta && meta.make) ? meta.make : "",
-        (meta && meta.model) ? meta.model : "",
-        measureTolerance ?? "",
-        measureCorrection ?? "",
-        ...Array(padCount).fill(""),
-      ]);
+      rows.push([make || "", model || "", measureTolerance ?? "", measureCorrection ?? "", ...Array(padCount).fill("")]);
 
-      // Header row
+      // Header row (wide)
       rows.push(wideHeader);
 
-      // Data rows: use manualRowCount for row count if available, else infer from keys
-      const rowCount = (typeof manualRowCount === "number" && manualRowCount > 0)
-        ? manualRowCount
-        : Math.max(
-            0,
-            ...groups.map((g) => {
-              const re = new RegExp("^" + String(g) + "(\\d+)_");
-              let mx = 0;
-              Object.keys(manualGrid || {}).forEach((k) => {
-                const mm = k.match(re);
-                if (mm) mx = Math.max(mx, Number(mm[1] || 0));
-              });
-              return mx;
-            })
-          );
-
-      for (let i = 0; i < rowCount; i++) {
+      // Data rows
+      const maxLen = Math.max(...groups.map((g) => (manualGrid?.[g]?.length || 0)));
+      for (let i = 0; i < maxLen; i++) {
         const r = [];
         groups.forEach((g) => {
-          const base = `${g}${i + 1}_`;
-          const line = (manualGrid && manualGrid[base + "line"] != null) ? manualGrid[base + "line"] : `${g}${i + 1}`;
-          const factory = (manualGrid && manualGrid[base + "soll"] != null) ? manualGrid[base + "soll"] : "";
-          const left = (manualGrid && manualGrid[base + "l"] != null) ? manualGrid[base + "l"] : "";
-          const right = (manualGrid && manualGrid[base + "r"] != null) ? manualGrid[base + "r"] : "";
-          r.push(line ?? "", factory ?? "", left ?? "", right ?? "");
+          const row = manualGrid?.[g]?.[i] || {};
+          r.push(row.line || `${g}${i + 1}`);
+          r.push(row.factory ?? "");
+          r.push(row.left ?? "");
+          r.push(row.right ?? "");
         });
         rows.push(r);
       }
@@ -1082,15 +1060,12 @@ export default function App() {
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.style.display = "none";
       a.href = url;
-      a.rel = "noopener";
       a.download = "manual_entry_export.csv";
       document.body.appendChild(a);
-      console.log("Export CSV click()", { bytes: blob.size });
       a.click();
       a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 2500);
+      URL.revokeObjectURL(url);
     } catch (e) {
       console.error(e);
     }
@@ -1111,216 +1086,6 @@ export default function App() {
   const [manualPasteBox, setManualPasteBox] = useState("");
   const [manualPasteOpen, setManualPasteOpen] = useState(false);
   const [showMeasureMode, setShowMeasureMode] = useState(false);
-
-  // --- GLM50C Web Bluetooth (Windows Chrome/Edge) ---
-  // Web Bluetooth is BLE (GATT) only. Some devices do not advertise the custom service UUID,
-  // so we filter by name prefix and use optionalServices. On Windows, some Bosch firmware variants
-  // notify on a different characteristic/service, so we subscribe across ALL primary services.
-  const GLM_SERVICE_UUID = "00005301-0000-0041-5253-534f46540000";
-  const GLM_CHAR_UUID = "00004301-0000-0041-5253-534f46540000";
-  const BATTERY_SERVICE_UUID = "0000180f-0000-1000-8000-00805f9b34fb";
-
-  const AUTOSYNC_ENABLE = new Uint8Array([0xC0, 0x55, 0x02, 0x01, 0x00, 0x1A]);
-
-  const [glmBtState, setGlmBtState] = useState("disconnected"); // disconnected | connecting | connected | error
-  const [glmBtName, setGlmBtName] = useState("");
-  const [glmBtInfo, setGlmBtInfo] = useState("");
-  const [glmLastMm, setGlmLastMm] = useState(null);
-  const [glmRxCount, setGlmRxCount] = useState(0);
-  const [glmSubCount, setGlmSubCount] = useState(0);
-  const [glmLastRxHex, setGlmLastRxHex] = useState("");
-
-  const glmBtDeviceRef = useRef(null);
-  const glmBtSubscribedCharsRef = useRef([]); // subscribed characteristics (all services)
-  const glmBtOnValueRef = useRef(null);
-
-  function glmHex(bytes, max = 24) {
-    if (!bytes) return "";
-    const n = Math.min(bytes.length, max);
-    let s = "";
-    for (let i = 0; i < n; i++) s += bytes[i].toString(16).padStart(2, "0").toUpperCase() + (i === n - 1 ? "" : " ");
-    if (bytes.length > n) s += " …";
-    return s;
-  }
-
-  function glmDecodeDistanceMm(bytes) {
-    if (!bytes || bytes.length < 11) return null;
-    if (bytes[0] !== 0xC0 || bytes[1] !== 0x55) return null;
-    if (bytes[2] !== 0x10 || bytes[3] !== 0x06 || bytes[4] !== 0x08) return null;
-    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    const meters = dv.getFloat32(7, true);
-    if (!Number.isFinite(meters) || meters <= 0 || meters > 200) return null;
-    return Math.round(meters * 1000);
-  }
-
-  async function glmRequestDeviceFiltered() {
-    return await navigator.bluetooth.requestDevice({
-      filters: [
-        { namePrefix: "Bosch GLM50C" },
-        { namePrefix: "Bosch" },
-        { namePrefix: "GLM50C" },
-      ],
-      optionalServices: [GLM_SERVICE_UUID, BATTERY_SERVICE_UUID],
-    });
-  }
-
-  async function glmRequestDeviceAll() {
-    return await navigator.bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: [GLM_SERVICE_UUID, BATTERY_SERVICE_UUID],
-    });
-  }
-
-  async function glmDisconnect() {
-    try {
-      const dev = glmBtDeviceRef.current;
-      const onv = glmBtOnValueRef.current;
-      const chars = glmBtSubscribedCharsRef.current || [];
-      if (onv) {
-        chars.forEach((ch) => {
-          try { ch.removeEventListener("characteristicvaluechanged", onv); } catch (_) {}
-        });
-      }
-      glmBtOnValueRef.current = null;
-      glmBtSubscribedCharsRef.current = [];
-      if (dev?.gatt?.connected) dev.gatt.disconnect();
-    } catch (_) {
-      // ignore
-    } finally {
-      glmBtDeviceRef.current = null;
-      setGlmBtState("disconnected");
-      setGlmBtName("");
-      setGlmBtInfo("");
-      setGlmSubCount(0);
-      setGlmRxCount(0);
-      setGlmLastMm(null);
-      setGlmLastRxHex("");
-    }
-  }
-
-  async function glmSubscribeAllServices(server) {
-    const services = await server.getPrimaryServices();
-    const subscribed = [];
-    for (const svc of services) {
-      let chars = [];
-      try { chars = await svc.getCharacteristics(); } catch (_) { chars = []; }
-      for (const ch of chars) {
-        try {
-          await ch.startNotifications();
-          subscribed.push(ch);
-        } catch (_) {
-          // ignore non-notifiable / permission issues
-        }
-      }
-    }
-    return subscribed;
-  }
-
-  async function glmTryWriteAutosync(glmService) {
-    const chars = await glmService.getCharacteristics();
-    const preferred = chars.find((c) => (c.uuid || "").toLowerCase() === GLM_CHAR_UUID);
-    const order = preferred ? [preferred, ...chars.filter((c) => c !== preferred)] : chars;
-
-    for (const ch of order) {
-      try {
-        try { await ch.writeValueWithoutResponse(AUTOSYNC_ENABLE); }
-        catch (_) { await ch.writeValue(AUTOSYNC_ENABLE); }
-        return ch;
-      } catch (_) {}
-    }
-    return null;
-  }
-
-  async function glmConnect(mode = "filtered") {
-    try {
-      if (!("bluetooth" in navigator)) {
-        alert("Web Bluetooth is not available. Use Chrome/Edge on Windows and HTTPS/localhost.");
-        return;
-      }
-      await glmDisconnect();
-      setGlmBtState("connecting");
-      setGlmBtInfo("Choose device…");
-
-      const device = mode === "all" ? await glmRequestDeviceAll() : await glmRequestDeviceFiltered();
-      glmBtDeviceRef.current = device;
-      setGlmBtName(device?.name || "");
-      setGlmBtInfo("Connecting…");
-
-      device.addEventListener("gattserverdisconnected", () => {
-        setGlmBtState("disconnected");
-        setGlmBtInfo("Disconnected");
-      });
-
-      const server = await device.gatt.connect();
-      setGlmBtInfo("Connected. Subscribing (all services)…");
-
-      const subscribed = await glmSubscribeAllServices(server);
-      glmBtSubscribedCharsRef.current = subscribed;
-      setGlmSubCount(subscribed.length);
-
-      // Listener for any subscribed characteristic
-      const onValue = (ev) => {
-        const v = ev?.target?.value;
-        if (!v) return;
-
-        const bytes = new Uint8Array(v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength));
-        setGlmRxCount((n) => n + 1);
-        setGlmLastRxHex(glmHex(bytes, 24));
-
-        const mm = glmDecodeDistanceMm(bytes);
-        if (mm == null) return;
-
-        setGlmLastMm(mm);
-
-        const pos =
-          (manualActiveRef && manualActiveRef.current) ? manualActiveRef.current
-          : (manualActivePosRef && manualActivePosRef.current) ? manualActivePosRef.current
-          : manualActivePos;
-
-        if (!pos) return;
-
-        try {
-          manualSetCell(pos.row, pos.col, String(mm));
-          const next = manualMeasureNextPos(pos.row, pos.col);
-          manualFocusCell(next.row, next.col);
-          if (showMeasureMode && measureInputRef && measureInputRef.current) {
-            try { measureInputRef.current.focus(); } catch (_) {}
-          }
-        } catch (_) {}
-      };
-
-      glmBtOnValueRef.current = onValue;
-      subscribed.forEach((ch) => {
-        try { ch.addEventListener("characteristicvaluechanged", onValue); } catch (_) {}
-      });
-
-      // Now get GLM service and send AutoSyncEnable
-      setGlmBtInfo("Getting GLM service…");
-      const glmService = await server.getPrimaryService(GLM_SERVICE_UUID);
-      setGlmBtInfo("Sending AutoSyncEnable…");
-
-      const writtenTo = await glmTryWriteAutosync(glmService);
-      if (!writtenTo) {
-        setGlmBtInfo("AutoSync write failed. Remove GLM from Windows Bluetooth devices and retry.");
-      } else {
-        // Kick: read the preferred characteristic once (some Windows stacks start delivering notifications after a read)
-        try {
-          const pref = await glmService.getCharacteristic(GLM_CHAR_UUID);
-          try { await pref.readValue(); } catch (_) {}
-        } catch (_) {}
-
-        setGlmBtInfo(`Subscribed=${subscribed.length}. AutoSync written (${writtenTo.uuid?.slice(0,8)}…). Press Measure.`);
-      }
-
-      setGlmBtState("connected");
-    } catch (err) {
-      console.error(err);
-      setGlmBtState("error");
-      setGlmBtInfo(String(err?.message || err));
-    }
-  }
-  // --- /GLM50C Web Bluetooth ---
-
   const [measureCorrection, setMeasureCorrection] = useState(0);
   const [measureTolerance, setMeasureTolerance] = useState(10);
   const [manualRowCount, setManualRowCount] = useState(MANUAL_DEFAULT_ROWS);
@@ -1338,14 +1103,6 @@ export default function App() {
   const measureInputRef = useRef(null);
   const manualScrollRef = useRef(null);
   const [manualActivePos, setManualActivePos] = useState({ row: 0, col: 0 });
-
-  // Keep latest manualActivePos available inside async callbacks (e.g., Web Bluetooth notifications)
-  const manualActivePosRef = useRef(manualActivePos);
-  useEffect(() => {
-    manualActivePosRef.current = manualActivePos;
-  }, [manualActivePos]);
-
-
 
   // Manual grid multi-cell selection (drag to select)
   const [manualSel, setManualSel] = useState(null); // { r0,c0,r1,c1 }
@@ -4152,7 +3909,21 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                         >
                           <div>
                             <div style={{ fontWeight: 950, letterSpacing: -0.2, fontSize: 21 }}>Manual entry (wide grid)
-        
+        <button type="button"
+          
+          style={{
+            borderRadius: 999,
+            border: `1px solid ${theme.border}`,
+            background: theme.bg2,
+            color: theme.text,
+            fontWeight: 900,
+            fontSize: 12,
+            padding: "6px 10px",
+            cursor: "pointer",
+          }}
+          onClick={(e) => { e.preventDefault(); exportManualCSV(); }}>
+          Export CSV
+        </button>
 </div>
 
                             <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
@@ -4470,96 +4241,6 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                             >
                               Start measurement
                             </button>
-                            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginLeft: 10, flexWrap: "wrap" }}>
-                              
-
-                              <button
-                                type="button"
-                                onClick={() => glmConnect("all")}
-                                disabled={glmBtState === "connecting" || glmBtState === "connected"}
-                                style={{
-                                  border: `1px solid ${theme.border}`,
-                                  background: "rgba(0,0,0,0.35)",
-                                  color: theme.text,
-                                  borderRadius: 999,
-                                  padding: "8px 10px",
-                                  fontWeight: 850,
-                                  cursor: glmBtState === "connecting" || glmBtState === "connected" ? "default" : "pointer",
-                                  opacity: glmBtState === "connecting" || glmBtState === "connected" ? 0.75 : 1,
-                                }}
-                                title="Fallback: show all Bluetooth devices in the picker."
-                              >
-                                Connect (all)
-                              </button>
-
-                              {glmBtState === "connected" ? (
-                                <button
-                                  type="button"
-                                  onClick={() => glmDisconnect()}
-                                  style={{
-                                    border: "1px solid rgba(239,68,68,0.85)",
-                                    background: "rgba(239,68,68,0.15)",
-                                    color: theme.text,
-                                    borderRadius: 999,
-                                    padding: "8px 10px",
-                                    fontWeight: 850,
-                                    cursor: "pointer",
-                                  }}
-                                  title="Disconnect GLM50C"
-                                >
-                                  Disconnect
-                                </button>
-                              ) : null}
-
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontWeight: 850, opacity: 0.95 }}>
-                                <span
-                                  style={{
-                                    width: 10,
-                                    height: 10,
-                                    borderRadius: 99,
-                                    background:
-                                      glmBtState === "connected"
-                                        ? "rgba(34,197,94,0.95)"
-                                        : glmBtState === "connecting"
-                                        ? "rgba(234,179,8,0.95)"
-                                        : glmBtState === "error"
-                                        ? "rgba(239,68,68,0.95)"
-                                        : "rgba(148,163,184,0.8)",
-                                    boxShadow: "0 0 0 2px rgba(0,0,0,0.35)",
-                                  }}
-                                />
-                                <span>
-                                  {glmBtState === "connected"
-                                    ? `Connected${glmBtName ? `: ${glmBtName}` : ""}`
-                                    : glmBtState === "connecting"
-                                    ? "Connecting…"
-                                    : glmBtState === "error"
-                                    ? "Connect error (try again)"
-                                    : "Not connected"}
-                                </span>
-                              </span>
-
-                              <span style={{ marginLeft: 6, fontWeight: 850, opacity: 0.9 }}>
-                                {glmLastMm != null ? `Last: ${glmLastMm} mm` : `RX: ${glmRxCount}`}
-                              </span>
-
-                              <span style={{ marginLeft: 6, fontWeight: 750, opacity: 0.85 }}>
-                                {glmSubCount ? `Subs: ${glmSubCount}` : "Subs: 0"}
-                              </span>
-
-                              {glmLastRxHex ? (
-                                <span style={{ marginLeft: 6, fontWeight: 750, opacity: 0.85, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>
-                                  {glmLastRxHex}
-                                </span>
-                              ) : null}
-
-                              {glmBtInfo ? (
-                                <span style={{ marginLeft: 6, fontWeight: 750, opacity: 0.85 }}>
-                                  {glmBtInfo}
-                                </span>
-                              ) : null}
-                            </div>
-
 
 
                             <button
