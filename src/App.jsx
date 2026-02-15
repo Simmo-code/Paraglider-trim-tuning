@@ -1018,6 +1018,31 @@ async function readFileText(file) {
   return await file.text();
 }
 
+
+
+function FactorySelect({ theme, value, onChange, disabled, title, minWidth = 160, opacity, children }) {
+  return (
+    <select
+      className="factory-select"
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+      title={title}
+      style={{
+        padding: "8px 10px",
+        borderRadius: 10,
+        border: `1px solid ${theme.border}`,
+        background: theme.panel,
+        color: theme.text,
+        fontWeight: 800,
+        minWidth,
+        opacity: opacity ?? (disabled ? 0.55 : 1),
+      }}
+    >
+      {children}
+    </select>
+  );
+}
 export default function App() {
 
   const exportManualCSV = () => {
@@ -1127,7 +1152,11 @@ export default function App() {
     (async () => {
       try {
         setTrimDbErr("");
-        const res = await fetch("/trimdb.json", { cache: "no-store" });
+        // Use Vite's BASE_URL safely. new URL() needs an absolute base, so build a relative path instead.
+        const base = (import.meta.env?.BASE_URL ?? "/");
+        const baseNorm = base.endsWith("/") ? base : `${base}/`;
+        const trimdbUrl = `${baseNorm}trimdb.json`;
+        const res = await fetch(trimdbUrl, { cache: "no-store" });
         if (!res.ok) throw new Error(`Failed to load trimdb.json (${res.status})`);
         const data = await res.json();
         if (!cancelled) setTrimDb(data);
@@ -1255,10 +1284,66 @@ export default function App() {
       const wingSizeObj = trimDb.makes?.[dbMake]?.[dbModel]?.sizes?.[dbSize];
       if (!wingSizeObj) throw new Error("Selected entry not found in trim database");
 
+      // Open the manual grid immediately so the user sees the edit view.
+      // We also re-open it after applyParsedImport, because applyParsedImport resets this flag.
+      setShowMeasureMode(false);
+      setShowManualGrid(true);
+
       const rows = buildWideRowsFromTrimDbWing(dbMake, dbModel, dbSize, wingSizeObj);
       const parsed = parseWideTableFromRows(rows);
       parsed.meta.size = String(dbSize || "");
       applyParsedImport(parsed, `trimdb: ${dbMake} / ${dbModel} / ${dbSize}`);
+
+      // ALSO seed the Manual entry (wide grid) so the user can immediately type measured values.
+      // Factory values go into the "Factory" (soll) cells; measured L/R remain blank.
+      const groupsObj = wingSizeObj?.groups || {};
+      const orderIds = (obj) =>
+        Object.keys(obj || {}).sort((a, b) => {
+          const na = parseInt(String(a).replace(/\D+/g, ""), 10);
+          const nb = parseInt(String(b).replace(/\D+/g, ""), 10);
+          if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+          return String(a).localeCompare(String(b));
+        });
+
+      const present = ["A", "B", "C", "D", "BR"].filter(
+        (g) => groupsObj[g] && Object.keys(groupsObj[g] || {}).length > 0
+      );
+      const nextGroups = present.length ? present : ["A", "B", "C", "D"]; // sensible default
+
+      // Determine row count across selected groups
+      const idsByGroup = {};
+      for (const g of nextGroups) {
+        idsByGroup[g] = orderIds(groupsObj[g] || {});
+      }
+      const maxRows = Math.max(1, ...nextGroups.map((g) => (idsByGroup[g] || []).length));
+
+      const nextGrid = {};
+      for (const g of nextGroups) {
+        const ids = idsByGroup[g] || [];
+        for (let i = 0; i < maxRows; i++) {
+          const base = `${g}${i + 1}_`;
+          const lineId = i < ids.length ? String(ids[i] || "") : `${g}${i + 1}`;
+          const factory = i < ids.length ? (groupsObj[g]?.[ids[i]] ?? "") : "";
+          nextGrid[base + "line"] = lineId;
+          nextGrid[base + "soll"] = factory;
+          // Leave measured values blank for user input
+          nextGrid[base + "l"] = "";
+          nextGrid[base + "r"] = "";
+        }
+      }
+
+      setManualGroups(nextGroups);
+      setManualRowCount(maxRows);
+      setManualGrid(nextGrid);
+      setManualActivePos({ row: 0, col: 0 });
+
+      // Re-open on next tick in case applyParsedImport closed it in the same render pass.
+      setTimeout(() => {
+        try {
+          setShowMeasureMode(false);
+          setShowManualGrid(true);
+        } catch (err) {}
+      }, 0);
     } catch (e) {
       setImportStatus({ ok: false, name: "", err: String(e?.message || e) });
     }
@@ -3931,22 +4016,17 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                   >
                     <div style={{ fontWeight: 950, opacity: 0.9 }}>Factory DB</div>
 
-                    <select
+                    <style>{`.factory-select option { background: #ffffff; color: #111111; }`}</style>
+
+                    <FactorySelect
+                      theme={theme}
                       value={dbMake}
                       onChange={(e) => {
                         setDbMake(e.target.value);
                         setDbModel("");
                         setDbSize("");
                       }}
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 10,
-                        border: `1px solid ${theme.border}`,
-                        background: theme.panel,
-                        color: theme.text,
-                        fontWeight: 800,
-                        minWidth: 160,
-                      }}
+                      minWidth={160}
                       title={trimDb ? "Select manufacturer" : "Put trimdb.json in /public and reload"}
                     >
                       <option value="">Make…</option>
@@ -3955,25 +4035,17 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                           {m}
                         </option>
                       ))}
-                    </select>
+                    </FactorySelect>
 
-                    <select
+                    <FactorySelect
+                      theme={theme}
                       value={dbModel}
                       onChange={(e) => {
                         setDbModel(e.target.value);
                         setDbSize("");
                       }}
                       disabled={!dbMake}
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 10,
-                        border: `1px solid ${theme.border}`,
-                        background: theme.panel,
-                        color: theme.text,
-                        fontWeight: 800,
-                        minWidth: 220,
-                        opacity: dbMake ? 1 : 0.55,
-                      }}
+                      minWidth={220}
                       title={dbMake ? "Select model" : "Select make first"}
                     >
                       <option value="">Model…</option>
@@ -3982,22 +4054,14 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                           {m}
                         </option>
                       ))}
-                    </select>
+                    </FactorySelect>
 
-                    <select
+                    <FactorySelect
+                      theme={theme}
                       value={dbSize}
                       onChange={(e) => setDbSize(e.target.value)}
                       disabled={!dbMake || !dbModel}
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 10,
-                        border: `1px solid ${theme.border}`,
-                        background: theme.panel,
-                        color: theme.text,
-                        fontWeight: 800,
-                        minWidth: 120,
-                        opacity: dbMake && dbModel ? 1 : 0.55,
-                      }}
+                      minWidth={120}
                       title={dbMake && dbModel ? "Select size" : "Select make + model first"}
                     >
                       <option value="">Size…</option>
@@ -4006,7 +4070,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                           {s}
                         </option>
                       ))}
-                    </select>
+                    </FactorySelect>
 
                     <button
                       type="button"
