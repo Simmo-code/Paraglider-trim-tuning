@@ -1128,12 +1128,16 @@ export default function App() {
   // Report (A4 preview) — generated from Step 4 data (no step navigation)
   const [showReport, setShowReport] = useState(false);
 
-  // Factory trim database (public/trimdb.json) — pre-generated offline. No browser scraping.
-  const [trimDb, setTrimDb] = useState(null);
-  const [trimDbErr, setTrimDbErr] = useState("");
-  const [dbMake, setDbMake] = useState("");
-  const [dbModel, setDbModel] = useState("");
-  const [dbSize, setDbSize] = useState("");
+  // Factory trim database (public/trimdb/*) — pre-generated offline. No browser scraping.
+// We load a small index.json, then lazy-load the selected manufacturer's JSON (e.g. Ozone.json).
+const [trimIndex, setTrimIndex] = useState(null);
+const [trimIndexErr, setTrimIndexErr] = useState("");
+const [trimMakeDb, setTrimMakeDb] = useState(null); // currently loaded make file
+const [trimMakeErr, setTrimMakeErr] = useState("");
+
+const [dbMake, setDbMake] = useState("");
+const [dbModel, setDbModel] = useState("");
+const [dbSize, setDbSize] = useState("");
 
 
   // Step 1 manual entry grid (wide CSV-style). UI-only; does not affect import or Step 3/4.
@@ -1146,50 +1150,91 @@ export default function App() {
   const [showMeasureMode, setShowMeasureMode] = useState(false);
 
 
-  // Load trim database once (served from /public). Safe + offline; no scraping.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setTrimDbErr("");
-        // Use Vite's BASE_URL safely. new URL() needs an absolute base, so build a relative path instead.
-        const base = (import.meta.env?.BASE_URL ?? "/");
-        const baseNorm = base.endsWith("/") ? base : `${base}/`;
-        const trimdbUrl = `${baseNorm}trimdb.json`;
-        const res = await fetch(trimdbUrl, { cache: "no-store" });
-        if (!res.ok) throw new Error(`Failed to load trimdb.json (${res.status})`);
-        const data = await res.json();
-        if (!cancelled) setTrimDb(data);
-      } catch (e) {
-        if (!cancelled) setTrimDbErr(String(e?.message || e));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Load trim database index once (served from /public). Safe + offline; no scraping.
+useEffect(() => {
+  let cancelled = false;
+  (async () => {
+    try {
+      setTrimIndexErr("");
+      const base = (import.meta.env?.BASE_URL ?? "/");
+      const baseNorm = base.endsWith("/") ? base : `${base}/`;
+      const indexUrl = `${baseNorm}trimdb/index.json`;
+      const res = await fetch(indexUrl, { cache: "no-store" });
+      if (!res.ok) throw new Error(`Failed to load trimdb/index.json (${res.status})`);
+      const data = await res.json();
+      if (!cancelled) setTrimIndex(data);
+    } catch (e) {
+      if (!cancelled) setTrimIndexErr(String(e?.message || e));
+    }
+  })();
+  return () => {
+    cancelled = true;
+  };
+}, []);
 
-  const dbMakes = useMemo(() => Object.keys(trimDb?.makes || {}).sort(), [trimDb]);
-  const dbModels = useMemo(() => Object.keys(trimDb?.makes?.[dbMake] || {}).sort(), [trimDb, dbMake]);
-  const dbSizes = useMemo(() => Object.keys(trimDb?.makes?.[dbMake]?.[dbModel]?.sizes || {}).sort(), [trimDb, dbMake, dbModel]);
+// Lazy-load the selected manufacturer's DB when Make changes.
+useEffect(() => {
+  let cancelled = false;
+  (async () => {
+    try {
+      setTrimMakeErr("");
+      setTrimMakeDb(null);
+
+      if (!dbMake) return;
+
+      const entry = (trimIndex?.makes || []).find((x) => String(x?.make) === String(dbMake));
+      if (!entry?.file) throw new Error(`No database file for make: ${dbMake}`);
+
+      const base = (import.meta.env?.BASE_URL ?? "/");
+      const baseNorm = base.endsWith("/") ? base : `${base}/`;
+      const makeUrl = `${baseNorm}trimdb/${entry.file}`;
+      const res = await fetch(makeUrl, { cache: "no-store" });
+      if (!res.ok) throw new Error(`Failed to load trimdb/${entry.file} (${res.status})`);
+      const data = await res.json();
+      if (!cancelled) setTrimMakeDb(data);
+    } catch (e) {
+      if (!cancelled) setTrimMakeErr(String(e?.message || e));
+    }
+  })();
+  return () => {
+    cancelled = true;
+  };
+}, [trimIndex, dbMake]);
+
+  const dbMakes = useMemo(() => {
+  const arr = (trimIndex?.makes || []).map((x) => String(x?.make || "")).filter(Boolean);
+  return Array.from(new Set(arr)).sort((a, b) => a.localeCompare(b));
+}, [trimIndex]);
+
+const dbModels = useMemo(() => {
+  const modelsObj = trimMakeDb?.models || {};
+  return Object.keys(modelsObj).sort((a, b) => a.localeCompare(b));
+}, [trimMakeDb]);
+
+const dbSizes = useMemo(() => {
+  const sizesObj = trimMakeDb?.models?.[dbModel]?.sizes || {};
+  return Object.keys(sizesObj).sort((a, b) => a.localeCompare(b));
+}, [trimMakeDb, dbModel]);
 
   // Keep dependent dropdowns valid
-  useEffect(() => {
-    if (!dbMake || !trimDb?.makes?.[dbMake]) {
-      setDbModel("");
-      setDbSize("");
-      return;
-    }
-    if (dbModel && !trimDb.makes[dbMake]?.[dbModel]) setDbModel("");
-  }, [trimDb, dbMake, dbModel]);
+useEffect(() => {
+  if (!dbMake) {
+    setDbModel("");
+    setDbSize("");
+    return;
+  }
+  // If make changed, we clear model/size immediately; models will repopulate once make DB loads.
+  setDbModel("");
+  setDbSize("");
+}, [dbMake]);
 
-  useEffect(() => {
-    if (!dbMake || !dbModel) {
-      setDbSize("");
-      return;
-    }
-    if (dbSize && !trimDb?.makes?.[dbMake]?.[dbModel]?.sizes?.[dbSize]) setDbSize("");
-  }, [trimDb, dbMake, dbModel, dbSize]);
+useEffect(() => {
+  if (!dbModel) {
+    setDbSize("");
+    return;
+  }
+  if (dbSize && !trimMakeDb?.models?.[dbModel]?.sizes?.[dbSize]) setDbSize("");
+}, [trimMakeDb, dbModel, dbSize]);
 
   function buildWideRowsFromTrimDbWing(make, model, size, wingSizeObj) {
     const tol = wingSizeObj?.tolerance ?? "";
@@ -1279,9 +1324,10 @@ export default function App() {
 
   function importFactoryFromTrimDb() {
     try {
-      if (!trimDb) throw new Error("trimdb.json not loaded");
+      if (!trimIndex) throw new Error("trimdb/index.json not loaded");
+      if (!trimMakeDb) throw new Error("Manufacturer database not loaded");
       if (!dbMake || !dbModel || !dbSize) throw new Error("Select Make, Model and Size");
-      const wingSizeObj = trimDb.makes?.[dbMake]?.[dbModel]?.sizes?.[dbSize];
+      const wingSizeObj = trimMakeDb?.models?.[dbModel]?.sizes?.[dbSize];
       if (!wingSizeObj) throw new Error("Selected entry not found in trim database");
 
       // Open the manual grid immediately so the user sees the edit view.
@@ -4001,7 +4047,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                   </button>
 
 
-                  {/* Factory database import (public/trimdb.json) */}
+                  {/* Factory database import (public/trimdb) */}
                   <div
                     style={{
                       display: "flex",
@@ -4027,7 +4073,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                         setDbSize("");
                       }}
                       minWidth={160}
-                      title={trimDb ? "Select manufacturer" : "Put trimdb.json in /public and reload"}
+                      title={trimIndex ? "Select manufacturer" : "Put /public/trimdb/index.json and reload"}
                     >
                       <option value="">Make…</option>
                       {dbMakes.map((m) => (
@@ -4075,18 +4121,19 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                     <button
                       type="button"
                       onClick={importFactoryFromTrimDb}
-                      disabled={!trimDb || !dbMake || !dbModel || !dbSize}
+                      disabled={!trimIndex || !trimMakeDb || !dbMake || !dbModel || !dbSize}
                       style={{
                         ...chooseBtn,
                         background: "rgba(34,197,94,0.18)",
-                        opacity: !trimDb || !dbMake || !dbModel || !dbSize ? 0.55 : 1,
+                        opacity: !trimIndex || !trimMakeDb || !dbMake || !dbModel || !dbSize ? 0.55 : 1,
                       }}
-                      title="Import factory nominal lengths from trimdb.json"
+                      title="Import factory nominal lengths from trimdb"
                     >
                       Import factory…
                     </button>
 
-                    {trimDbErr ? <div style={{ color: theme.bad, fontWeight: 950 }}>{trimDbErr}</div> : null}
+                    {trimIndexErr ? <div style={{ color: theme.bad, fontWeight: 950 }}>{trimIndexErr}</div> : null}
+                    {trimMakeErr ? <div style={{ color: theme.bad, fontWeight: 950 }}>{trimMakeErr}</div> : null}
                   </div>
 
                   <div style={{ opacity: 0.85, fontWeight: 900 }}>
