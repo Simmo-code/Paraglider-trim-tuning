@@ -1103,6 +1103,13 @@ export default function App() {
   // Report (A4 preview) — generated from Step 4 data (no step navigation)
   const [showReport, setShowReport] = useState(false);
 
+  // Factory trim database (public/trimdb.json) — pre-generated offline. No browser scraping.
+  const [trimDb, setTrimDb] = useState(null);
+  const [trimDbErr, setTrimDbErr] = useState("");
+  const [dbMake, setDbMake] = useState("");
+  const [dbModel, setDbModel] = useState("");
+  const [dbSize, setDbSize] = useState("");
+
 
   // Step 1 manual entry grid (wide CSV-style). UI-only; does not affect import or Step 3/4.
   const MANUAL_DEFAULT_ROWS = 16;
@@ -1112,6 +1119,150 @@ export default function App() {
   const [manualPasteBox, setManualPasteBox] = useState("");
   const [manualPasteOpen, setManualPasteOpen] = useState(false);
   const [showMeasureMode, setShowMeasureMode] = useState(false);
+
+
+  // Load trim database once (served from /public). Safe + offline; no scraping.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setTrimDbErr("");
+        const res = await fetch("/trimdb.json", { cache: "no-store" });
+        if (!res.ok) throw new Error(`Failed to load trimdb.json (${res.status})`);
+        const data = await res.json();
+        if (!cancelled) setTrimDb(data);
+      } catch (e) {
+        if (!cancelled) setTrimDbErr(String(e?.message || e));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const dbMakes = useMemo(() => Object.keys(trimDb?.makes || {}).sort(), [trimDb]);
+  const dbModels = useMemo(() => Object.keys(trimDb?.makes?.[dbMake] || {}).sort(), [trimDb, dbMake]);
+  const dbSizes = useMemo(() => Object.keys(trimDb?.makes?.[dbMake]?.[dbModel]?.sizes || {}).sort(), [trimDb, dbMake, dbModel]);
+
+  // Keep dependent dropdowns valid
+  useEffect(() => {
+    if (!dbMake || !trimDb?.makes?.[dbMake]) {
+      setDbModel("");
+      setDbSize("");
+      return;
+    }
+    if (dbModel && !trimDb.makes[dbMake]?.[dbModel]) setDbModel("");
+  }, [trimDb, dbMake, dbModel]);
+
+  useEffect(() => {
+    if (!dbMake || !dbModel) {
+      setDbSize("");
+      return;
+    }
+    if (dbSize && !trimDb?.makes?.[dbMake]?.[dbModel]?.sizes?.[dbSize]) setDbSize("");
+  }, [trimDb, dbMake, dbModel, dbSize]);
+
+  function buildWideRowsFromTrimDbWing(make, model, size, wingSizeObj) {
+    const tol = wingSizeObj?.tolerance ?? "";
+    const corr = wingSizeObj?.correction ?? "";
+    const groups = wingSizeObj?.groups || {};
+    const orderIds = (obj) =>
+      Object.keys(obj || {}).sort((a, b) => {
+        const na = parseInt(String(a).replace(/\D+/g, ""), 10);
+        const nb = parseInt(String(b).replace(/\D+/g, ""), 10);
+        if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+        return String(a).localeCompare(String(b));
+      });
+
+    const A = groups.A || {};
+    const B = groups.B || {};
+    const C = groups.C || {};
+    const D = groups.D || {};
+    const BR = groups.BR || {};
+
+    const idsA = orderIds(A);
+    const idsB = orderIds(B);
+    const idsC = orderIds(C);
+    const idsD = orderIds(D);
+    const idsBR = orderIds(BR);
+
+    const max = Math.max(idsA.length, idsB.length, idsC.length, idsD.length, idsBR.length, 0);
+
+    const rows = [];
+    rows.push(["Make", "Model", "Tolerance", "Correction"]);
+    rows.push([make, model, tol, corr]);
+    rows.push([
+      "A",
+      "Factory",
+      "Ist L",
+      "Ist R",
+      "B",
+      "Factory",
+      "Ist L",
+      "Ist R",
+      "C",
+      "Factory",
+      "Ist L",
+      "Ist R",
+      "D",
+      "Factory",
+      "Ist L",
+      "Ist R",
+      "BR",
+      "Factory",
+      "Ist L",
+      "Ist R",
+    ]);
+
+    for (let i = 0; i < max; i++) {
+      const r = new Array(20).fill("");
+      if (i < idsA.length) {
+        const id = idsA[i];
+        r[0] = id;
+        r[1] = A[id] ?? "";
+      }
+      if (i < idsB.length) {
+        const id = idsB[i];
+        r[4] = id;
+        r[5] = B[id] ?? "";
+      }
+      if (i < idsC.length) {
+        const id = idsC[i];
+        r[8] = id;
+        r[9] = C[id] ?? "";
+      }
+      if (i < idsD.length) {
+        const id = idsD[i];
+        r[12] = id;
+        r[13] = D[id] ?? "";
+      }
+      if (i < idsBR.length) {
+        const id = idsBR[i];
+        r[16] = id;
+        r[17] = BR[id] ?? "";
+      }
+      // Ist L / Ist R remain blank for factory import
+      rows.push(r);
+    }
+
+    return rows;
+  }
+
+  function importFactoryFromTrimDb() {
+    try {
+      if (!trimDb) throw new Error("trimdb.json not loaded");
+      if (!dbMake || !dbModel || !dbSize) throw new Error("Select Make, Model and Size");
+      const wingSizeObj = trimDb.makes?.[dbMake]?.[dbModel]?.sizes?.[dbSize];
+      if (!wingSizeObj) throw new Error("Selected entry not found in trim database");
+
+      const rows = buildWideRowsFromTrimDbWing(dbMake, dbModel, dbSize, wingSizeObj);
+      const parsed = parseWideTableFromRows(rows);
+      parsed.meta.size = String(dbSize || "");
+      applyParsedImport(parsed, `trimdb: ${dbMake} / ${dbModel} / ${dbSize}`);
+    } catch (e) {
+      setImportStatus({ ok: false, name: "", err: String(e?.message || e) });
+    }
+  }
 
   // --- GLM50C Web Bluetooth (Windows Chrome/Edge) ---
   // Web Bluetooth is BLE (GATT) only. Some devices do not advertise the custom service UUID,
@@ -3763,6 +3914,116 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                   >
                     Manual entry…
                   </button>
+
+
+                  {/* Factory database import (public/trimdb.json) */}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      padding: "8px 10px",
+                      border: `1px solid ${theme.border}`,
+                      borderRadius: 12,
+                      background: "rgba(255,255,255,0.03)",
+                    }}
+                  >
+                    <div style={{ fontWeight: 950, opacity: 0.9 }}>Factory DB</div>
+
+                    <select
+                      value={dbMake}
+                      onChange={(e) => {
+                        setDbMake(e.target.value);
+                        setDbModel("");
+                        setDbSize("");
+                      }}
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 10,
+                        border: `1px solid ${theme.border}`,
+                        background: theme.panel,
+                        color: theme.text,
+                        fontWeight: 800,
+                        minWidth: 160,
+                      }}
+                      title={trimDb ? "Select manufacturer" : "Put trimdb.json in /public and reload"}
+                    >
+                      <option value="">Make…</option>
+                      {dbMakes.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={dbModel}
+                      onChange={(e) => {
+                        setDbModel(e.target.value);
+                        setDbSize("");
+                      }}
+                      disabled={!dbMake}
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 10,
+                        border: `1px solid ${theme.border}`,
+                        background: theme.panel,
+                        color: theme.text,
+                        fontWeight: 800,
+                        minWidth: 220,
+                        opacity: dbMake ? 1 : 0.55,
+                      }}
+                      title={dbMake ? "Select model" : "Select make first"}
+                    >
+                      <option value="">Model…</option>
+                      {dbModels.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={dbSize}
+                      onChange={(e) => setDbSize(e.target.value)}
+                      disabled={!dbMake || !dbModel}
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 10,
+                        border: `1px solid ${theme.border}`,
+                        background: theme.panel,
+                        color: theme.text,
+                        fontWeight: 800,
+                        minWidth: 120,
+                        opacity: dbMake && dbModel ? 1 : 0.55,
+                      }}
+                      title={dbMake && dbModel ? "Select size" : "Select make + model first"}
+                    >
+                      <option value="">Size…</option>
+                      {dbSizes.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={importFactoryFromTrimDb}
+                      disabled={!trimDb || !dbMake || !dbModel || !dbSize}
+                      style={{
+                        ...chooseBtn,
+                        background: "rgba(34,197,94,0.18)",
+                        opacity: !trimDb || !dbMake || !dbModel || !dbSize ? 0.55 : 1,
+                      }}
+                      title="Import factory nominal lengths from trimdb.json"
+                    >
+                      Import factory…
+                    </button>
+
+                    {trimDbErr ? <div style={{ color: theme.bad, fontWeight: 950 }}>{trimDbErr}</div> : null}
+                  </div>
 
                   <div style={{ opacity: 0.85, fontWeight: 900 }}>
                     Imported rows: <b>{wideRows.length}</b> • Lines total (L+R): <b>{summary.totalLines}</b>
