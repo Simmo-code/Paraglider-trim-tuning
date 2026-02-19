@@ -1047,6 +1047,52 @@ function FactorySelect({ theme, value, onChange, disabled, title, minWidth = 160
 }
 export default function App() {
 
+// --- Front-end login gate (UI-only) ---
+// NOTE: This is a simple client-side gate (not secure authentication).
+const LOGIN_USERNAME = "Wingtrim";
+const LOGIN_PASSWORD = "xxx";
+
+const [isAuthed, setIsAuthed] = useState(() => {
+  try {
+    return window.localStorage.getItem("wingtrim_authed") === "1";
+  } catch {
+    return false;
+  }
+});
+const [loginUser, setLoginUser] = useState("");
+const [loginPass, setLoginPass] = useState("");
+const [loginErr, setLoginErr] = useState("");
+
+const handleLogin = (e) => {
+  e?.preventDefault?.();
+  const u = String(loginUser || "").trim();
+  const p = String(loginPass || "");
+  if (u === LOGIN_USERNAME && p === LOGIN_PASSWORD) {
+    setLoginErr("");
+    setIsAuthed(true);
+    try {
+      window.localStorage.setItem("wingtrim_authed", "1");
+    } catch {}
+  } else {
+    setLoginErr("Invalid username or password.");
+    setIsAuthed(false);
+    try {
+      window.localStorage.removeItem("wingtrim_authed");
+    } catch {}
+  }
+};
+
+const handleLogout = () => {
+  setIsAuthed(false);
+  setLoginUser("");
+  setLoginPass("");
+  setLoginErr("");
+  try {
+    window.localStorage.removeItem("wingtrim_authed");
+  } catch {}
+};
+
+
   const buildManualWideRows = () => {
     const groups = Array.isArray(manualGroups) && manualGroups.length ? manualGroups : ["A", "B", "C", "D"];
 
@@ -1199,6 +1245,12 @@ const [trimIndexErr, setTrimIndexErr] = useState("");
 const [trimMakeDb, setTrimMakeDb] = useState(null); // currently loaded make file
 const [trimMakeErr, setTrimMakeErr] = useState("");
 
+// Rigging diagram manifest + viewer (informational only; no trim math coupling)
+const [riggingManifest, setRiggingManifest] = useState(null);
+const [riggingBaseDir, setRiggingBaseDir] = useState(""); // e.g. "ozone"
+const [riggingManifestErr, setRiggingManifestErr] = useState("");
+const [riggingPdfUrl, setRiggingPdfUrl] = useState("");
+
 const [dbMake, setDbMake] = useState("");
 const [dbModel, setDbModel] = useState("");
 const [dbSize, setDbSize] = useState("");
@@ -1265,6 +1317,52 @@ useEffect(() => {
   };
 }, [trimIndex, dbMake]);
 
+
+// Lazy-load rigging manifest for the selected manufacturer (served from /public; offline generated).
+useEffect(() => {
+  let cancelled = false;
+  (async () => {
+    try {
+      setRiggingManifestErr("");
+      setRiggingManifest(null);
+      setRiggingBaseDir("");
+      setRiggingPdfUrl("");
+
+      if (!dbMake || !trimIndex) return;
+
+      const entry = (trimIndex?.makes || []).find((x) => String(x?.make) === String(dbMake));
+      const file = String(entry?.file || "");
+      const dirFromFile = file.includes("/") ? file.split("/")[0] : "";
+      const fallbackDir = String(dbMake || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+      const rigDir = dirFromFile || fallbackDir;
+      if (!cancelled) setRiggingBaseDir(rigDir);
+
+      const base = (import.meta.env?.BASE_URL ?? "/");
+      const baseNorm = base.endsWith("/") ? base : `${base}/`;
+
+      // Primary (matches our offline export convention)
+      const url1 = `${baseNorm}trimdb/${rigDir}/_exports/rigging_manifest.json`;
+
+      let res = await fetch(url1, { cache: "no-store" });
+      if (!res.ok) {
+        // Secondary fallback: if entry.file already includes a dir path, try full dirname
+        const parts = file.split("/").filter(Boolean);
+        const dir2 = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
+        const url2 = dir2 ? `${baseNorm}trimdb/${dir2}/_exports/rigging_manifest.json` : "";
+        if (url2) res = await fetch(url2, { cache: "no-store" });
+      }
+      if (!res.ok) throw new Error(`Failed to load rigging_manifest.json for ${dbMake} (${res.status})`);
+
+      const data = await res.json();
+      if (!cancelled) setRiggingManifest(data);
+    } catch (e) {
+      if (!cancelled) setRiggingManifestErr(String(e?.message || e));
+    }
+  })();
+  return () => { cancelled = true; };
+}, [trimIndex, dbMake]);
+
+
   const dbMakes = useMemo(() => {
   const arr = (trimIndex?.makes || []).map((x) => String(x?.make || "")).filter(Boolean);
   return Array.from(new Set(arr)).sort((a, b) => a.localeCompare(b));
@@ -1279,6 +1377,28 @@ const dbSizes = useMemo(() => {
   const sizesObj = trimMakeDb?.models?.[dbModel]?.sizes || {};
   return Object.keys(sizesObj).sort((a, b) => a.localeCompare(b));
 }, [trimMakeDb, dbModel]);
+
+
+// Derive rigging PDF URL deterministically from manifest when a factory DB wing is selected.
+// Informational only; does not affect trim/pitch/baseline logic.
+useEffect(() => {
+  if (!riggingManifest || !dbModel || !dbSize) {
+    setRiggingPdfUrl("");
+    return;
+  }
+  const modelEntry = riggingManifest?.by_model_size?.[dbModel];
+  const sizeEntry = modelEntry?.sizes?.[dbSize];
+  const pdfFilename = sizeEntry?.matched ? String(sizeEntry?.pdf_filename || "") : "";
+  if (!pdfFilename) {
+    setRiggingPdfUrl("");
+    return;
+  }
+
+  const base = (import.meta.env?.BASE_URL ?? "/");
+  const baseNorm = base.endsWith("/") ? base : `${base}/`;
+  setRiggingPdfUrl(`${baseNorm}trimdb/${String(riggingBaseDir || String(dbMake || "").toLowerCase().replace(/[^a-z0-9]+/g, ""))}/_rigging_pdfs/${pdfFilename}`);
+}, [riggingManifest, riggingBaseDir, dbMake, dbModel, dbSize]);
+
 
   // Keep dependent dropdowns valid
 useEffect(() => {
@@ -3902,6 +4022,85 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
     { value: 4, label: "Step 4 (Trim)" },
   ];
 
+
+  if (!isAuthed) {
+    return (
+      <div style={{ minHeight: "100vh", background: theme.bg, color: theme.text, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"' }}>
+        <div style={{ width: "min(520px, 100%)", border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel, padding: 16 }}>
+          <div style={{ fontSize: 26, fontWeight: 950, letterSpacing: -0.6 }}>WingTrim Login</div>
+          <div style={{ marginTop: 6, opacity: 0.82, fontSize: 13, fontWeight: 850 }}>
+            Enter credentials to access the trim tool.
+          </div>
+
+          <form onSubmit={handleLogin} style={{ marginTop: 14, display: "grid", gap: 10 }}>
+            <label style={{ display: "grid", gap: 6 }}>
+              <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.85 }}>Username</div>
+              <input
+                value={loginUser}
+                onChange={(e) => setLoginUser(e.target.value)}
+                autoComplete="username"
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: `1px solid ${theme.border}`,
+                  background: theme.panel2,
+                  color: theme.text,
+                  outline: "none",
+                  fontWeight: 850,
+                }}
+              />
+            </label>
+
+            <label style={{ display: "grid", gap: 6 }}>
+              <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.85 }}>Password</div>
+              <input
+                type="password"
+                value={loginPass}
+                onChange={(e) => setLoginPass(e.target.value)}
+                autoComplete="current-password"
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: `1px solid ${theme.border}`,
+                  background: theme.panel2,
+                  color: theme.text,
+                  outline: "none",
+                  fontWeight: 850,
+                }}
+              />
+            </label>
+
+            {loginErr ? (
+              <div style={{ padding: "10px 12px", borderRadius: 12, border: `1px solid ${theme.warnStroke}`, background: theme.warnBg, color: theme.text, fontWeight: 900 }}>
+                {loginErr}
+              </div>
+            ) : null}
+
+            <button
+              type="submit"
+              style={{
+                marginTop: 4,
+                padding: "12px 14px",
+                borderRadius: 12,
+                border: `1px solid ${theme.border}`,
+                background: "rgba(255,255,255,0.10)",
+                color: theme.text,
+                fontWeight: 950,
+                cursor: "pointer",
+              }}
+            >
+              Sign in
+            </button>
+
+            <div style={{ opacity: 0.7, fontSize: 12, fontWeight: 800, marginTop: 2 }}>
+              Note: this is a front-end gate (not secure authentication).
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ minHeight: "100vh", overflowX: "hidden", background: theme.bg, color: theme.text, padding: 16, fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial' }}>
       {/* scrollbars styling */}
@@ -5633,6 +5832,37 @@ onPaste={(e) => {
                   </div>
                 </div>
 
+
+                {/* Rigging diagram viewer (Step 2) — shows when a Factory DB wing is selected */}
+                {(dbMake && dbModel && dbSize) ? (
+                  riggingPdfUrl ? (
+                    <div style={{ marginTop: 10, border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                        <div style={{ fontWeight: 950 }}>Rigging diagram (PDF)</div>
+                        <a href={riggingPdfUrl} target="_blank" rel="noopener noreferrer" style={{ color: "rgba(59,130,246,0.95)", fontWeight: 950 }}>
+                          Open in new tab
+                        </a>
+                      </div>
+
+                      <div style={{ marginTop: 10, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: "hidden" }}>
+                        <object data={riggingPdfUrl} type="application/pdf" width="100%" height="520">
+                          <div style={{ padding: 12, fontWeight: 900, opacity: 0.9 }}>
+                            PDF preview not available.{" "}
+                            <a href={riggingPdfUrl} target="_blank" rel="noopener noreferrer" style={{ color: "rgba(59,130,246,0.95)" }}>
+                              Open the rigging diagram
+                            </a>
+                            .
+                          </div>
+                        </object>
+                      </div>
+                    </div>
+                  ) : riggingManifestErr ? (
+                    <div style={{ marginTop: 10, color: theme.bad, fontWeight: 950 }}>
+                      {riggingManifestErr}
+                    </div>
+                  ) : null
+                ) : null}
+
                 <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
                   <div style={{ fontWeight: 950 }}>Defaults</div>
 
@@ -6639,6 +6869,38 @@ onPaste={(e) => {
                   <div style={{ opacity: 0.78, fontSize: 12, marginTop: 4 }}>
                     Uses <b>frozen baseline</b> from Step 3. Step 3 edits will not affect this page until you Reset all.
                   </div>
+
+
+                  {/* Rigging diagram viewer (Step 4) — informational only */}
+                  {(dbMake && dbModel && dbSize) ? (
+                    riggingPdfUrl ? (
+                      <div style={{ marginTop: 10, border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                          <div style={{ fontWeight: 950 }}>Rigging diagram (PDF)</div>
+                          <a href={riggingPdfUrl} target="_blank" rel="noopener noreferrer" style={{ color: "rgba(59,130,246,0.95)", fontWeight: 950 }}>
+                            Open in new tab
+                          </a>
+                        </div>
+
+                        <div style={{ marginTop: 10, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: "hidden" }}>
+                          <object data={riggingPdfUrl} type="application/pdf" width="100%" height="520">
+                            <div style={{ padding: 12, fontWeight: 900, opacity: 0.9 }}>
+                              PDF preview not available.{" "}
+                              <a href={riggingPdfUrl} target="_blank" rel="noopener noreferrer" style={{ color: "rgba(59,130,246,0.95)" }}>
+                                Open the rigging diagram
+                              </a>
+                              .
+                            </div>
+                          </object>
+                        </div>
+                      </div>
+                    ) : riggingManifestErr ? (
+                      <div style={{ marginTop: 10, color: theme.bad, fontWeight: 950 }}>
+                        {riggingManifestErr}
+                      </div>
+                    ) : null
+                  ) : null}
+
 
                   {groupsInUse.length === 0 ? (
                     <div style={{ marginTop: 10, opacity: 0.75 }}>No groups detected. Complete Step 2 mapping first.</div>

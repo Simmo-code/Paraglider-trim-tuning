@@ -1,0 +1,2723 @@
+{
+  "make": "Ozone",
+  "source_share_token": "P50kSUqNGQT2DK3S",
+  "rigging_dir": "ozone_bulk\\_rigging_pdfs",
+  "by_model_size": {
+    "Alpina3 -": {
+      "sizes": {
+        "XS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Alpina3-_XS_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "S": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Alpina3-_S_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "MS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Alpina3-_MS_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "ML": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Alpina3-_ML_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "L": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Alpina3-_L_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Alpina3 -_WIDE.xlsx",
+      "xlsx_source_token": "sjyrp49sX7TRQeZE",
+      "xlsx_source_name": "Alpina3 - lines.xlsx"
+    },
+    "Alpina 4": {
+      "sizes": {
+        "XS": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Alpina4_XS_rigging_2.pdf",
+          "source_pdf_name": "Alpina 4 Rigging diagram.pdf",
+          "source_pdf_token": "x75SrTtUc11HmoJD"
+        },
+        "S": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Alpina4_S_rigging_2.pdf",
+          "source_pdf_name": "Alpina 4 Rigging diagram.pdf",
+          "source_pdf_token": "x75SrTtUc11HmoJD"
+        },
+        "MS": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Alpina4_MS_rigging_2.pdf",
+          "source_pdf_name": "Alpina 4 Rigging diagram.pdf",
+          "source_pdf_token": "x75SrTtUc11HmoJD"
+        },
+        "ML": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Alpina4_ML_rigging_2.pdf",
+          "source_pdf_name": "Alpina 4 Rigging diagram.pdf",
+          "source_pdf_token": "x75SrTtUc11HmoJD"
+        },
+        "L": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Alpina4_L_rigging_2.pdf",
+          "source_pdf_name": "Alpina 4 Rigging diagram.pdf",
+          "source_pdf_token": "x75SrTtUc11HmoJD"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Alpina 4 Lines_WIDE.xlsx",
+      "xlsx_source_token": "K4hr4a5eJpsdm2NY",
+      "xlsx_source_name": "Alpina 4 Lines_maj.xlsx"
+    },
+    "Alta Chart": {
+      "sizes": {
+        "XXS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_AltaChart_XXS_rigging.pdf",
+          "source_pdf_name": "Alta Rigging Diagram.pdf",
+          "source_pdf_token": "0LXiPAASpsn6JwQY"
+        },
+        "XS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_AltaChart_XS_rigging.pdf",
+          "source_pdf_name": "Alta Rigging Diagram.pdf",
+          "source_pdf_token": "0LXiPAASpsn6JwQY"
+        },
+        "S": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_AltaChart_S_rigging.pdf",
+          "source_pdf_name": "Alta Rigging Diagram.pdf",
+          "source_pdf_token": "0LXiPAASpsn6JwQY"
+        },
+        "M": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_AltaChart_M_rigging.pdf",
+          "source_pdf_name": "Alta Rigging Diagram.pdf",
+          "source_pdf_token": "0LXiPAASpsn6JwQY"
+        },
+        "L": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_AltaChart_L_rigging.pdf",
+          "source_pdf_name": "Alta Rigging Diagram.pdf",
+          "source_pdf_token": "0LXiPAASpsn6JwQY"
+        },
+        "XL": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_AltaChart_XL_rigging.pdf",
+          "source_pdf_name": "Alta Rigging Diagram.pdf",
+          "source_pdf_token": "0LXiPAASpsn6JwQY"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Alta Chart_WIDE.xlsx",
+      "xlsx_source_token": "7RuyUy4M0LkfH2RW",
+      "xlsx_source_name": "Alta Line Chart.xlsx"
+    },
+    "Arc Chart - 10m": {
+      "sizes": {
+        "Line check": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_ArcChart-10m_Line check_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "Line mods": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_ArcChart-10m_Line mods_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Arc Line Chart - 10m_WIDE.xlsx",
+      "xlsx_source_token": "upCxOhzejAPFkpBP",
+      "xlsx_source_name": "Arc_Line_Chart_-_10m.xlsx"
+    },
+    "Arc Chart - 12m": {
+      "sizes": {
+        "Line check": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_ArcChart-12m_Line check_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "Line mods": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_ArcChart-12m_Line mods_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Arc Line Chart - 12m_WIDE.xlsx",
+      "xlsx_source_token": "Q1OH8s6kan3L0vMx",
+      "xlsx_source_name": "Arc_Line_Chart_-_12m.xlsx"
+    },
+    "Arc Chart - 14m": {
+      "sizes": {
+        "Line check": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_ArcChart-14m_Line check_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "Line mods": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_ArcChart-14m_Line mods_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Arc Line Chart - 14m_WIDE.xlsx",
+      "xlsx_source_token": "6iyyiHOw1cS3JZAY",
+      "xlsx_source_name": "Arc_Line_Chart_-_14m.xlsx"
+    },
+    "Arc Chart - 8m": {
+      "sizes": {
+        "Line check": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_ArcChart-8m_Line check_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "Line mods": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_ArcChart-8m_Line mods_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Arc Line Chart - 8m_WIDE.xlsx",
+      "xlsx_source_token": "Sbks2UaPaEytZNmP",
+      "xlsx_source_name": "Arc_Line_Chart_-_8m.xlsx"
+    },
+    "Buzz Z5 -": {
+      "sizes": {
+        "Z5_XS": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_BuzzZ5-_Z5_XS_rigging.pdf",
+          "source_pdf_name": "Buzz Z5 Rigging diagram.pdf",
+          "source_pdf_token": "YHWonVp7z4FHYGwQ"
+        },
+        "Z5_S": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_BuzzZ5-_Z5_S_rigging.pdf",
+          "source_pdf_name": "Buzz Z5 Rigging diagram.pdf",
+          "source_pdf_token": "YHWonVp7z4FHYGwQ"
+        },
+        "Z5_MS": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_BuzzZ5-_Z5_MS_rigging.pdf",
+          "source_pdf_name": "Buzz Z5 Rigging diagram.pdf",
+          "source_pdf_token": "YHWonVp7z4FHYGwQ"
+        },
+        "Z5_ML": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_BuzzZ5-_Z5_ML_rigging.pdf",
+          "source_pdf_name": "Buzz Z5 Rigging diagram.pdf",
+          "source_pdf_token": "YHWonVp7z4FHYGwQ"
+        },
+        "Z5_L": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_BuzzZ5-_Z5_L_rigging.pdf",
+          "source_pdf_name": "Buzz Z5 Rigging diagram.pdf",
+          "source_pdf_token": "YHWonVp7z4FHYGwQ"
+        },
+        "Z5 XL": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_BuzzZ5-_Z5 XL_rigging.pdf",
+          "source_pdf_name": "Buzz Z5 Rigging diagram.pdf",
+          "source_pdf_token": "YHWonVp7z4FHYGwQ"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Buzz Z5 -_WIDE.xlsx",
+      "xlsx_source_token": "vnsA5CwzUKXSkPbf",
+      "xlsx_source_name": "Buzz Z5 - lines.xlsx"
+    },
+    "Buzz Z6": {
+      "sizes": {
+        "MS": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_BuzzZ6_MS_rigging.pdf",
+          "source_pdf_name": "Buzz Z6 Rigging diagram.pdf",
+          "source_pdf_token": "EUrdpNBeS4fasyxr"
+        },
+        "ML": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_BuzzZ6_ML_rigging.pdf",
+          "source_pdf_name": "Buzz Z6 Rigging diagram.pdf",
+          "source_pdf_token": "EUrdpNBeS4fasyxr"
+        },
+        "L": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_BuzzZ6_L_rigging.pdf",
+          "source_pdf_name": "Buzz Z6 Rigging diagram.pdf",
+          "source_pdf_token": "EUrdpNBeS4fasyxr"
+        },
+        "XL": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_BuzzZ6_XL_rigging.pdf",
+          "source_pdf_name": "Buzz Z6 Rigging diagram.pdf",
+          "source_pdf_token": "EUrdpNBeS4fasyxr"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Buzz Z6_WIDE.xlsx",
+      "xlsx_source_token": "QWvbdKA5UBkrPam8",
+      "xlsx_source_name": "Buzz Z6 lines.xlsx"
+    },
+    "Buzz Z7 -": {
+      "sizes": {
+        "XS": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_BuzzZ7-_XS_rigging.pdf",
+          "source_pdf_name": "Buzz Z7 Rigging diagram.pdf",
+          "source_pdf_token": "fzQI4faXutkdfHji"
+        },
+        "S": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_BuzzZ7-_S_rigging.pdf",
+          "source_pdf_name": "Buzz Z7 Rigging diagram.pdf",
+          "source_pdf_token": "fzQI4faXutkdfHji"
+        },
+        "MS": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_BuzzZ7-_MS_rigging.pdf",
+          "source_pdf_name": "Buzz Z7 Rigging diagram.pdf",
+          "source_pdf_token": "fzQI4faXutkdfHji"
+        },
+        "ML": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_BuzzZ7-_ML_rigging.pdf",
+          "source_pdf_name": "Buzz Z7 Rigging diagram.pdf",
+          "source_pdf_token": "fzQI4faXutkdfHji"
+        },
+        "L": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_BuzzZ7-_L_rigging.pdf",
+          "source_pdf_name": "Buzz Z7 Rigging diagram.pdf",
+          "source_pdf_token": "fzQI4faXutkdfHji"
+        },
+        "XL": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_BuzzZ7-_XL_rigging.pdf",
+          "source_pdf_name": "Buzz Z7 Rigging diagram.pdf",
+          "source_pdf_token": "fzQI4faXutkdfHji"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Buzz Z7 -_WIDE.xlsx",
+      "xlsx_source_token": "HEk5wOQMalrUTRYy",
+      "xlsx_source_name": "Buzz Z7 - lines.xlsx"
+    },
+    "Delta 3": {
+      "sizes": {
+        "XS": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Delta3_XS_rigging.pdf",
+          "source_pdf_name": "Delta 3 Rigging diagram.pdf",
+          "source_pdf_token": "QuEV2qisBNkyKqH5"
+        },
+        "S": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Delta3_S_rigging.pdf",
+          "source_pdf_name": "Delta 3 Rigging diagram.pdf",
+          "source_pdf_token": "QuEV2qisBNkyKqH5"
+        },
+        "MS": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Delta3_MS_rigging.pdf",
+          "source_pdf_name": "Delta 3 Rigging diagram.pdf",
+          "source_pdf_token": "QuEV2qisBNkyKqH5"
+        },
+        "ML": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Delta3_ML_rigging.pdf",
+          "source_pdf_name": "Delta 3 Rigging diagram.pdf",
+          "source_pdf_token": "QuEV2qisBNkyKqH5"
+        },
+        "L": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Delta3_L_rigging.pdf",
+          "source_pdf_name": "Delta 3 Rigging diagram.pdf",
+          "source_pdf_token": "QuEV2qisBNkyKqH5"
+        },
+        "XL": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Delta3_XL_rigging.pdf",
+          "source_pdf_name": "Delta 3 Rigging diagram.pdf",
+          "source_pdf_token": "QuEV2qisBNkyKqH5"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Delta 3_WIDE.xlsx",
+      "xlsx_source_token": "grHn7UOvWIopRT6l",
+      "xlsx_source_name": "Delta 3 lines.xlsx"
+    },
+    "Delta4 check Analysis": {
+      "sizes": {
+        "Delta4 measurement analysis": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Delta4checkAnalysis_Delta4 measurement analysis_rigging.pdf",
+          "source_pdf_name": "Delta 4 Rigging diagram.pdf",
+          "source_pdf_token": "PV0MRhHnIGinQSc2"
+        },
+        "Manual Value XS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Delta4checkAnalysis_Manual Value XS_rigging.pdf",
+          "source_pdf_name": "Delta 4 Rigging diagram.pdf",
+          "source_pdf_token": "PV0MRhHnIGinQSc2"
+        },
+        "Manual value S": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Delta4checkAnalysis_Manual value S_rigging.pdf",
+          "source_pdf_name": "Delta 4 Rigging diagram.pdf",
+          "source_pdf_token": "PV0MRhHnIGinQSc2"
+        },
+        "Manual Value MS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Delta4checkAnalysis_Manual Value MS_rigging.pdf",
+          "source_pdf_name": "Delta 4 Rigging diagram.pdf",
+          "source_pdf_token": "PV0MRhHnIGinQSc2"
+        },
+        "Manual Value ML": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Delta4checkAnalysis_Manual Value ML_rigging.pdf",
+          "source_pdf_name": "Delta 4 Rigging diagram.pdf",
+          "source_pdf_token": "PV0MRhHnIGinQSc2"
+        },
+        "Manual Value L": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Delta4checkAnalysis_Manual Value L_rigging.pdf",
+          "source_pdf_name": "Delta 4 Rigging diagram.pdf",
+          "source_pdf_token": "PV0MRhHnIGinQSc2"
+        },
+        "Manual Value XL": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Delta4checkAnalysis_Manual Value XL_rigging.pdf",
+          "source_pdf_name": "Delta 4 Rigging diagram.pdf",
+          "source_pdf_token": "PV0MRhHnIGinQSc2"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Delta4 check Analysis_WIDE.xlsx",
+      "xlsx_source_token": "rKTi1HvJSzAP8dV8",
+      "xlsx_source_name": "Delta4 Line check Analysis.xlsx"
+    },
+    "ALL Delta 4": {
+      "sizes": {
+        "D4 XS": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_ALLDelta4_D4 XS_rigging.pdf",
+          "source_pdf_name": "Delta 4 Rigging diagram.pdf",
+          "source_pdf_token": "PV0MRhHnIGinQSc2"
+        },
+        "D4 S": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_ALLDelta4_D4 S_rigging.pdf",
+          "source_pdf_name": "Delta 4 Rigging diagram.pdf",
+          "source_pdf_token": "PV0MRhHnIGinQSc2"
+        },
+        "D4 MS": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_ALLDelta4_D4 MS_rigging.pdf",
+          "source_pdf_name": "Delta 4 Rigging diagram.pdf",
+          "source_pdf_token": "PV0MRhHnIGinQSc2"
+        },
+        "D4 ML": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_ALLDelta4_D4 ML_rigging.pdf",
+          "source_pdf_name": "Delta 4 Rigging diagram.pdf",
+          "source_pdf_token": "PV0MRhHnIGinQSc2"
+        },
+        "D4 L": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_ALLDelta4_D4 L_rigging.pdf",
+          "source_pdf_name": "Delta 4 Rigging diagram.pdf",
+          "source_pdf_token": "PV0MRhHnIGinQSc2"
+        },
+        "D4 XL": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_ALLDelta4_D4 XL_rigging.pdf",
+          "source_pdf_name": "Delta 4 Rigging diagram.pdf",
+          "source_pdf_token": "PV0MRhHnIGinQSc2"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_ALL Delta 4_WIDE.xlsx",
+      "xlsx_source_token": "xd8lLb5WHZGZWSO3",
+      "xlsx_source_name": "LINES ALL Delta 4.xlsx"
+    },
+    "Dragonfly": {
+      "sizes": {
+        "14": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_Dragonfly_14_rigging.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        },
+        "16": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_Dragonfly_16_rigging.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        },
+        "18": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_Dragonfly_18_rigging.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Dragonfly_WIDE.xlsx",
+      "xlsx_source_token": "Bm2EpdZAErCaEXey",
+      "xlsx_source_name": "Dragonfly Lines.xlsx"
+    },
+    "Element 3 Chart-1": {
+      "sizes": {
+        "XXS": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Element3Chart-1_XXS_rigging.pdf",
+          "source_pdf_name": "Element 3 Rigging Diagram.pdf",
+          "source_pdf_token": "oidDeKM8E0InP324"
+        },
+        "XS": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Element3Chart-1_XS_rigging.pdf",
+          "source_pdf_name": "Element 3 Rigging Diagram.pdf",
+          "source_pdf_token": "oidDeKM8E0InP324"
+        },
+        "S": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Element3Chart-1_S_rigging.pdf",
+          "source_pdf_name": "Element 3 Rigging Diagram.pdf",
+          "source_pdf_token": "oidDeKM8E0InP324"
+        },
+        "M": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Element3Chart-1_M_rigging.pdf",
+          "source_pdf_name": "Element 3 Rigging Diagram.pdf",
+          "source_pdf_token": "oidDeKM8E0InP324"
+        },
+        "L": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Element3Chart-1_L_rigging.pdf",
+          "source_pdf_name": "Element 3 Rigging Diagram.pdf",
+          "source_pdf_token": "oidDeKM8E0InP324"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Element 3 Chart-1_WIDE.xlsx",
+      "xlsx_source_token": "6lZzj0uIzTv9qCva",
+      "xlsx_source_name": "Element 3 Line Chart-1.xlsx"
+    },
+    "enzo3 CCC and Risers": {
+      "sizes": {
+        "XXS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_enzo3CCCandRisers_XXS_rigging.pdf",
+          "source_pdf_name": "Enzo3 Rigging diagram.pdf",
+          "source_pdf_token": "NTlAr8O0ZsMTSFqA"
+        },
+        "XS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_enzo3CCCandRisers_XS_rigging.pdf",
+          "source_pdf_name": "Enzo3 Rigging diagram.pdf",
+          "source_pdf_token": "NTlAr8O0ZsMTSFqA"
+        },
+        "S": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_enzo3CCCandRisers_S_rigging.pdf",
+          "source_pdf_name": "Enzo3 Rigging diagram.pdf",
+          "source_pdf_token": "NTlAr8O0ZsMTSFqA"
+        },
+        "M": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_enzo3CCCandRisers_M_rigging.pdf",
+          "source_pdf_name": "Enzo3 Rigging diagram.pdf",
+          "source_pdf_token": "NTlAr8O0ZsMTSFqA"
+        },
+        "L": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_enzo3CCCandRisers_L_rigging.pdf",
+          "source_pdf_name": "Enzo3 Rigging diagram.pdf",
+          "source_pdf_token": "NTlAr8O0ZsMTSFqA"
+        },
+        "XL": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_enzo3CCCandRisers_XL_rigging.pdf",
+          "source_pdf_name": "Enzo3 Rigging diagram.pdf",
+          "source_pdf_token": "NTlAr8O0ZsMTSFqA"
+        },
+        "ScalingCheck": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_enzo3CCCandRisers_ScalingCheck_rigging.pdf",
+          "source_pdf_name": "Enzo3 Rigging diagram.pdf",
+          "source_pdf_token": "NTlAr8O0ZsMTSFqA"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_enzo3 CCC and Risers_WIDE.xlsx",
+      "xlsx_source_token": "tsKGPOZEfPIa3UOo",
+      "xlsx_source_name": "enzo3 CCC Lines and Risers Length.xlsx"
+    },
+    "Freeride Chart": {
+      "sizes": {
+        "15": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_FreerideChart_15_rigging.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        },
+        "16": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_FreerideChart_16_rigging.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        },
+        "17": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_FreerideChart_17_rigging.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        },
+        "19": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_FreerideChart_19_rigging.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        },
+        "21": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_FreerideChart_21_rigging.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        },
+        "23": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_FreerideChart_23_rigging.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Freeride Line Chart_WIDE.xlsx",
+      "xlsx_source_token": "FUgJJoCum4F27QNw",
+      "xlsx_source_name": "Freeride_Line_Chart.xlsx"
+    },
+    "Freeride 2 Freeride 2 - Chart": {
+      "sizes": {
+        "13_UNSH": {
+          "matched": true,
+          "score": 575,
+          "pdf_filename": "Ozone_Freeride2Freeride2-Chart_13_UNSH_rigging.pdf",
+          "source_pdf_name": "Triox 2 rigging diagram v2.pdf",
+          "source_pdf_token": "00AbS6kOYSy3U4yf"
+        },
+        "14_SH": {
+          "matched": true,
+          "score": 575,
+          "pdf_filename": "Ozone_Freeride2Freeride2-Chart_14_SH_rigging.pdf",
+          "source_pdf_name": "Triox 2 rigging diagram v2.pdf",
+          "source_pdf_token": "00AbS6kOYSy3U4yf"
+        },
+        "14_UNSH": {
+          "matched": true,
+          "score": 575,
+          "pdf_filename": "Ozone_Freeride2Freeride2-Chart_14_UNSH_rigging.pdf",
+          "source_pdf_name": "Triox 2 rigging diagram v2.pdf",
+          "source_pdf_token": "00AbS6kOYSy3U4yf"
+        },
+        "15_SH": {
+          "matched": true,
+          "score": 575,
+          "pdf_filename": "Ozone_Freeride2Freeride2-Chart_15_SH_rigging.pdf",
+          "source_pdf_name": "Triox 2 rigging diagram v2.pdf",
+          "source_pdf_token": "00AbS6kOYSy3U4yf"
+        },
+        "15_UNSH": {
+          "matched": true,
+          "score": 575,
+          "pdf_filename": "Ozone_Freeride2Freeride2-Chart_15_UNSH_rigging.pdf",
+          "source_pdf_name": "Triox 2 rigging diagram v2.pdf",
+          "source_pdf_token": "00AbS6kOYSy3U4yf"
+        },
+        "16_SH": {
+          "matched": true,
+          "score": 575,
+          "pdf_filename": "Ozone_Freeride2Freeride2-Chart_16_SH_rigging.pdf",
+          "source_pdf_name": "Triox 2 rigging diagram v2.pdf",
+          "source_pdf_token": "00AbS6kOYSy3U4yf"
+        },
+        "16_UNSH": {
+          "matched": true,
+          "score": 575,
+          "pdf_filename": "Ozone_Freeride2Freeride2-Chart_16_UNSH_rigging.pdf",
+          "source_pdf_name": "Triox 2 rigging diagram v2.pdf",
+          "source_pdf_token": "00AbS6kOYSy3U4yf"
+        },
+        "17_SH": {
+          "matched": true,
+          "score": 575,
+          "pdf_filename": "Ozone_Freeride2Freeride2-Chart_17_SH_rigging.pdf",
+          "source_pdf_name": "Triox 2 rigging diagram v2.pdf",
+          "source_pdf_token": "00AbS6kOYSy3U4yf"
+        },
+        "17_UNSH": {
+          "matched": true,
+          "score": 575,
+          "pdf_filename": "Ozone_Freeride2Freeride2-Chart_17_UNSH_rigging.pdf",
+          "source_pdf_name": "Triox 2 rigging diagram v2.pdf",
+          "source_pdf_token": "00AbS6kOYSy3U4yf"
+        },
+        "19_SH": {
+          "matched": true,
+          "score": 575,
+          "pdf_filename": "Ozone_Freeride2Freeride2-Chart_19_SH_rigging.pdf",
+          "source_pdf_name": "Triox 2 rigging diagram v2.pdf",
+          "source_pdf_token": "00AbS6kOYSy3U4yf"
+        },
+        "21_SH": {
+          "matched": true,
+          "score": 575,
+          "pdf_filename": "Ozone_Freeride2Freeride2-Chart_21_SH_rigging.pdf",
+          "source_pdf_name": "Triox 2 rigging diagram v2.pdf",
+          "source_pdf_token": "00AbS6kOYSy3U4yf"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Freeride 2 Freeride 2 - Line Chart_WIDE.xlsx",
+      "xlsx_source_token": "b6tlBfvgcenk8uHy",
+      "xlsx_source_name": "Freeride_2_Freeride_2_-_Line_Chart.xlsx"
+    },
+    "Geo6": {
+      "sizes": {
+        "MS": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Geo6_MS_rigging.pdf",
+          "source_pdf_name": "Geo 6 Rigging diagram.pdf",
+          "source_pdf_token": "aI6RyUlPlOvFTbHy"
+        },
+        "ML": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Geo6_ML_rigging.pdf",
+          "source_pdf_name": "Geo 6 Rigging diagram.pdf",
+          "source_pdf_token": "aI6RyUlPlOvFTbHy"
+        },
+        "L": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Geo6_L_rigging.pdf",
+          "source_pdf_name": "Geo 6 Rigging diagram.pdf",
+          "source_pdf_token": "aI6RyUlPlOvFTbHy"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Geo6_WIDE.xlsx",
+      "xlsx_source_token": "GSb9MzRsuzBrjcTV",
+      "xlsx_source_name": "Geo6 lines.xlsx"
+    },
+    "Geo7 -": {
+      "sizes": {
+        "XS": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Geo7-_XS_rigging.pdf",
+          "source_pdf_name": "Geo 7 Rigging diagram.pdf",
+          "source_pdf_token": "PqV6t2uu2JDm8ERe"
+        },
+        "S": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Geo7-_S_rigging.pdf",
+          "source_pdf_name": "Geo 7 Rigging diagram.pdf",
+          "source_pdf_token": "PqV6t2uu2JDm8ERe"
+        },
+        "MS": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Geo7-_MS_rigging.pdf",
+          "source_pdf_name": "Geo 7 Rigging diagram.pdf",
+          "source_pdf_token": "PqV6t2uu2JDm8ERe"
+        },
+        "ML": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Geo7-_ML_rigging.pdf",
+          "source_pdf_name": "Geo 7 Rigging diagram.pdf",
+          "source_pdf_token": "PqV6t2uu2JDm8ERe"
+        },
+        "L": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Geo7-_L_rigging.pdf",
+          "source_pdf_name": "Geo 7 Rigging diagram.pdf",
+          "source_pdf_token": "PqV6t2uu2JDm8ERe"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Geo7 -_WIDE.xlsx",
+      "xlsx_source_token": "72nXK2DWCHaGRFbk",
+      "xlsx_source_name": "Geo7 - lines.xlsx"
+    },
+    "Jomo 2": {
+      "sizes": {
+        "XS": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Jomo2_XS_rigging.pdf",
+          "source_pdf_name": "Jomo 2 Rigging diagram.pdf",
+          "source_pdf_token": "3DU9rllNjwOOx0uL"
+        },
+        "S": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Jomo2_S_rigging.pdf",
+          "source_pdf_name": "Jomo 2 Rigging diagram.pdf",
+          "source_pdf_token": "3DU9rllNjwOOx0uL"
+        },
+        "M": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Jomo2_M_rigging.pdf",
+          "source_pdf_name": "Jomo 2 Rigging diagram.pdf",
+          "source_pdf_token": "3DU9rllNjwOOx0uL"
+        },
+        "L": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Jomo2_L_rigging.pdf",
+          "source_pdf_name": "Jomo 2 Rigging diagram.pdf",
+          "source_pdf_token": "3DU9rllNjwOOx0uL"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Jomo 2_WIDE.xlsx",
+      "xlsx_source_token": "J7KMMRdOjDKsSvnH",
+      "xlsx_source_name": "Jomo 2 lines.xlsx"
+    },
+    "Kona -": {
+      "sizes": {
+        "22": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Kona-_22_rigging.pdf",
+          "source_pdf_name": "Kona Rigging diagram.pdf",
+          "source_pdf_token": "GipybyeRaObtZRit"
+        },
+        "24": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Kona-_24_rigging.pdf",
+          "source_pdf_name": "Kona Rigging diagram.pdf",
+          "source_pdf_token": "GipybyeRaObtZRit"
+        },
+        "26": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Kona-_26_rigging.pdf",
+          "source_pdf_name": "Kona Rigging diagram.pdf",
+          "source_pdf_token": "GipybyeRaObtZRit"
+        },
+        "27": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Kona-_27_rigging.pdf",
+          "source_pdf_name": "Kona Rigging diagram.pdf",
+          "source_pdf_token": "GipybyeRaObtZRit"
+        },
+        "29": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Kona-_29_rigging.pdf",
+          "source_pdf_name": "Kona Rigging diagram.pdf",
+          "source_pdf_token": "GipybyeRaObtZRit"
+        },
+        "31": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Kona-_31_rigging.pdf",
+          "source_pdf_name": "Kona Rigging diagram.pdf",
+          "source_pdf_token": "GipybyeRaObtZRit"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Kona -_WIDE.xlsx",
+      "xlsx_source_token": "OAe9x64JO944eJ7x",
+      "xlsx_source_name": "Kona - lines.xlsx"
+    },
+    "Kona 2 Chart (Post December 2019)": {
+      "sizes": {
+        "26": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Kona2Chart(PostDecember2019)_26_rigging.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        },
+        "27": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Kona2Chart(PostDecember2019)_27_rigging.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        },
+        "29": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Kona2Chart(PostDecember2019)_29_rigging.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        },
+        "31": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Kona2Chart(PostDecember2019)_31_rigging.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Kona 2 Line Chart (Post December 2019)_WIDE.xlsx",
+      "xlsx_source_token": "hIFhfyd5iFuECmat",
+      "xlsx_source_name": "Kona_2_Line_Chart_(Post_December_2019).xlsx"
+    },
+    "Kona3 -": {
+      "sizes": {
+        "22": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Kona3-_22_rigging.pdf",
+          "source_pdf_name": "Kona 3 Rigging diagram.pdf",
+          "source_pdf_token": "2ZA3nSCqsZVaBhvq"
+        },
+        "24": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Kona3-_24_rigging.pdf",
+          "source_pdf_name": "Kona 3 Rigging diagram.pdf",
+          "source_pdf_token": "2ZA3nSCqsZVaBhvq"
+        },
+        "26": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Kona3-_26_rigging.pdf",
+          "source_pdf_name": "Kona 3 Rigging diagram.pdf",
+          "source_pdf_token": "2ZA3nSCqsZVaBhvq"
+        },
+        "27": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Kona3-_27_rigging.pdf",
+          "source_pdf_name": "Kona 3 Rigging diagram.pdf",
+          "source_pdf_token": "2ZA3nSCqsZVaBhvq"
+        },
+        "29": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Kona3-_29_rigging.pdf",
+          "source_pdf_name": "Kona 3 Rigging diagram.pdf",
+          "source_pdf_token": "2ZA3nSCqsZVaBhvq"
+        },
+        "31": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Kona3-_31_rigging.pdf",
+          "source_pdf_name": "Kona 3 Rigging diagram.pdf",
+          "source_pdf_token": "2ZA3nSCqsZVaBhvq"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Kona3 -_WIDE.xlsx",
+      "xlsx_source_token": "wPS7yN0APlcdPquH",
+      "xlsx_source_name": "Kona3 - lines.xlsx"
+    },
+    "Lyght details": {
+      "sizes": {
+        "XS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Lyghtdetails_XS_rigging.pdf",
+          "source_pdf_name": "Lyght Rigging diagram.pdf",
+          "source_pdf_token": "AFjDTNo6ADnNBFBt"
+        },
+        "S": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Lyghtdetails_S_rigging.pdf",
+          "source_pdf_name": "Lyght Rigging diagram.pdf",
+          "source_pdf_token": "AFjDTNo6ADnNBFBt"
+        },
+        "MS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Lyghtdetails_MS_rigging.pdf",
+          "source_pdf_name": "Lyght Rigging diagram.pdf",
+          "source_pdf_token": "AFjDTNo6ADnNBFBt"
+        },
+        "ML": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Lyghtdetails_ML_rigging.pdf",
+          "source_pdf_name": "Lyght Rigging diagram.pdf",
+          "source_pdf_token": "AFjDTNo6ADnNBFBt"
+        },
+        "L": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Lyghtdetails_L_rigging.pdf",
+          "source_pdf_name": "Lyght Rigging diagram.pdf",
+          "source_pdf_token": "AFjDTNo6ADnNBFBt"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Lyght details_WIDE.xlsx",
+      "xlsx_source_token": "T3wUYrBRxLyhMi7x",
+      "xlsx_source_name": "Lyght Line details.xlsx"
+    },
+    "MagMax 2 Chart": {
+      "sizes": {
+        "MagMax2 38": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_MagMax2Chart_MagMax2 38_rigging.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        },
+        "MagMax2 41": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_MagMax2Chart_MagMax2 41_rigging.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_MagMax 2 Line Chart_WIDE.xlsx",
+      "xlsx_source_token": "ZhGzl4fjUlUJIQON",
+      "xlsx_source_name": "MagMax_2_Line_Chart.xlsx"
+    },
+    "Magnum3 -": {
+      "sizes": {
+        "38": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Magnum3-_38_rigging.pdf",
+          "source_pdf_name": "Magnum 3 Rigging diagram.pdf",
+          "source_pdf_token": "KyZIUz4XXiOmEjvS"
+        },
+        "41": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Magnum3-_41_rigging.pdf",
+          "source_pdf_name": "Magnum 3 Rigging diagram.pdf",
+          "source_pdf_token": "KyZIUz4XXiOmEjvS"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Magnum3 -_WIDE.xlsx",
+      "xlsx_source_token": "knbVuJVtgCxQaR2g",
+      "xlsx_source_name": "Magnum3 - lines.xlsx"
+    },
+    "Mojo6": {
+      "sizes": {
+        "XS": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Mojo6_XS_rigging.pdf",
+          "source_pdf_name": "Mojo 6 Rigging diagram.pdf",
+          "source_pdf_token": "3hSHG0rgtxeMtuMq"
+        },
+        "S": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Mojo6_S_rigging.pdf",
+          "source_pdf_name": "Mojo 6 Rigging diagram.pdf",
+          "source_pdf_token": "3hSHG0rgtxeMtuMq"
+        },
+        "M": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Mojo6_M_rigging.pdf",
+          "source_pdf_name": "Mojo 6 Rigging diagram.pdf",
+          "source_pdf_token": "3hSHG0rgtxeMtuMq"
+        },
+        "L": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Mojo6_L_rigging.pdf",
+          "source_pdf_name": "Mojo 6 Rigging diagram.pdf",
+          "source_pdf_token": "3hSHG0rgtxeMtuMq"
+        },
+        "XL": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Mojo6_XL_rigging.pdf",
+          "source_pdf_name": "Mojo 6 Rigging diagram.pdf",
+          "source_pdf_token": "3hSHG0rgtxeMtuMq"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Mojo6_WIDE.xlsx",
+      "xlsx_source_token": "ZLah7jparedA6kVR",
+      "xlsx_source_name": "Mojo6 lines.xlsx"
+    },
+    "MojoPWR 2 -": {
+      "sizes": {
+        "22": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_MojoPWR2-_22_rigging.pdf",
+          "source_pdf_name": "Mojo PWR 2 Rigging diagram.pdf",
+          "source_pdf_token": "tq3hCJ1HYcjuXzqM"
+        },
+        "24": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_MojoPWR2-_24_rigging.pdf",
+          "source_pdf_name": "Mojo PWR 2 Rigging diagram.pdf",
+          "source_pdf_token": "tq3hCJ1HYcjuXzqM"
+        },
+        "26": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_MojoPWR2-_26_rigging.pdf",
+          "source_pdf_name": "Mojo PWR 2 Rigging diagram.pdf",
+          "source_pdf_token": "tq3hCJ1HYcjuXzqM"
+        },
+        "28": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_MojoPWR2-_28_rigging.pdf",
+          "source_pdf_name": "Mojo PWR 2 Rigging diagram.pdf",
+          "source_pdf_token": "tq3hCJ1HYcjuXzqM"
+        },
+        "30": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_MojoPWR2-_30_rigging.pdf",
+          "source_pdf_name": "Mojo PWR 2 Rigging diagram.pdf",
+          "source_pdf_token": "tq3hCJ1HYcjuXzqM"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_MojoPWR 2 -_WIDE.xlsx",
+      "xlsx_source_token": "ofTV9okMajdgrwoP",
+      "xlsx_source_name": "MojoPWR 2 - lines.xlsx"
+    },
+    "MojoMax -": {
+      "sizes": {
+        "33": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_MojoMax-_33_rigging.pdf",
+          "source_pdf_name": "MojoMAX Rigging diagram.pdf",
+          "source_pdf_token": "i9PGIuchemGHS8Nb"
+        },
+        "36": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_MojoMax-_36_rigging.pdf",
+          "source_pdf_name": "MojoMAX Rigging diagram.pdf",
+          "source_pdf_token": "i9PGIuchemGHS8Nb"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_MojoMax -_WIDE.xlsx",
+      "xlsx_source_token": "D21NB99omXiQaU6f",
+      "xlsx_source_name": "MojoMax - lines.xlsx"
+    },
+    "Moxie -": {
+      "sizes": {
+        "XXS": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Moxie-_XXS_rigging.pdf",
+          "source_pdf_name": "Moxie Rigging diagram.pdf",
+          "source_pdf_token": "NN3SLRnFDWVIgxyB"
+        },
+        "XS": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Moxie-_XS_rigging.pdf",
+          "source_pdf_name": "Moxie Rigging diagram.pdf",
+          "source_pdf_token": "NN3SLRnFDWVIgxyB"
+        },
+        "S": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Moxie-_S_rigging.pdf",
+          "source_pdf_name": "Moxie Rigging diagram.pdf",
+          "source_pdf_token": "NN3SLRnFDWVIgxyB"
+        },
+        "M": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Moxie-_M_rigging.pdf",
+          "source_pdf_name": "Moxie Rigging diagram.pdf",
+          "source_pdf_token": "NN3SLRnFDWVIgxyB"
+        },
+        "L": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Moxie-_L_rigging.pdf",
+          "source_pdf_name": "Moxie Rigging diagram.pdf",
+          "source_pdf_token": "NN3SLRnFDWVIgxyB"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Moxie -_WIDE.xlsx",
+      "xlsx_source_token": "DoDMIqtivv15vmyP",
+      "xlsx_source_name": "Moxie - lines.xlsx"
+    },
+    "MoxiePWR -": {
+      "sizes": {
+        "20": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_MoxiePWR-_20_rigging.pdf",
+          "source_pdf_name": "Moxie PWR Rigging Diagram.pdf",
+          "source_pdf_token": "153Xg0U7470UuFHo"
+        },
+        "22": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_MoxiePWR-_22_rigging.pdf",
+          "source_pdf_name": "Moxie PWR Rigging Diagram.pdf",
+          "source_pdf_token": "153Xg0U7470UuFHo"
+        },
+        "24": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_MoxiePWR-_24_rigging.pdf",
+          "source_pdf_name": "Moxie PWR Rigging Diagram.pdf",
+          "source_pdf_token": "153Xg0U7470UuFHo"
+        },
+        "26": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_MoxiePWR-_26_rigging.pdf",
+          "source_pdf_name": "Moxie PWR Rigging Diagram.pdf",
+          "source_pdf_token": "153Xg0U7470UuFHo"
+        },
+        "29": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_MoxiePWR-_29_rigging.pdf",
+          "source_pdf_name": "Moxie PWR Rigging Diagram.pdf",
+          "source_pdf_token": "153Xg0U7470UuFHo"
+        },
+        "31": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_MoxiePWR-_31_rigging.pdf",
+          "source_pdf_name": "Moxie PWR Rigging Diagram.pdf",
+          "source_pdf_token": "153Xg0U7470UuFHo"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_MoxiePWR -_WIDE.xlsx",
+      "xlsx_source_token": "nkbSRYOTf2VKpP63",
+      "xlsx_source_name": "MoxiePWR - lines.xlsx"
+    },
+    "Photon Chart": {
+      "sizes": {
+        "XS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_PhotonChart_XS_rigging.pdf",
+          "source_pdf_name": "Photon Rigging Diagram-1.pdf",
+          "source_pdf_token": "IEBO7vDdrQiYQpMA"
+        },
+        "S": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_PhotonChart_S_rigging.pdf",
+          "source_pdf_name": "Photon Rigging Diagram-1.pdf",
+          "source_pdf_token": "IEBO7vDdrQiYQpMA"
+        },
+        "MS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_PhotonChart_MS_rigging.pdf",
+          "source_pdf_name": "Photon Rigging Diagram-1.pdf",
+          "source_pdf_token": "IEBO7vDdrQiYQpMA"
+        },
+        "ML": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_PhotonChart_ML_rigging.pdf",
+          "source_pdf_name": "Photon Rigging Diagram-1.pdf",
+          "source_pdf_token": "IEBO7vDdrQiYQpMA"
+        },
+        "L": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_PhotonChart_L_rigging.pdf",
+          "source_pdf_name": "Photon Rigging Diagram-1.pdf",
+          "source_pdf_token": "IEBO7vDdrQiYQpMA"
+        },
+        "XL": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_PhotonChart_XL_rigging.pdf",
+          "source_pdf_name": "Photon Rigging Diagram-1.pdf",
+          "source_pdf_token": "IEBO7vDdrQiYQpMA"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Photon Chart_WIDE.xlsx",
+      "xlsx_source_token": "bAtn7xujRuTSQuMR",
+      "xlsx_source_name": "Photon Line Chart.xlsx"
+    },
+    "Photon MS PWC check table": {
+      "sizes": {
+        "Wing analysis": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_PhotonMSPWCchecktable_Wing analysis_rigging.pdf",
+          "source_pdf_name": "Photon Rigging Diagram-1.pdf",
+          "source_pdf_token": "IEBO7vDdrQiYQpMA"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Photon MS PWC check table_WIDE.xlsx",
+      "xlsx_source_token": "gDxnRJn71FtjO6uL",
+      "xlsx_source_name": "Photon MS PWC check table.xlsx"
+    },
+    "Photon S PWC check table": {
+      "sizes": {
+        "Wing analysis": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_PhotonSPWCchecktable_Wing analysis_rigging.pdf",
+          "source_pdf_name": "Photon Rigging Diagram-1.pdf",
+          "source_pdf_token": "IEBO7vDdrQiYQpMA"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Photon S PWC check table_WIDE.xlsx",
+      "xlsx_source_token": "UWuYaUjdbVifk62Z",
+      "xlsx_source_name": "Photon S PWC check table.xlsx"
+    },
+    "Rapido 3 Chart - Sheathed": {
+      "sizes": {
+        "15m": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Rapido3Chart-Sheathed_15m_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "13m": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Rapido3Chart-Sheathed_13m_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "11m": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Rapido3Chart-Sheathed_11m_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "9m": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Rapido3Chart-Sheathed_9m_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "8m": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Rapido3Chart-Sheathed_8m_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Rapido 3 Line Chart - Sheathed Lines_WIDE.xlsx",
+      "xlsx_source_token": "nMnGJFZa959lHMdZ",
+      "xlsx_source_name": "Rapido_3_Line_Chart_-_Sheathed_Lines.xlsx"
+    },
+    "Rapido 3X Chart": {
+      "sizes": {
+        "5.9": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_Rapido3XChart_5.9_rigging.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        },
+        "6.5": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_Rapido3XChart_6.5_rigging.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        },
+        "8": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_Rapido3XChart_8_rigging.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        },
+        "9": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_Rapido3XChart_9_rigging.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        },
+        "11": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_Rapido3XChart_11_rigging.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Rapido 3X Line Chart_WIDE.xlsx",
+      "xlsx_source_token": "auIMFo7Ht2wHphip",
+      "xlsx_source_name": "Rapido_3X_Line_Chart.xlsx"
+    },
+    "RoadMax 32 -": {
+      "sizes": {
+        "32": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_RoadMax32-_32_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_RoadMax 32 -_WIDE.xlsx",
+      "xlsx_source_token": "EEIqvqf1fPpQRurF",
+      "xlsx_source_name": "RoadMax 32 - lines.xlsx"
+    },
+    "Roadrunner Chart": {
+      "sizes": {
+        "Line details": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_RoadrunnerChart_Line details_rigging.pdf",
+          "source_pdf_name": "Roadrunner Rigging diagram.pdf",
+          "source_pdf_token": "HnPSci4voVxnVANO"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Roadrunner Chart_WIDE.xlsx",
+      "xlsx_source_token": "IcgBbRiI5bL9pL9O",
+      "xlsx_source_name": "Roadrunner Line Chart.xlsx"
+    },
+    "Roadster 3": {
+      "sizes": {
+        "22": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Roadster3_22_rigging.pdf",
+          "source_pdf_name": "Roadster 3 rigging diagram.pdf",
+          "source_pdf_token": "tsbpurzs0HHHADit"
+        },
+        "24": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Roadster3_24_rigging.pdf",
+          "source_pdf_name": "Roadster 3 rigging diagram.pdf",
+          "source_pdf_token": "tsbpurzs0HHHADit"
+        },
+        "26": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Roadster3_26_rigging.pdf",
+          "source_pdf_name": "Roadster 3 rigging diagram.pdf",
+          "source_pdf_token": "tsbpurzs0HHHADit"
+        },
+        "28": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Roadster3_28_rigging.pdf",
+          "source_pdf_name": "Roadster 3 rigging diagram.pdf",
+          "source_pdf_token": "tsbpurzs0HHHADit"
+        },
+        "30": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Roadster3_30_rigging.pdf",
+          "source_pdf_name": "Roadster 3 rigging diagram.pdf",
+          "source_pdf_token": "tsbpurzs0HHHADit"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Roadster 3_WIDE.xlsx",
+      "xlsx_source_token": "GRGdqcYuvXAn7vDg",
+      "xlsx_source_name": "Roadster 3 lines.xlsx"
+    },
+    "Roadster4 - all": {
+      "sizes": {
+        "20": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Roadster4-all_20_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "22": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Roadster4-all_22_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "24": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Roadster4-all_24_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "26": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Roadster4-all_26_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "28": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Roadster4-all_28_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "30": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Roadster4-all_30_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Roadster4 - all_WIDE.xlsx",
+      "xlsx_source_token": "uKYbzum8zTz529Ys",
+      "xlsx_source_name": "Roadster4 - lines all.xlsx"
+    },
+    "Rush 5 Chart": {
+      "sizes": {
+        "XS": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Rush5Chart_XS_rigging.pdf",
+          "source_pdf_name": "Rush 5 rigging diagram.pdf",
+          "source_pdf_token": "i8dYrcpCKTnpbed7"
+        },
+        "S": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Rush5Chart_S_rigging.pdf",
+          "source_pdf_name": "Rush 5 rigging diagram.pdf",
+          "source_pdf_token": "i8dYrcpCKTnpbed7"
+        },
+        "MS": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Rush5Chart_MS_rigging.pdf",
+          "source_pdf_name": "Rush 5 rigging diagram.pdf",
+          "source_pdf_token": "i8dYrcpCKTnpbed7"
+        },
+        "ML": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Rush5Chart_ML_rigging.pdf",
+          "source_pdf_name": "Rush 5 rigging diagram.pdf",
+          "source_pdf_token": "i8dYrcpCKTnpbed7"
+        },
+        "L": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Rush5Chart_L_rigging.pdf",
+          "source_pdf_name": "Rush 5 rigging diagram.pdf",
+          "source_pdf_token": "i8dYrcpCKTnpbed7"
+        },
+        "XL": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Rush5Chart_XL_rigging.pdf",
+          "source_pdf_name": "Rush 5 rigging diagram.pdf",
+          "source_pdf_token": "i8dYrcpCKTnpbed7"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Rush 5 Chart_WIDE.xlsx",
+      "xlsx_source_token": "0ocbiVvaO9LRHkFB",
+      "xlsx_source_name": "Rush 5 Line Chart.xlsx"
+    },
+    "Rush6 check Analysis": {
+      "sizes": {
+        "Rush6 measurement analysis": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Rush6checkAnalysis_Rush6 measurement analysis_rigging.pdf",
+          "source_pdf_name": "Rush 6 rigging diagram.pdf",
+          "source_pdf_token": "a09OglB95FzAxT9v"
+        },
+        "Manual Value XS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Rush6checkAnalysis_Manual Value XS_rigging.pdf",
+          "source_pdf_name": "Rush 6 rigging diagram.pdf",
+          "source_pdf_token": "a09OglB95FzAxT9v"
+        },
+        "Manual value S": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Rush6checkAnalysis_Manual value S_rigging.pdf",
+          "source_pdf_name": "Rush 6 rigging diagram.pdf",
+          "source_pdf_token": "a09OglB95FzAxT9v"
+        },
+        "Manual Value MS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Rush6checkAnalysis_Manual Value MS_rigging.pdf",
+          "source_pdf_name": "Rush 6 rigging diagram.pdf",
+          "source_pdf_token": "a09OglB95FzAxT9v"
+        },
+        "Manual Value ML": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Rush6checkAnalysis_Manual Value ML_rigging.pdf",
+          "source_pdf_name": "Rush 6 rigging diagram.pdf",
+          "source_pdf_token": "a09OglB95FzAxT9v"
+        },
+        "Manual Value L": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Rush6checkAnalysis_Manual Value L_rigging.pdf",
+          "source_pdf_name": "Rush 6 rigging diagram.pdf",
+          "source_pdf_token": "a09OglB95FzAxT9v"
+        },
+        "Manual Value XL": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Rush6checkAnalysis_Manual Value XL_rigging.pdf",
+          "source_pdf_name": "Rush 6 rigging diagram.pdf",
+          "source_pdf_token": "a09OglB95FzAxT9v"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Rush6 check Analysis_WIDE.xlsx",
+      "xlsx_source_token": "nJDBzCHbBZY5LXKg",
+      "xlsx_source_name": "Rush6 Line check Analysis.xlsx"
+    },
+    "Rush6 Swift6 - 8001": {
+      "sizes": {
+        "XS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Rush6Swift6-8001_XS_rigging_2.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "S": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Rush6Swift6-8001_S_rigging_2.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "MS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Rush6Swift6-8001_MS_rigging_2.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "ML": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Rush6Swift6-8001_ML_rigging_2.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "L": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Rush6Swift6-8001_L_rigging_2.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "XL": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Rush6Swift6-8001_XL_rigging_2.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Rush6 Swift6 - 8001_WIDE.xlsx",
+      "xlsx_source_token": "g0bN4tmb4XfYFW1z",
+      "xlsx_source_name": "Rush6_Swift6 - lines 8001.xlsx"
+    },
+    "Session Chart 16m": {
+      "sizes": {
+        "Line check": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_SessionChart16m_Line check_rigging.pdf",
+          "source_pdf_name": "Session Rigging Diagram.pdf",
+          "source_pdf_token": "d3S3QgXK93F2hEQD"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Session Chart 16m_WIDE.xlsx",
+      "xlsx_source_token": "UxPQnut51cw0WTMy",
+      "xlsx_source_name": "Session Line Chart 16m.xlsx"
+    },
+    "Session Chart 17m": {
+      "sizes": {
+        "Line check": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_SessionChart17m_Line check_rigging.pdf",
+          "source_pdf_name": "Session Rigging Diagram.pdf",
+          "source_pdf_token": "d3S3QgXK93F2hEQD"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Session Chart 17m_WIDE.xlsx",
+      "xlsx_source_token": "E5OsrTda45BqiKQ3",
+      "xlsx_source_name": "Session Line Chart 17m.xlsx"
+    },
+    "Sirocco 2 Chart": {
+      "sizes": {
+        "19": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Sirocco2Chart_19_rigging.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        },
+        "22": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Sirocco2Chart_22_rigging.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        },
+        "24": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Sirocco2Chart_24_rigging.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        },
+        "26": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Sirocco2Chart_26_rigging.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        },
+        "28": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Sirocco2Chart_28_rigging.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        },
+        "30": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Sirocco2Chart_30_rigging.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Sirocco 2 Line Chart_WIDE.xlsx",
+      "xlsx_source_token": "AF1oS50HV4FicOu7",
+      "xlsx_source_name": "Sirocco_2_Line_Chart.xlsx"
+    },
+    "Sirocco 3 -": {
+      "sizes": {
+        "18": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Sirocco3-_18_rigging.pdf",
+          "source_pdf_name": "Sirocco 3 Rigging Diagram.pdf",
+          "source_pdf_token": "8zu31zOrzZQp6F4u"
+        },
+        "20": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Sirocco3-_20_rigging.pdf",
+          "source_pdf_name": "Sirocco 3 Rigging Diagram.pdf",
+          "source_pdf_token": "8zu31zOrzZQp6F4u"
+        },
+        "22": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Sirocco3-_22_rigging.pdf",
+          "source_pdf_name": "Sirocco 3 Rigging Diagram.pdf",
+          "source_pdf_token": "8zu31zOrzZQp6F4u"
+        },
+        "24": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Sirocco3-_24_rigging.pdf",
+          "source_pdf_name": "Sirocco 3 Rigging Diagram.pdf",
+          "source_pdf_token": "8zu31zOrzZQp6F4u"
+        },
+        "26": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Sirocco3-_26_rigging.pdf",
+          "source_pdf_name": "Sirocco 3 Rigging Diagram.pdf",
+          "source_pdf_token": "8zu31zOrzZQp6F4u"
+        },
+        "28": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Sirocco3-_28_rigging.pdf",
+          "source_pdf_name": "Sirocco 3 Rigging Diagram.pdf",
+          "source_pdf_token": "8zu31zOrzZQp6F4u"
+        },
+        "30": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Sirocco3-_30_rigging.pdf",
+          "source_pdf_name": "Sirocco 3 Rigging Diagram.pdf",
+          "source_pdf_token": "8zu31zOrzZQp6F4u"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Sirocco 3 -_WIDE.xlsx",
+      "xlsx_source_token": "O2wSChsCaQniswZc",
+      "xlsx_source_name": "Sirocco 3 - lines.xlsx"
+    },
+    "Spark 2 Chart": {
+      "sizes": {
+        "25": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Spark2Chart_25_rigging.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        },
+        "27": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Spark2Chart_27_rigging.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        },
+        "30": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Spark2Chart_30_rigging.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Spark 2 Line Chart_WIDE.xlsx",
+      "xlsx_source_token": "OfRKeLMOn9kV9k6V",
+      "xlsx_source_name": "Spark_2_Line_Chart.xlsx"
+    },
+    "Speedster2 -": {
+      "sizes": {
+        "22": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Speedster2-_22_rigging.pdf",
+          "source_pdf_name": "Speedster 2 rigging diagram.pdf",
+          "source_pdf_token": "56UprORKzU8MQT7U"
+        },
+        "24": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Speedster2-_24_rigging.pdf",
+          "source_pdf_name": "Speedster 2 rigging diagram.pdf",
+          "source_pdf_token": "56UprORKzU8MQT7U"
+        },
+        "26": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Speedster2-_26_rigging.pdf",
+          "source_pdf_name": "Speedster 2 rigging diagram.pdf",
+          "source_pdf_token": "56UprORKzU8MQT7U"
+        },
+        "28": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Speedster2-_28_rigging.pdf",
+          "source_pdf_name": "Speedster 2 rigging diagram.pdf",
+          "source_pdf_token": "56UprORKzU8MQT7U"
+        },
+        "30": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Speedster2-_30_rigging.pdf",
+          "source_pdf_name": "Speedster 2 rigging diagram.pdf",
+          "source_pdf_token": "56UprORKzU8MQT7U"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Speedster2 -_WIDE.xlsx",
+      "xlsx_source_token": "RyhlHmGAUkLlMb9U",
+      "xlsx_source_name": "Speedster2 - lines.xlsx"
+    },
+    "Speedster 3 -": {
+      "sizes": {
+        "20": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Speedster3-_20_rigging.pdf",
+          "source_pdf_name": "Speedster 3 Rigging Diagram.pdf",
+          "source_pdf_token": "RoSdvmLoTIROSOq2"
+        },
+        "22": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Speedster3-_22_rigging.pdf",
+          "source_pdf_name": "Speedster 3 Rigging Diagram.pdf",
+          "source_pdf_token": "RoSdvmLoTIROSOq2"
+        },
+        "24": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Speedster3-_24_rigging.pdf",
+          "source_pdf_name": "Speedster 3 Rigging Diagram.pdf",
+          "source_pdf_token": "RoSdvmLoTIROSOq2"
+        },
+        "26": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Speedster3-_26_rigging.pdf",
+          "source_pdf_name": "Speedster 3 Rigging Diagram.pdf",
+          "source_pdf_token": "RoSdvmLoTIROSOq2"
+        },
+        "28": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Speedster3-_28_rigging.pdf",
+          "source_pdf_name": "Speedster 3 Rigging Diagram.pdf",
+          "source_pdf_token": "RoSdvmLoTIROSOq2"
+        },
+        "30": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Speedster3-_30_rigging.pdf",
+          "source_pdf_name": "Speedster 3 Rigging Diagram.pdf",
+          "source_pdf_token": "RoSdvmLoTIROSOq2"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Speedster 3 -_WIDE.xlsx",
+      "xlsx_source_token": "pkEpQx4pWmD26B4i",
+      "xlsx_source_name": "Speedster 3 - lines.xlsx"
+    },
+    "Spyder 3": {
+      "sizes": {
+        "20": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Spyder3_20_rigging.pdf",
+          "source_pdf_name": "Spyder 3 rigging diagram.pdf",
+          "source_pdf_token": "FMzu6GKKWBZ3TDkN"
+        },
+        "22": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Spyder3_22_rigging.pdf",
+          "source_pdf_name": "Spyder 3 rigging diagram.pdf",
+          "source_pdf_token": "FMzu6GKKWBZ3TDkN"
+        },
+        "24": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Spyder3_24_rigging.pdf",
+          "source_pdf_name": "Spyder 3 rigging diagram.pdf",
+          "source_pdf_token": "FMzu6GKKWBZ3TDkN"
+        },
+        "26": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Spyder3_26_rigging.pdf",
+          "source_pdf_name": "Spyder 3 rigging diagram.pdf",
+          "source_pdf_token": "FMzu6GKKWBZ3TDkN"
+        },
+        "28": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Spyder3_28_rigging.pdf",
+          "source_pdf_name": "Spyder 3 rigging diagram.pdf",
+          "source_pdf_token": "FMzu6GKKWBZ3TDkN"
+        },
+        "30": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_Spyder3_30_rigging.pdf",
+          "source_pdf_name": "Spyder 3 rigging diagram.pdf",
+          "source_pdf_token": "FMzu6GKKWBZ3TDkN"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Spyder 3_WIDE.xlsx",
+      "xlsx_source_token": "qAx9ZtDHvc4KGiFs",
+      "xlsx_source_name": "Spyder 3 lines.xlsx"
+    },
+    "Spyder 4 - all": {
+      "sizes": {
+        "20": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Spyder4-all_20_rigging.pdf",
+          "source_pdf_name": "Spyder 4 rigging diagram.pdf",
+          "source_pdf_token": "MnqIE2Wg6qd2rV7y"
+        },
+        "22": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Spyder4-all_22_rigging.pdf",
+          "source_pdf_name": "Spyder 4 rigging diagram.pdf",
+          "source_pdf_token": "MnqIE2Wg6qd2rV7y"
+        },
+        "24": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Spyder4-all_24_rigging.pdf",
+          "source_pdf_name": "Spyder 4 rigging diagram.pdf",
+          "source_pdf_token": "MnqIE2Wg6qd2rV7y"
+        },
+        "26": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Spyder4-all_26_rigging.pdf",
+          "source_pdf_name": "Spyder 4 rigging diagram.pdf",
+          "source_pdf_token": "MnqIE2Wg6qd2rV7y"
+        },
+        "28": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Spyder4-all_28_rigging.pdf",
+          "source_pdf_name": "Spyder 4 rigging diagram.pdf",
+          "source_pdf_token": "MnqIE2Wg6qd2rV7y"
+        },
+        "30": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_Spyder4-all_30_rigging.pdf",
+          "source_pdf_name": "Spyder 4 rigging diagram.pdf",
+          "source_pdf_token": "MnqIE2Wg6qd2rV7y"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Spyder 4 - all_WIDE.xlsx",
+      "xlsx_source_token": "NFQ68ttoE2FZlsNM",
+      "xlsx_source_name": "Spyder 4 - lines all.xlsx"
+    },
+    "Rush5 Swift5": {
+      "sizes": {
+        "XS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Rush5Swift5_XS_rigging.pdf",
+          "source_pdf_name": "Rush 5 rigging diagram.pdf",
+          "source_pdf_token": "i8dYrcpCKTnpbed7"
+        },
+        "S": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Rush5Swift5_S_rigging.pdf",
+          "source_pdf_name": "Rush 5 rigging diagram.pdf",
+          "source_pdf_token": "i8dYrcpCKTnpbed7"
+        },
+        "MS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Rush5Swift5_MS_rigging.pdf",
+          "source_pdf_name": "Rush 5 rigging diagram.pdf",
+          "source_pdf_token": "i8dYrcpCKTnpbed7"
+        },
+        "ML": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Rush5Swift5_ML_rigging.pdf",
+          "source_pdf_name": "Rush 5 rigging diagram.pdf",
+          "source_pdf_token": "i8dYrcpCKTnpbed7"
+        },
+        "L": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Rush5Swift5_L_rigging.pdf",
+          "source_pdf_name": "Rush 5 rigging diagram.pdf",
+          "source_pdf_token": "i8dYrcpCKTnpbed7"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Rush5 Swift5_WIDE.xlsx",
+      "xlsx_source_token": "hEXBMD1SL8zhhMYy",
+      "xlsx_source_name": "Rush5_Swift5 lines.xlsx"
+    },
+    "TriOx -": {
+      "sizes": {
+        "34": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_TriOx-_34_rigging.pdf",
+          "source_pdf_name": "Triox rigging diagram.pdf",
+          "source_pdf_token": "ovDbrvSBBkSsgBMf"
+        },
+        "38": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_TriOx-_38_rigging.pdf",
+          "source_pdf_name": "Triox rigging diagram.pdf",
+          "source_pdf_token": "ovDbrvSBBkSsgBMf"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_TriOx -_WIDE.xlsx",
+      "xlsx_source_token": "Zk8QbObqq0iX4ZJx",
+      "xlsx_source_name": "TriOx - lines.xlsx"
+    },
+    "TriOx2 -": {
+      "sizes": {
+        "35": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_TriOx2-_35_rigging.pdf",
+          "source_pdf_name": "Triox 2 rigging diagram v2.pdf",
+          "source_pdf_token": "00AbS6kOYSy3U4yf"
+        },
+        "38": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_TriOx2-_38_rigging.pdf",
+          "source_pdf_name": "Triox 2 rigging diagram v2.pdf",
+          "source_pdf_token": "00AbS6kOYSy3U4yf"
+        },
+        "41": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_TriOx2-_41_rigging.pdf",
+          "source_pdf_name": "Triox 2 rigging diagram v2.pdf",
+          "source_pdf_token": "00AbS6kOYSy3U4yf"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_TriOx2 -_WIDE.xlsx",
+      "xlsx_source_token": "qa6NVdcw8QjAKLhF",
+      "xlsx_source_name": "TriOx2 - lines.xlsx"
+    },
+    "UL4": {
+      "sizes": {
+        "UL4_17": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_UL4_UL4_17_rigging.pdf",
+          "source_pdf_name": "UL4 Rigging diagram.pdf",
+          "source_pdf_token": "Ux7pPpQ25bi1BDDQ"
+        },
+        "UL4_19": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_UL4_UL4_19_rigging.pdf",
+          "source_pdf_name": "UL4 Rigging diagram.pdf",
+          "source_pdf_token": "Ux7pPpQ25bi1BDDQ"
+        },
+        "UL4_21": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_UL4_UL4_21_rigging.pdf",
+          "source_pdf_name": "UL4 Rigging diagram.pdf",
+          "source_pdf_token": "Ux7pPpQ25bi1BDDQ"
+        },
+        "UL4_23": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_UL4_UL4_23_rigging.pdf",
+          "source_pdf_name": "UL4 Rigging diagram.pdf",
+          "source_pdf_token": "Ux7pPpQ25bi1BDDQ"
+        },
+        "UL4_25": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_UL4_UL4_25_rigging.pdf",
+          "source_pdf_name": "UL4 Rigging diagram.pdf",
+          "source_pdf_token": "Ux7pPpQ25bi1BDDQ"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_UL4_WIDE.xlsx",
+      "xlsx_source_token": "CVibf7hVIDFt16u3",
+      "xlsx_source_name": "UL4 lines.xlsx"
+    },
+    "UltraLite5 -": {
+      "sizes": {
+        "13": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_UltraLite5-_13_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "15": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_UltraLite5-_15_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "17": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_UltraLite5-_17_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "19": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_UltraLite5-_19_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "21": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_UltraLite5-_21_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "23": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_UltraLite5-_23_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "25": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_UltraLite5-_25_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_UltraLite5 -_WIDE.xlsx",
+      "xlsx_source_token": "CoCPSWab4YUmqL8t",
+      "xlsx_source_name": "UltraLite5 - lines.xlsx"
+    },
+    "Viper 5 Chart": {
+      "sizes": {
+        "16": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Viper5Chart_16_rigging.pdf",
+          "source_pdf_name": "Alpina 5 Rigging diagram.pdf",
+          "source_pdf_token": "s67DxIwcmHDWsbKB"
+        },
+        "18": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Viper5Chart_18_rigging.pdf",
+          "source_pdf_name": "Alpina 5 Rigging diagram.pdf",
+          "source_pdf_token": "s67DxIwcmHDWsbKB"
+        },
+        "20": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Viper5Chart_20_rigging.pdf",
+          "source_pdf_name": "Alpina 5 Rigging diagram.pdf",
+          "source_pdf_token": "s67DxIwcmHDWsbKB"
+        },
+        "22": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Viper5Chart_22_rigging.pdf",
+          "source_pdf_name": "Alpina 5 Rigging diagram.pdf",
+          "source_pdf_token": "s67DxIwcmHDWsbKB"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Viper 5 Line Chart_WIDE.xlsx",
+      "xlsx_source_token": "i4Ban9wKHpt2TGoM",
+      "xlsx_source_name": "Viper_5_Line_Chart.xlsx"
+    },
+    "Viper6 - tables": {
+      "sizes": {
+        "16": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Viper6-tables_16_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "18": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Viper6-tables_18_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "20": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Viper6-tables_20_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        },
+        "22": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Viper6-tables_22_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Viper6 - tables_WIDE.xlsx",
+      "xlsx_source_token": "7sOCV4VLklWHVdzG",
+      "xlsx_source_name": "Viper6 - lines tables.xlsx"
+    },
+    "ViperXC -": {
+      "sizes": {
+        "16": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_ViperXC-_16_rigging.pdf",
+          "source_pdf_name": "Viper XC Rigging Diagram.pdf",
+          "source_pdf_token": "MUGGPw4G2IvP20jF"
+        },
+        "18": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_ViperXC-_18_rigging.pdf",
+          "source_pdf_name": "Viper XC Rigging Diagram.pdf",
+          "source_pdf_token": "MUGGPw4G2IvP20jF"
+        },
+        "20": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_ViperXC-_20_rigging.pdf",
+          "source_pdf_name": "Viper XC Rigging Diagram.pdf",
+          "source_pdf_token": "MUGGPw4G2IvP20jF"
+        },
+        "22": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_ViperXC-_22_rigging.pdf",
+          "source_pdf_name": "Viper XC Rigging Diagram.pdf",
+          "source_pdf_token": "MUGGPw4G2IvP20jF"
+        },
+        "24": {
+          "matched": true,
+          "score": 700,
+          "pdf_filename": "Ozone_ViperXC-_24_rigging.pdf",
+          "source_pdf_name": "Viper XC Rigging Diagram.pdf",
+          "source_pdf_token": "MUGGPw4G2IvP20jF"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_ViperXC -_WIDE.xlsx",
+      "xlsx_source_token": "TpxPkQYzjJm7pMQF",
+      "xlsx_source_name": "ViperXC - lines.xlsx"
+    },
+    "Wisp2 37 -": {
+      "sizes": {
+        "37": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Wisp237-_37_rigging.pdf",
+          "source_pdf_name": "MagMax 3 Rigging diagram.pdf",
+          "source_pdf_token": "Zux9d0CVbbq8VBvz"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Wisp2 37 -_WIDE.xlsx",
+      "xlsx_source_token": "NapElgNCVFF3wl1C",
+      "xlsx_source_name": "Wisp2 37 - lines.xlsx"
+    },
+    "XXLite 2 Chart": {
+      "sizes": {
+        "XXlite 2 16": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_XXLite2Chart_XXlite 2 16_rigging.pdf",
+          "source_pdf_name": "XXLite 2 Rigging Diagram.pdf",
+          "source_pdf_token": "0m0PeXxsdttK5u4x"
+        },
+        "XXLite 2 18": {
+          "matched": true,
+          "score": 550,
+          "pdf_filename": "Ozone_XXLite2Chart_XXLite 2 18_rigging.pdf",
+          "source_pdf_name": "XXLite 2 Rigging Diagram.pdf",
+          "source_pdf_token": "0m0PeXxsdttK5u4x"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_XXLite 2 Chart_WIDE.xlsx",
+      "xlsx_source_token": "g0GaA7jTZ1AhXlIc",
+      "xlsx_source_name": "XXLite 2 Line Chart.xlsx"
+    },
+    "Zeno ML PWC check table": {
+      "sizes": {
+        "Wing left right": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_ZenoMLPWCchecktable_Wing left right_rigging.pdf",
+          "source_pdf_name": "Zeno Rigging diagram.pdf",
+          "source_pdf_token": "jHHlLJ7EB2IX1v8T"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Zeno ML PWC check table_WIDE.xlsx",
+      "xlsx_source_token": "ZmNHQ9DhzfGCk7if",
+      "xlsx_source_name": "Zeno ML PWC check table.xlsx"
+    },
+    "manual Zeno2 XS": {
+      "sizes": {
+        "Sheet1": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_manualZeno2XS_Sheet1_rigging.pdf",
+          "source_pdf_name": "Zeno 2 Rigging Diagram.pdf",
+          "source_pdf_token": "A8wLIbzVkt3Gwo4C"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_manual Zeno2 XS_WIDE.xlsx",
+      "xlsx_source_token": "RXQtfzviY1buga9j",
+      "xlsx_source_name": "Lines manual Zeno2 XS.xlsx"
+    },
+    "manual Zeno2L": {
+      "sizes": {
+        "Manual": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_manualZeno2L_Manual_rigging.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_manual Zeno2L_WIDE.xlsx",
+      "xlsx_source_token": "gZPtFWT4G8VFf5dD",
+      "xlsx_source_name": "Lines manual Zeno2L.xlsx"
+    },
+    "manual Zeno2ML": {
+      "sizes": {
+        "Manual": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_manualZeno2ML_Manual_rigging.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_manual Zeno2ML_WIDE.xlsx",
+      "xlsx_source_token": "2XekMBOv8B1R3pRA",
+      "xlsx_source_name": "Lines manual Zeno2ML.xlsx"
+    },
+    "manual Zeno2MS": {
+      "sizes": {
+        "Manual": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_manualZeno2MS_Manual_rigging.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_manual Zeno2MS_WIDE.xlsx",
+      "xlsx_source_token": "SiZQiXZ3n9gewtQf",
+      "xlsx_source_name": "Lines manual Zeno2MS.xlsx"
+    },
+    "manual Zeno2S": {
+      "sizes": {
+        "Manual": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_manualZeno2S_Manual_rigging.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_manual Zeno2S_WIDE.xlsx",
+      "xlsx_source_token": "1iPocoet4ewGkzyn",
+      "xlsx_source_name": "Lines manual Zeno2S.xlsx"
+    },
+    "Zeno2 L PWC check table": {
+      "sizes": {
+        "Wing left right": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Zeno2LPWCchecktable_Wing left right_rigging.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Zeno2 L PWC check table_WIDE.xlsx",
+      "xlsx_source_token": "8MmxR4bWaxcRNuZx",
+      "xlsx_source_name": "Zeno2 L PWC check table.xlsx"
+    },
+    "Zeno2 ML PWC check table": {
+      "sizes": {
+        "Wing left right": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Zeno2MLPWCchecktable_Wing left right_rigging.pdf",
+          "source_pdf_name": "Zeno 2 Rigging Diagram.pdf",
+          "source_pdf_token": "A8wLIbzVkt3Gwo4C"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Zeno2 ML PWC check table_WIDE.xlsx",
+      "xlsx_source_token": "pTOXNBp2Q06AgU15",
+      "xlsx_source_name": "Zeno2 ML PWC check table.xlsx"
+    },
+    "Zeno2 MS PWC check table": {
+      "sizes": {
+        "Wing left right": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Zeno2MSPWCchecktable_Wing left right_rigging.pdf",
+          "source_pdf_name": "Zeno 2 Rigging Diagram.pdf",
+          "source_pdf_token": "A8wLIbzVkt3Gwo4C"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Zeno2 MS PWC check table_WIDE.xlsx",
+      "xlsx_source_token": "RTadDrkZkpkMbDcm",
+      "xlsx_source_name": "Zeno2 MS PWC check table.xlsx"
+    },
+    "Zeno2 S PWC check table": {
+      "sizes": {
+        "Wing left right": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Zeno2SPWCchecktable_Wing left right_rigging.pdf",
+          "source_pdf_name": "Roadster2 rigging diagram.pdf",
+          "source_pdf_token": "C8jf3YCZQyj8Vo3B"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Zeno2 S PWC check table_WIDE.xlsx",
+      "xlsx_source_token": "ewHR2gkssz8leQa9",
+      "xlsx_source_name": "Zeno2 S PWC check table.xlsx"
+    },
+    "Zeolite Chart": {
+      "sizes": {
+        "S": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_ZeoliteChart_S_rigging.pdf",
+          "source_pdf_name": "Zeolite Rigging Diagram.pdf",
+          "source_pdf_token": "XQyTugDaxgH9u3Io"
+        },
+        "MS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_ZeoliteChart_MS_rigging.pdf",
+          "source_pdf_name": "Zeolite Rigging Diagram.pdf",
+          "source_pdf_token": "XQyTugDaxgH9u3Io"
+        },
+        "ML": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_ZeoliteChart_ML_rigging.pdf",
+          "source_pdf_name": "Zeolite Rigging Diagram.pdf",
+          "source_pdf_token": "XQyTugDaxgH9u3Io"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Zeolite Chart_WIDE.xlsx",
+      "xlsx_source_token": "qk7a0EczaFU75Eoy",
+      "xlsx_source_name": "Zeolite Line Chart.xlsx"
+    },
+    "Zeolite2 GT details": {
+      "sizes": {
+        "XS": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_Zeolite2GTdetails_XS_rigging_2.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        },
+        "S": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_Zeolite2GTdetails_S_rigging_2.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        },
+        "MS": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_Zeolite2GTdetails_MS_rigging_2.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        },
+        "ML": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_Zeolite2GTdetails_ML_rigging_2.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        },
+        "L": {
+          "matched": true,
+          "score": 500,
+          "pdf_filename": "Ozone_Zeolite2GTdetails_L_rigging_2.pdf",
+          "source_pdf_name": "Alpina rigging diagram.pdf",
+          "source_pdf_token": "XevopecZotYdDK5j"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Zeolite2 GT details_WIDE.xlsx",
+      "xlsx_source_token": "6gnLLpMQQg89MBFC",
+      "xlsx_source_name": "Zeolite2 GT Lines details.xlsx"
+    },
+    "Zeolite 2 Chart": {
+      "sizes": {
+        "XS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Zeolite2Chart_XS_rigging_2.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        },
+        "S": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Zeolite2Chart_S_rigging_2.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        },
+        "MS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Zeolite2Chart_MS_rigging_2.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        },
+        "ML": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Zeolite2Chart_ML_rigging_2.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        },
+        "L": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Zeolite2Chart_L_rigging_2.pdf",
+          "source_pdf_name": "Alpina2 Rigging Diagram.pdf",
+          "source_pdf_token": "MfK7F0KmA8ZUYz2u"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Zeolite 2 Line Chart_WIDE.xlsx",
+      "xlsx_source_token": "yuPWrGQl6cO6ftf9",
+      "xlsx_source_name": "Zeolite_2_Line_Chart.xlsx"
+    },
+    "Zeolite GT Chart": {
+      "sizes": {
+        "S": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_ZeoliteGTChart_S_rigging.pdf",
+          "source_pdf_name": "Zeolite Rigging Diagram.pdf",
+          "source_pdf_token": "XQyTugDaxgH9u3Io"
+        },
+        "MS": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_ZeoliteGTChart_MS_rigging.pdf",
+          "source_pdf_name": "Zeolite Rigging Diagram.pdf",
+          "source_pdf_token": "XQyTugDaxgH9u3Io"
+        },
+        "ML": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_ZeoliteGTChart_ML_rigging.pdf",
+          "source_pdf_name": "Zeolite Rigging Diagram.pdf",
+          "source_pdf_token": "XQyTugDaxgH9u3Io"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Zeolite GT Line Chart_WIDE.xlsx",
+      "xlsx_source_token": "hRtxejYt3VAnRtIn",
+      "xlsx_source_name": "Zeolite_GT_Line_Chart.xlsx"
+    },
+    "Zero 3 Chart": {
+      "sizes": {
+        "13": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Zero3Chart_13_rigging.pdf",
+          "source_pdf_name": "Delta 3 Rigging diagram.pdf",
+          "source_pdf_token": "QuEV2qisBNkyKqH5"
+        },
+        "15": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Zero3Chart_15_rigging.pdf",
+          "source_pdf_name": "Delta 3 Rigging diagram.pdf",
+          "source_pdf_token": "QuEV2qisBNkyKqH5"
+        },
+        "17": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Zero3Chart_17_rigging.pdf",
+          "source_pdf_name": "Delta 3 Rigging diagram.pdf",
+          "source_pdf_token": "QuEV2qisBNkyKqH5"
+        },
+        "19": {
+          "matched": true,
+          "score": 525,
+          "pdf_filename": "Ozone_Zero3Chart_19_rigging.pdf",
+          "source_pdf_name": "Delta 3 Rigging diagram.pdf",
+          "source_pdf_token": "QuEV2qisBNkyKqH5"
+        }
+      },
+      "wide_xlsx": "ozone_bulk\\_exports\\Ozone_Zero 3 Line Chart_WIDE.xlsx",
+      "xlsx_source_token": "KW4poQsybBpo6T3q",
+      "xlsx_source_name": "Zero_3_Line_Chart.xlsx"
+    }
+  }
+}
