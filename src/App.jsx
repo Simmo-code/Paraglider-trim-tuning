@@ -407,6 +407,8 @@ function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showW
   const W = DIAGRAM_W;
   const H = DIAGRAM_H;
   const cx = W / 2;
+  // Extra horizontal margin so the wing outline/background covers outer buckets (e.g. AR3/BR3/CR3/DR3)
+  const M = Math.round(360 * DIAGRAM_SCALE);
   const [drag, setDrag] = useState({ active: false });
 
   const rowY = {
@@ -529,7 +531,7 @@ function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showW
   }
 
   const items = [];
-  items.push(<rect key="bg" x={0} y={0} width={W} height={H} fill="rgba(0,0,0,0)" />);
+  items.push(<rect key="bg" x={-M} y={0} width={W + M * 2} height={H} fill="rgba(0,0,0,0)" />);
 
   if (showWingOutline) {
     items.push(
@@ -616,7 +618,7 @@ function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showW
     <div style={{ width: "100%", border: `1px solid ${theme.border}`, borderRadius: 18, background: "rgba(0,0,0,0.38)", overflow: "hidden" }}>
       <svg
         width="100%"
-        viewBox={`0 0 ${W} ${H}`}
+        viewBox={`${-M} 0 ${W + M * 2} ${H}`}
         style={{ display: "block", touchAction: "none" }}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -1044,6 +1046,68 @@ function FactorySelect({ theme, value, onChange, disabled, title, minWidth = 160
   );
 }
 export default function App() {
+
+  const buildManualWideRows = () => {
+    const groups = Array.isArray(manualGroups) && manualGroups.length ? manualGroups : ["A", "B", "C", "D"];
+
+    // Wide header row (matches wide import parser expectations)
+    const wideHeader = [];
+    groups.forEach((g) => {
+      wideHeader.push(g, "Factory", g === "B" ? "L" : "Ist L", g === "B" ? "R" : "Ist R");
+    });
+
+    // Metadata rows (pad to match header length)
+    const padCount = Math.max(0, wideHeader.length - 4);
+    const metaRow1 = ["Make ", "Model", "tolerance ", "correction", ...Array(padCount).fill("")];
+    const metaRow2 = [
+      (meta && meta.make) ? meta.make : "",
+      (meta && meta.model) ? meta.model : "",
+      measureTolerance ?? "",
+      measureCorrection ?? "",
+      ...Array(padCount).fill(""),
+    ];
+
+    // Build rows exactly like a wide CSV/XLSX import: 2 meta rows + header + data
+    const rows = [metaRow1, metaRow2, wideHeader];
+
+    const rowCount = Math.max(0, Number(manualRowCount || 0));
+    for (let i = 0; i < rowCount; i++) {
+      const rowNum = i + 1;
+      const row = [];
+      groups.forEach((g) => {
+        // Manual grid stores keys like: "A1_line", "A1_soll", "A1_l", "A1_r"
+        const kLine = `${g}${rowNum}_line`;
+        const kSoll = `${g}${rowNum}_soll`;
+        const kL = `${g}${rowNum}_l`;
+        const kR = `${g}${rowNum}_r`;
+
+        row.push(
+          manualGrid?.[kLine] ?? "",
+          manualGrid?.[kSoll] ?? "",
+          manualGrid?.[kL] ?? "",
+          manualGrid?.[kR] ?? ""
+        );
+      });
+      rows.push(row);
+    }
+
+    return { rows, groups };
+  };
+
+  const commitManualWideGridToStep2 = () => {
+    try {
+      const { rows } = buildManualWideRows();
+      const parsed = parseWideTableFromRows(rows);
+      applyParsedImport(parsed, "Manual Grid");
+      setShowMeasureMode(false);
+      setShowManualGrid(false);
+      setStep(2);
+    } catch (e) {
+      setImportStatus({ ok: false, name: "", err: String(e?.message || e) });
+    }
+  };
+
+
 
   const exportManualCSV = () => {
     console.log("Export CSV triggered");
@@ -2270,16 +2334,31 @@ useEffect(() => {
 
     const maxCore = { A: 0, B: 0, C: 0, D: 0 };
     let maxBR = 0;
+
+    // Step 2 Defaults should reflect the *factory* line set only.
+    // Important: Number("") === 0 in JS, so treat blanks as missing (null) explicitly.
+    const hasFactory = (v) => {
+      if (v === null || v === undefined) return false;
+      const s = String(v).trim();
+      if (s === "") return false;
+      const n = Number(s);
+      return Number.isFinite(n);
+    };
+
     for (const r of parsed.wideRows) {
+      // Only count rows that actually have a factory (nominal) value
+      if (!hasFactory(r.nominal)) continue;
+
       const L = String(r.letter || "").toUpperCase();
       if (r.idx == null) continue;
-      const ix = Number(r.idx || 0);
+      const ix = Number(String(r.idx).trim());
       if (!Number.isFinite(ix)) continue;
+
       if (L === "BR") {
         maxBR = Math.max(maxBR, ix);
         continue;
       }
-      if (!maxCore.hasOwnProperty(L)) continue;
+      if (!Object.prototype.hasOwnProperty.call(maxCore, L)) continue;
       maxCore[L] = Math.max(maxCore[L] || 0, ix);
     }
     setMaxByLetter({ ...maxCore, BR: maxBR });
@@ -2667,11 +2746,28 @@ const step4SheetByLetter = useMemo(() => {
   const byLetter = {};
   for (const L of letters) byLetter[L] = [];
 
+  // --- Step 4 safe numeric parsing ---
+  // IMPORTANT: JS Number("") === 0, so blanks must be treated as missing (null).
+  const toNumOrNull = (v) => {
+    if (v === null || v === undefined) return null;
+    const s = String(v).trim();
+    if (s === "") return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  // Measured "after" values can never be 0mm; if 0 appears it is almost certainly coerced blank.
+  const toAfterOrNull = (v) => {
+    const n = toNumOrNull(v);
+    return n === 0 ? null : n;
+  };
+
   // Collect per (letter, idx) with left/right pivot
   const map = new Map(); // key = `${letter}:${idx}`
   for (const r of step4LineRows) {
     const letter = String(r.letter || "").toUpperCase();
     if (!byLetter[letter]) continue;
+
     const idx = Number(r.idx);
     if (!Number.isFinite(idx)) continue;
 
@@ -2679,29 +2775,40 @@ const step4SheetByLetter = useMemo(() => {
     const cur = map.get(key) || {
       letter,
       idx,
-      factory: Number.isFinite(Number(r.nominal)) ? Number(r.nominal) : null,
+      // factory length can never be 0mm; treat 0 as missing too
+      factory: (() => {
+        const n = toNumOrNull(r.nominal);
+        return n === 0 ? null : n;
+      })(),
       L: null,
       R: null,
       dL: null,
       dR: null,
     };
 
-    if (r.side === "L") {
-      cur.L = Number.isFinite(Number(r.after)) ? Number(r.after) : null;
-      cur.dL = Number.isFinite(Number(r.delta)) ? Number(r.delta) : null;
-    } else if (r.side === "R") {
-      cur.R = Number.isFinite(Number(r.after)) ? Number(r.after) : null;
-      cur.dR = Number.isFinite(Number(r.delta)) ? Number(r.delta) : null;
+    // Prefer the nominal from whichever side has it
+    if (cur.factory == null) {
+      const nf = toNumOrNull(r.nominal);
+      cur.factory = nf === 0 ? null : nf;
     }
 
-    // Prefer the nominal from whichever side has it
-    if (cur.factory == null && Number.isFinite(Number(r.nominal))) cur.factory = Number(r.nominal);
+    // Store measured "after" (L/R) safely
+    if (r.side === "L") {
+      cur.L = toAfterOrNull(r.after);
+    } else if (r.side === "R") {
+      cur.R = toAfterOrNull(r.after);
+    }
+
+    // Compute deltas ONLY when both values exist
+    cur.dL = cur.factory == null || cur.L == null ? null : cur.L - cur.factory;
+    cur.dR = cur.factory == null || cur.R == null ? null : cur.R - cur.factory;
 
     map.set(key, cur);
   }
 
   for (const v of map.values()) {
-    const sym = v.L == null || v.R == null ? null : v.L - v.R;
+    // Symmetry should be ΔL - ΔR (not afterL - afterR)
+    const sym = v.dL == null || v.dR == null ? null : v.dL - v.dR;
     byLetter[v.letter].push({ ...v, sym });
   }
 
@@ -2709,10 +2816,12 @@ const step4SheetByLetter = useMemo(() => {
     byLetter[L].sort((a, b) => a.idx - b.idx);
   }
 
-  // Max difference per letter for dL/dR/sym (spread = max - min)
+  // Max difference per letter for dL/dR/sym (spread = max - min), ignoring missing
   const maxDiff = {};
   const spread = (arr) => {
-    const nums = arr.filter((x) => x != null && Number.isFinite(Number(x))).map(Number);
+    const nums = arr
+      .map(toNumOrNull)
+      .filter((x) => x !== null);
     if (nums.length === 0) return null;
     return Math.max(...nums) - Math.min(...nums);
   };
@@ -2736,7 +2845,7 @@ var abcAverages = useMemo(() => {
     out[L] = { L: { avg: null, n: 0 }, R: { avg: null, n: 0 }, sym: null };
     for (const side of ["L", "R"]) {
       const vals = step4LineRows
-        .filter((r) => r.letter === L && r.side === side && Number.isFinite(r.delta))
+        .filter((r) => r.letter === L && r.side === side && Number.isFinite(r.delta) && Number.isFinite(r.after) && Number(r.after) !== 0)
         .map((r) => Number(r.delta));
       const n = vals.length;
       const avg = n ? vals.reduce((a, b) => a + b, 0) / n : null;
@@ -2789,7 +2898,7 @@ var pitchAverages = useMemo(() => {
     const ids = new Set(effectiveIds(L));
     for (const side of ["L", "R"]) {
       const vals = step4LineRows
-        .filter((r) => r.letter === L && r.side === side && Number.isFinite(r.delta))
+        .filter((r) => r.letter === L && r.side === side && Number.isFinite(r.delta) && Number.isFinite(r.after) && Number(r.after) !== 0)
         .filter((r) => {
           const idx = r.idx == null ? null : Number(r.idx);
           if (!Number.isFinite(idx)) return false;
@@ -3739,6 +3848,8 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
 
   function DiagramScrollBox({ height, width }) {
     // Fixed height + responsive width + obvious scrollbars
+    const PAD_X = 260; // extra canvas on each side so outer buckets are reachable
+    const PAD_Y = 0;
     return (
       <div
         ref={diagramBoxRef}
@@ -3757,15 +3868,15 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
       >
         <div
         style={{
-          width: Math.max(DIAGRAM_W * diagramZoom, (width || 980) + 260),
-          height: Math.max(DIAGRAM_H * diagramZoom, (height || 640) + 140),
+          width: Math.max((DIAGRAM_W + 520 + PAD_X * 2) * diagramZoom, (width || 980) + 520 + PAD_X * 2),
+          height: Math.max((DIAGRAM_H + 220 + PAD_Y * 2) * diagramZoom, (height || 640) + 220 + PAD_Y * 2),
         }}
       >
         <div
           style={{
-            width: DIAGRAM_W,
-            height: DIAGRAM_H,
-            transform: `scale(${diagramZoom})`,
+            width: DIAGRAM_W + PAD_X * 2,
+            height: DIAGRAM_H + PAD_Y * 2,
+            transform: `translate(${PAD_X}px, ${PAD_Y}px) scale(${diagramZoom})`,
             transformOrigin: "top left",
           }}
         >
@@ -4732,8 +4843,8 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                               type="button"
                               onClick={() => setManualGrid({})}
                               style={{
-                                border: "1px solid rgba(34,197,94,0.95)",
-                                background: "rgba(34,197,94,0.85)",
+                                border: "1px solid rgba(234,179,8,0.95)",
+                                background: "rgba(161,98,7,0.95)",
                                 color: theme.text,
                                 borderRadius: 999,
                                 padding: "8px 12px",
@@ -4950,6 +5061,25 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                               title="Export manual entry as wide CSV"
                             >
                               Export CSV
+                            </button>
+
+                            
+
+                            <button
+                              type="button"
+                              onClick={(e) => { e.preventDefault(); commitManualWideGridToStep2(); }}
+                              style={{
+                                border: "1px solid rgba(34,197,94,0.95)",
+                                background: "rgba(34,197,94,0.90)",
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title="Apply manual grid to the app and go to Step 2"
+                            >
+                              Go to Step 2
                             </button>
 
                             <button
@@ -6358,20 +6488,43 @@ onPaste={(e) => {
                     const headerCell = { padding: "6px 8px", borderBottom: `1px solid ${theme.border}`, whiteSpace: "nowrap" };
                     const cell = { padding: "6px 8px", borderBottom: `1px solid ${theme.border}`, textAlign: "center", whiteSpace: "nowrap" };
 
-                    const fmt = (v, digits = 0) => (v == null || !Number.isFinite(Number(v)) ? "—" : Number(v).toFixed(digits));
+                    // Step 4: treat missing as null (NOT 0). Display missing as em dash.
+                    const toNumOrNull = (v) => {
+                      if (v === null || v === undefined) return null;
+                      const s = String(v).trim();
+                      if (s === "") return null; // critical: blank stays missing (JS Number("") === 0)
+                      const n = Number(s);
+                      return Number.isFinite(n) ? n : null;
+                    };
+
+                    // Measured L/R should never be 0mm; if 0 appears it's almost certainly from earlier blank->0 coercion.
+                    const toMeasuredNumOrNull = (v) => {
+                      const n = toNumOrNull(v);
+                      return n === 0 ? null : n;
+                    };
+
+                    const fmtNum = (v, digits = 0) => {
+                      const n = toNumOrNull(v);
+                      return n === null ? "—" : n.toFixed(digits);
+                    };
+
+                    const fmtMeasured = (v, digits = 0) => {
+                      const n = toMeasuredNumOrNull(v);
+                      return n === null ? "—" : n.toFixed(digits);
+                    };
 
                     const avgOf = (arr) => {
-                      const xs = (arr || []).map(Number).filter((n) => Number.isFinite(n));
+                      const xs = (arr || []).map(toNumOrNull).filter((n) => n !== null);
                       if (xs.length === 0) return null;
                       const sum = xs.reduce((a, b) => a + b, 0);
                       return sum / xs.length;
                     };
 
                     var bandFromDelta = (delta) => {
-                      const d = Number(delta);
-                      if (!Number.isFinite(d)) return "";
+                      const d = toNumOrNull(delta);
+                      if (d === null) return "";
                       const a = Math.abs(d);
-                      const tol = Number(meta.tolerance || 10);
+                      const tol = toNumOrNull(meta.tolerance) ?? 10;
                       if (a <= 4) return "good";
                       if (a < tol) return "warn";
                       return "bad";
@@ -6423,12 +6576,12 @@ onPaste={(e) => {
                                 const r = letterMaps[L] && letterMaps[L].get ? letterMaps[L].get(idx) : null;
                                 return (
                                   <React.Fragment key={`${L}-${idx}`}>
-                                    <td style={cell}>{fmt(r ? r.factory : null, 0)}</td>
-                                    <td style={cell}>{fmt(r ? r.L : null, 0)}</td>
-                                    <td style={cell}>{fmt(r ? r.R : null, 0)}</td>
-                                    <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(r ? r.dL : null)), color: colorForBand(bandFromDelta(r ? r.dL : null)), fontWeight: 950 })}>{fmt(r ? r.dL : null, 0)}</td>
-                                    <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(r ? r.dR : null)), color: colorForBand(bandFromDelta(r ? r.dR : null)), fontWeight: 950 })}>{fmt(r ? r.dR : null, 0)}</td>
-                                    <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(r ? r.sym : null)), color: colorForBand(bandFromDelta(r ? r.sym : null)), fontWeight: 950 })}>{fmt(r ? r.sym : null, 0)}</td>
+                                    <td style={cell}>{fmtNum(r ? r.factory : null, 0)}</td>
+                                    <td style={cell}>{fmtMeasured(r ? r.L : null, 0)}</td>
+                                    <td style={cell}>{fmtMeasured(r ? r.R : null, 0)}</td>
+                                    <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(r ? r.dL : null)), color: colorForBand(bandFromDelta(r ? r.dL : null)), fontWeight: 950 })}>{fmtNum(r ? r.dL : null, 0)}</td>
+                                    <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(r ? r.dR : null)), color: colorForBand(bandFromDelta(r ? r.dR : null)), fontWeight: 950 })}>{fmtNum(r ? r.dR : null, 0)}</td>
+                                    <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(r ? r.sym : null)), color: colorForBand(bandFromDelta(r ? r.sym : null)), fontWeight: 950 })}>{fmtNum(r ? r.sym : null, 0)}</td>
                                   </React.Fragment>
                                 );
                               })}
@@ -6449,9 +6602,9 @@ onPaste={(e) => {
                                   <td style={cell} />
                                   <td style={cell} />
                                   <td style={cell} />
-                                  <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(aDL)), color: colorForBand(bandFromDelta(aDL)), fontWeight: 950 })}>{fmt(aDL, 1)}</td>
-                                  <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(aDR)), color: colorForBand(bandFromDelta(aDR)), fontWeight: 950 })}>{fmt(aDR, 1)}</td>
-                                  <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(aSY)), color: colorForBand(bandFromDelta(aSY)), fontWeight: 950 })}>{fmt(aSY, 1)}</td>
+                                  <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(aDL)), color: colorForBand(bandFromDelta(aDL)), fontWeight: 950 })}>{fmtNum(aDL, 1)}</td>
+                                  <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(aDR)), color: colorForBand(bandFromDelta(aDR)), fontWeight: 950 })}>{fmtNum(aDR, 1)}</td>
+                                  <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(aSY)), color: colorForBand(bandFromDelta(aSY)), fontWeight: 950 })}>{fmtNum(aSY, 1)}</td>
                                 </React.Fragment>
                               );
                             })}
@@ -6466,9 +6619,9 @@ onPaste={(e) => {
                                 <td style={cell} />
                                 <td style={cell} />
                                 <td style={cell} />
-                                <td style={cell}>{fmt(maxDiff[L].dL, 0)}</td>
-                                <td style={cell}>{fmt(maxDiff[L].dR, 0)}</td>
-                                <td style={cell}>{fmt(maxDiff[L].sym, 0)}</td>
+                                <td style={cell}>{fmtNum(maxDiff[L].dL, 0)}</td>
+                                <td style={cell}>{fmtNum(maxDiff[L].dR, 0)}</td>
+                                <td style={cell}>{fmtNum(maxDiff[L].sym, 0)}</td>
                               </React.Fragment>
                             ))}
                           </tr>
@@ -8156,11 +8309,29 @@ function RearViewChart({ rows, tolerance, height, loopTypes, groupLoopChange, se
       const groupName = String(rr.groupId || rr.group || "—").split("|")[0] || "—";
       if (side === "L") p.groupNameL = groupName;
       else if (side === "R") p.groupNameR = groupName;
-      const nominal = rr.nominal;
-      const beforeAbs = rr.before;
-      const afterDelta = rr.delta;
+      const toNumOrNull = (v) => {
+        if (v === null || v === undefined) return null;
+        const s = String(v).trim();
+        if (s === "") return null;
+        const n = Number(s);
+        return Number.isFinite(n) ? n : null;
+      };
+
+      const nominal = (() => {
+        const n = toNumOrNull(rr.nominal);
+        return n === 0 ? null : n;
+      })();
+      const beforeAbs = (() => {
+        const n = toNumOrNull(rr.before);
+        return n === 0 ? null : n;
+      })();
+      const afterAbs = (() => {
+        const n = toNumOrNull(rr.after);
+        return n === 0 ? null : n;
+      })();
 
       const beforeDelta = nominal == null || beforeAbs == null ? null : beforeAbs - nominal;
+      const afterDelta = nominal == null || afterAbs == null ? null : afterAbs - nominal;
 
       if (side === "L") {
         p.lineIdL = rr.lineId || p.lineIdL;
