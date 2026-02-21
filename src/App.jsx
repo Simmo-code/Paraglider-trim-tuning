@@ -10,7 +10,7 @@ import {
   SITE_VERSION, DEFAULT_LOOP_SIZES, LOOP_TYPES, theme, PALETTE,
   DIAGRAM_SCALE, DIAGRAM_W, DIAGRAM_H, ATTACHED_TEST_CSV,
   clamp, safeNum, median, deepClone,
-  bandForDelta, severity, chipColorFromLineId, groupColor,
+  bandForDelta, severity,
   rowsFromCSVText, rowsFromSheetAOA, parseWideTableFromRows,
   makeDefaultRanges, buildInitialLineToGroup, getGroupOptions,
   downloadJSON, readFileText,
@@ -24,12 +24,25 @@ import {
 
 import { RearViewChart } from "./components/charts/RearViewChart.jsx";
 import { WingPitchViz } from "./components/charts/WingPitchViz.jsx";
+import { PitchProfileChart } from "./components/charts/PitchProfileChart.jsx";
 import { PitchTrimChart } from "./components/charts/PitchTrimChart.jsx";
 import { DeltaLineChart } from "./components/charts/DeltaLineChart.jsx";
 import { WingProfileChart } from "./components/charts/WingProfileChart.jsx";
 
 const EXAMPLE_FILE_URL = new URL("./Example.file.csv", import.meta.url).href;
 
+
+function chipColorFromLineId(lineId) {
+  const first = String(lineId || "").trim().toUpperCase().charAt(0);
+  return (PALETTE[first] || PALETTE.A).base;
+}
+function groupColor(letter, bucket) {
+  const p = PALETTE[letter] || PALETTE.A;
+  if (bucket === 1) return p.base;
+  if (bucket === 2) return p.s2;
+  if (bucket === 3) return p.s3;
+  return p.s4;
+}
 
 function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showWingOutline, compactLayout, setLineToGroupFromDrag, changedLineIds }) {
   const W = DIAGRAM_W;
@@ -3344,6 +3357,14 @@ function setRange(letter, bucket, field, value) {
     const available = Math.max(320, el.clientWidth - 24);
     const z = clamp(available / DIAGRAM_W, 0.4, 1.8);
     setDiagramZoom(Number(z.toFixed(2)));
+    // Scroll to centre after React re-renders with the new zoom
+    setTimeout(() => {
+      if (!diagramBoxRef.current) return;
+      const el2 = diagramBoxRef.current;
+      const X_OFFSET = -180; // negative = left, positive = right
+      el2.scrollLeft = Math.round((el2.scrollWidth - el2.clientWidth) / 2) + X_OFFSET;
+      el2.scrollTop = 0;
+    }, 150);
   }
 
   function fitBaselineToScreen() {
@@ -3383,6 +3404,8 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
     const t = setTimeout(() => fitDiagramToScreen(), 80);
     return () => clearTimeout(t);
   }, [step]);
+
+
 
   const changes = useMemo(() => {
     const base = defaultMappingSnapshot || {};
@@ -3601,6 +3624,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
     // Fixed height + responsive width + obvious scrollbars
     const PAD_X = 260; // extra canvas on each side so outer buckets are reachable
     const PAD_Y = 0;
+
     return (
       <div
         ref={diagramBoxRef}
@@ -4004,6 +4028,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
             right={<SegTabs value={tab} onChange={setTab} tabs={[{ value: "import", label: "Import" }, { value: "testdata", label: "Test data" }]} />}
           >
             <div style={{ display: "grid", gap: 10 }}>
+
               {tab === "import" ? (
                 <div className="resp-import-btns" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
                     <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={importMeasurementFileFromRef} />
@@ -5654,6 +5679,7 @@ onPaste={(e) => {
                     <button style={topBtn} onClick={fitDiagramToScreen}>
                       Fit to screen
                     </button>
+
                     <Toggle value={diagramWingOutline} onChange={setDiagramWingOutline} label="Wing outline" />
                     <Toggle value={diagramCompact} onChange={setDiagramCompact} label="Compact" />
                   </div>
@@ -6339,7 +6365,16 @@ onPaste={(e) => {
 
 
                     <div style={{ marginTop: 10, border: `1px solid ${theme.border}`, borderRadius: 12, background: "rgba(0,0,0,0.22)", padding: 8, width: 320, maxWidth: "100%" }}>
-                      <div style={{ fontWeight: 950, fontSize: 13, marginBottom: 8 }}>Pitch OK (factory)</div>
+                      <div style={{ fontWeight: 950, fontSize: 13, marginBottom: 8 }}>Pitch profile</div>
+                      <PitchProfileChart
+                        pitchStats={pitchStats}
+                        tolerance={Number(groupPitchTol || 5)}
+                        height={220}
+                      />
+                    </div>
+
+                    <div style={{ marginTop: 10, border: `1px solid ${theme.border}`, borderRadius: 12, background: "rgba(0,0,0,0.22)", padding: 8, width: 320, maxWidth: "100%" }}>
+                      <div style={{ fontWeight: 950, fontSize: 13, marginBottom: 8 }}>Pitch balance (adjusted)</div>
                       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 0, tableLayout: "fixed" }}>
                         <thead>
                           <tr style={{ background: "rgba(255,255,255,0.05)" }}>
@@ -6462,6 +6497,7 @@ onPaste={(e) => {
                       if (a < tol) return "warn";
                       return "bad";
                     };
+
                     const bgForBand = (band) => {
                       if (band === "good") return "rgba(34,197,94,0.14)";
                       if (band === "warn") return "rgba(234,179,8,0.14)";
@@ -6554,7 +6590,7 @@ onPaste={(e) => {
                                 <td style={cell} />
                                 <td style={cell}>{fmtNum(maxDiff[L].dL, 0)}</td>
                                 <td style={cell}>{fmtNum(maxDiff[L].dR, 0)}</td>
-                                <td style={cell}>{fmtNum(maxDiff[L].sym, 0)}</td>
+                                <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(maxDiff[L].sym)), color: colorForBand(bandFromDelta(maxDiff[L].sym)), fontWeight: 950 })}>{fmtNum(maxDiff[L].sym, 0)}</td>
                               </React.Fragment>
                             ))}
                           </tr>
