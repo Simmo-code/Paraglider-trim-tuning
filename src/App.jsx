@@ -1528,8 +1528,8 @@ function RiggingDiagramPanel({ hint = "" }) {
     riggingPdfOverrideUrl && riggingPdfOverrideUrl.startsWith(riggingFolderUrl) ? (riggingPdfOverrideName || "") : "";
 
   const pillBtn = (enabled = true) => ({
-    border: `1px solid ${theme.border}`,
-    background: theme.bg2,
+    border: "1px solid rgba(70,140,255,0.65)",
+    background: "rgba(70,140,255,0.25)",
     borderRadius: 999,
     padding: "8px 10px",
     display: "inline-flex",
@@ -1621,7 +1621,7 @@ function RiggingDiagramPanel({ hint = "" }) {
             style={pillBtn(true)}
             title="Browse the rigging PDFs folder on the site"
           >
-            Choose file
+            Open in new tab
           </button>
 
           <label style={pillBtn(true)} title="Upload a local PDF from your computer">
@@ -2635,6 +2635,7 @@ useEffect(() => {
   const [diagramWingOutline, setDiagramWingOutline] = useState(true);
   const [diagramCompact, setDiagramCompact] = useState(false);
   const diagramBoxRef = useRef(null);
+  const hasCenteredLiveDiagramRef = useRef(false);
 
   // Step 3 baseline (installed loops by group) view controls (cosmetic only)
   const [baselineZoom, setBaselineZoom] = useState(0.65);
@@ -4018,6 +4019,30 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
   useEffect(() => {
     if (step !== 3) return;
     const t = setTimeout(() => fitDiagramToScreen(), 80);
+    return () => clearTimeout(t);
+  }, [step]);
+
+  useEffect(() => {
+    if (step !== 3) return;
+    if (hasCenteredLiveDiagramRef.current) return;
+
+    const t = setTimeout(() => {
+      const el = diagramBoxRef.current;
+      if (!el) return;
+
+      const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+      const maxTop = Math.max(0, el.scrollHeight - el.clientHeight);
+
+      // 🔧 Nudge if needed (pixels). Positive X moves right; positive Y moves down.
+      const X_OFFSET = -170;
+      const Y_OFFSET = -110;
+
+      el.scrollLeft = Math.round(maxLeft / 2) + X_OFFSET;
+      el.scrollTop = Math.round(maxTop / 2) + Y_OFFSET;
+
+      hasCenteredLiveDiagramRef.current = true;
+    }, 120);
+
     return () => clearTimeout(t);
   }, [step]);
 
