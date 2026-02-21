@@ -2397,6 +2397,19 @@ const chartPointsByLetter = useMemo(() => {
   return out;
 }, [step4LineRows, maxByLetter]);
 
+const step4Summary = useMemo(() => {
+  let red = 0, yellow = 0, green = 0, na = 0;
+  for (const r of step4LineRows) {
+    if (r.sev === "bad") red++;
+    else if (r.sev === "warn") yellow++;
+    else if (r.sev === "green" || r.sev === "good") green++;
+    else na++;
+  }
+  const total = step4LineRows.length;
+  const measured = total - na;
+  return { red, yellow, green, na, total, measured };
+}, [step4LineRows]);
+
 const step4GroupStats = useMemo(() => {
   // Average Δ before/after per group + side.
   const acc = new Map();
@@ -3775,28 +3788,48 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
             </div>
 
             <div className="resp-step-nav" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <button style={Object.assign({}, topBtn, { opacity: 0, padding: "2px 6px", fontSize: 10, minHeight: 0 })} onClick={() => setStep(2)}>← Back to Step 2</button>
               <ImportStatusRadio loaded={loaded} />
-              {/* Step navigation buttons removed from the header (non-destructive). */}
-              {false ? (
-                stepTabs.map((t) => {
+              {/* Step navigation */}
+              <div style={{ display: "flex", gap: 6, alignItems: "center", background: "rgba(0,0,0,0.25)", borderRadius: 14, padding: "4px 6px", border: `1px solid ${theme.border}` }}>
+                {stepTabs.map((t) => {
                   const disabled = t.value !== 1 && !loaded;
+                  const active = step === t.value;
+                  // Going to step 4 from step 3 needs the freeze warning
+                  const handleClick = () => {
+                    if (disabled) return;
+                    if (t.value === 4 && step === 3 && groupLoopBaseline === null) {
+                      setStep3Step4WarnOpen(true);
+                      return;
+                    }
+                    // Block going back to step 3 from step 4 (baseline already frozen)
+                    if (t.value <= 3 && step === 4) return;
+                    setStep(t.value);
+                  };
+                  const blockedBack = t.value <= 3 && step === 4;
                   return (
                     <button
                       key={t.value}
+                      className="resp-step-btn"
+                      title={blockedBack ? "Use Reset all to go back from Step 4" : disabled ? "Import data first" : ""}
                       style={{
-                        ...topBtn,
-                        ...(step === t.value ? topBtnActive : {}),
-                        opacity: disabled ? 0.55 : 1,
-                        cursor: disabled ? "not-allowed" : "pointer",
+                        padding: "7px 14px",
+                        borderRadius: 10,
+                        border: active ? `1px solid rgba(59,130,246,0.7)` : "1px solid transparent",
+                        background: active ? "rgba(59,130,246,0.28)" : "transparent",
+                        color: active ? theme.text : `rgba(255,255,255,${disabled || blockedBack ? "0.3" : "0.75"})`,
+                        fontWeight: active ? 950 : 900,
+                        fontSize: 13,
+                        cursor: disabled || blockedBack ? "not-allowed" : "pointer",
+                        transition: "background 0.15s, border-color 0.15s",
+                        whiteSpace: "nowrap",
                       }}
-                      onClick={() => !disabled && setStep(t.value)}
+                      onClick={handleClick}
                     >
-                      {t.label}
+                      {t.value === step ? `● ${t.label}` : t.label}
                     </button>
                   );
-                })
-              ) : null}
+                })}
+              </div>
               <button className="resp-step-btn" style={Object.assign({}, topBtn, { background: "rgba(239,68,68,0.16)" })} onClick={openResetAllWarn}>
                 Reset all
               </button>
@@ -6012,6 +6045,44 @@ onPaste={(e) => {
               </WarningBanner>
             ) : (
               <div style={{ display: "grid", gap: 10 }}>
+
+                {/* ── Summary banner ── */}
+                {step4Summary.measured > 0 && (
+                  <div style={{
+                    display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center",
+                    padding: "10px 14px", borderRadius: 14,
+                    border: `1px solid ${step4Summary.red > 0 ? "rgba(239,68,68,0.5)" : step4Summary.yellow > 0 ? "rgba(234,179,8,0.5)" : "rgba(34,197,94,0.5)"}`,
+                    background: step4Summary.red > 0 ? "rgba(239,68,68,0.08)" : step4Summary.yellow > 0 ? "rgba(234,179,8,0.07)" : "rgba(34,197,94,0.08)",
+                  }}>
+                    <div style={{ fontWeight: 950, fontSize: 14, marginRight: 4 }}>
+                      {step4Summary.red > 0
+                        ? `⚠ ${step4Summary.red} line${step4Summary.red > 1 ? "s" : ""} out of tolerance`
+                        : step4Summary.yellow > 0
+                        ? `△ ${step4Summary.yellow} line${step4Summary.yellow > 1 ? "s" : ""} within tolerance warning`
+                        : "✓ All lines within tolerance"}
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {step4Summary.red > 0 && (
+                        <span style={{ padding: "3px 10px", borderRadius: 999, background: "rgba(239,68,68,0.18)", border: "1px solid rgba(239,68,68,0.45)", color: "rgba(239,68,68,0.95)", fontWeight: 950, fontSize: 12 }}>
+                          🔴 {step4Summary.red} red
+                        </span>
+                      )}
+                      {step4Summary.yellow > 0 && (
+                        <span style={{ padding: "3px 10px", borderRadius: 999, background: "rgba(234,179,8,0.18)", border: "1px solid rgba(234,179,8,0.45)", color: "rgba(234,179,8,0.95)", fontWeight: 950, fontSize: 12 }}>
+                          🟡 {step4Summary.yellow} yellow
+                        </span>
+                      )}
+                      {step4Summary.green > 0 && (
+                        <span style={{ padding: "3px 10px", borderRadius: 999, background: "rgba(34,197,94,0.18)", border: "1px solid rgba(34,197,94,0.45)", color: "rgba(34,197,94,0.95)", fontWeight: 950, fontSize: 12 }}>
+                          🟢 {step4Summary.green} green
+                        </span>
+                      )}
+                      <span style={{ opacity: 0.6, fontSize: 12, fontWeight: 900, alignSelf: "center" }}>
+                        {step4Summary.measured} of {step4Summary.total} lines measured
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
