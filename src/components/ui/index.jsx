@@ -75,10 +75,10 @@ export function Toggle({ value, onChange, label }) {
   );
 }
 
-export function FactorySelect({ value, onChange, disabled, title, minWidth = 160, opacity, children }) {
+export function FactorySelect({ value, onChange, disabled, title, minWidth = 160, opacity, children, className }) {
   return (
     <select
-      className="factory-select"
+      className={["factory-select", className].filter(Boolean).join(" ")}
       value={value}
       onChange={onChange}
       disabled={disabled}
