@@ -834,6 +834,7 @@ const handleResetRiggingPdf = () => {
 };
 
 function TrimWorkflow({ hint = "" }) {
+  console.log("TrimWorkflow render, step:", typeof step !== "undefined" ? step : "unknown");
   const viewerId = `rigging_viewer_${String(hint || "main").replace(/[^a-z0-9]+/gi, "_")}`;
 
   // GitHub Pages friendly base path (e.g. "/repo-name/") via Vite BASE_URL
@@ -1985,6 +1986,7 @@ useEffect(() => {
   const [diagramWingOutline, setDiagramWingOutline] = useState(true);
   const [diagramCompact, setDiagramCompact] = useState(false);
   const diagramBoxRef = useRef(null);
+  const hasCenteredLiveDiagramRef = useRef(false);
 
   // Step 3 baseline (installed loops by group) view controls (cosmetic only)
   const [baselineZoom, setBaselineZoom] = useState(0.65);
@@ -3344,10 +3346,12 @@ function setRange(letter, bucket, field, value) {
     const available = Math.max(320, el.clientWidth - 24);
     const z = clamp(available / DIAGRAM_W, 0.4, 1.8);
     setDiagramZoom(Number(z.toFixed(2)));
-    // Centre scroll after zoom is applied
+    // Centre scroll — use computed content width since transform:scale doesn't affect scrollWidth
     setTimeout(() => {
-      const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
-      el.scrollLeft = Math.round(maxLeft / 2);
+      const PAD_X = 260;
+      const scaledContentW = (DIAGRAM_W + PAD_X * 2) * z;
+      const containerW = el.clientWidth;
+      el.scrollLeft = Math.max(0, Math.round((scaledContentW - containerW) / 2));
       el.scrollTop = 0;
     }, 60);
   }
@@ -3386,18 +3390,37 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
   }, [step, diagramWingOutline, diagramCompact]);
   useEffect(() => {
     if (step !== 3) return;
+    const t = setTimeout(() => fitDiagramToScreen(), 80);
+    return () => clearTimeout(t);
+  }, [step]);
+
+  useEffect(() => {
+    // Reset flag whenever we leave step 3 so it re-centres on re-entry
+    if (step !== 3) {
+      hasCenteredLiveDiagramRef.current = false;
+      return;
+    }
+
     const t = setTimeout(() => {
-      fitDiagramToScreen();
-      // Centre scroll horizontally after zoom is applied
+      console.log("CENTERING ATTEMPT, flag:", hasCenteredLiveDiagramRef.current);
       const el = diagramBoxRef.current;
+      console.log("CENTERING el:", el);
       if (!el) return;
-      // Short extra delay so zoom has been applied and scrollWidth is up to date
-      setTimeout(() => {
-        const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
-        el.scrollLeft = Math.round(maxLeft / 2);
-        el.scrollTop = 0;
-      }, 60);
-    }, 80);
+
+      const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+      const maxTop  = Math.max(0, el.scrollHeight - el.clientHeight);
+
+      const X_OFFSET = 0;
+      const Y_OFFSET = 0;
+
+      console.log("CENTERING: scrollWidth", el.scrollWidth, "clientWidth", el.clientWidth, "maxLeft", maxLeft, "target", Math.round(maxLeft / 2) + X_OFFSET);
+      el.scrollLeft = Math.round(maxLeft / 2) + X_OFFSET;
+      el.scrollTop  = Math.round(maxTop / 2) + Y_OFFSET;
+      console.log("CENTERING: scrollLeft is now", el.scrollLeft);
+
+      hasCenteredLiveDiagramRef.current = true;
+    }, 300);
+
     return () => clearTimeout(t);
   }, [step]);
 
@@ -3618,6 +3641,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
     // Fixed height + responsive width + obvious scrollbars
     const PAD_X = 260; // extra canvas on each side so outer buckets are reachable
     const PAD_Y = 0;
+
     return (
       <div
         ref={diagramBoxRef}
