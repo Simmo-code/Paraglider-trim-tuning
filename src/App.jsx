@@ -1250,11 +1250,43 @@ const [riggingManifest, setRiggingManifest] = useState(null);
 const [riggingBaseDir, setRiggingBaseDir] = useState(""); // e.g. "ozone"
 const [riggingManifestErr, setRiggingManifestErr] = useState("");
 const [riggingPdfUrl, setRiggingPdfUrl] = useState("");
+const [riggingPdfOverrideUrl, setRiggingPdfOverrideUrl] = useState("");
+const [riggingPdfOverrideName, setRiggingPdfOverrideName] = useState("");
 
 const [dbMake, setDbMake] = useState("");
 const [dbModel, setDbModel] = useState("");
 const [dbSize, setDbSize] = useState("");
 
+
+// If arriving from rigging index.html (GitHub Pages) with ?riggingPdf=...&riggingMakeDir=...,
+// load that PDF inline (as an override) and return to the step the user was on when they clicked "Choose file".
+useEffect(() => {
+  try {
+    const params = new URLSearchParams(window.location.search || "");
+    const pdf = params.get("riggingPdf");
+    const makeDir = params.get("riggingMakeDir");
+    if (!pdf) return;
+
+    const base = (import.meta?.env?.BASE_URL ?? "/").replace(/\/?$/, "/");
+    const dir = (makeDir || riggingBaseDir || "ozone").toLowerCase();
+    const pdfUrl = `${base}trimdb/${dir}/_rigging_pdfs/${pdf}`;
+
+    setRiggingBaseDir(dir);
+    setRiggingPdfOverrideName(pdf);
+    setRiggingPdfOverrideUrl(pdfUrl);
+
+    const rs = localStorage.getItem("rigging_return_step");
+    const rsNum = rs ? parseInt(rs, 10) : NaN;
+    if (!Number.isNaN(rsNum)) setStep(rsNum);
+
+    // Clean URL (remove query params) without reload
+    window.history.replaceState({}, "", window.location.pathname);
+  } catch {
+    // no-op
+  }
+  // run once
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   // Step 1 manual entry grid (wide CSV-style). UI-only; does not affect import or Step 3/4.
   const MANUAL_DEFAULT_ROWS = 16;
@@ -1316,6 +1348,38 @@ useEffect(() => {
     cancelled = true;
   };
 }, [trimIndex, dbMake]);
+
+// Fallback: if no Factory DB make is selected yet, load a default rigging manifest (so the rigging PDF dropdown isn't empty).
+// This keeps behavior deterministic and does not touch trim/pitch/baseline logic.
+useEffect(() => {
+  let cancelled = false;
+  (async () => {
+    try {
+      if (dbMake) return;                // primary loader will handle when a make is selected
+      if (riggingManifest) return;       // already loaded
+      if (riggingManifestErr) return;    // don't spam retries
+
+      const base = (import.meta.env?.BASE_URL ?? "/");
+      const baseNorm = base.endsWith("/") ? base : `${base}/`;
+      const defaultDir = "ozone";
+      const url = `${baseNorm}trimdb/${defaultDir}/_exports/rigging_manifest.json`;
+
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) return;
+
+      const data = await res.json();
+      if (!cancelled) {
+        setRiggingBaseDir(defaultDir);
+        setRiggingManifest(data);
+      }
+    } catch (e) {
+      // silent: this is only a convenience for the dropdown
+    }
+  })();
+  return () => { cancelled = true; };
+}, [dbMake, riggingManifest, riggingManifestErr]);
+
+
 
 
 // Lazy-load rigging manifest for the selected manufacturer (served from /public; offline generated).
@@ -1398,6 +1462,210 @@ useEffect(() => {
   const baseNorm = base.endsWith("/") ? base : `${base}/`;
   setRiggingPdfUrl(`${baseNorm}trimdb/${String(riggingBaseDir || String(dbMake || "").toLowerCase().replace(/[^a-z0-9]+/g, ""))}/_rigging_pdfs/${pdfFilename}`);
 }, [riggingManifest, riggingBaseDir, dbMake, dbModel, dbSize]);
+
+// Rigging PDF manual override (local file selection)
+const effectiveRiggingPdfUrl = riggingPdfOverrideUrl || riggingPdfUrl;
+
+useEffect(() => {
+  // Cleanup object URL on unmount
+  return () => {
+    if (riggingPdfOverrideUrl && String(riggingPdfOverrideUrl).startsWith("blob:")) {
+      try { URL.revokeObjectURL(riggingPdfOverrideUrl); } catch (e) {}
+    }
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+
+const handleSelectRiggingPdfFile = (e) => {
+  const file = e?.target?.files?.[0];
+  if (!file) return;
+
+  if (riggingPdfOverrideUrl && String(riggingPdfOverrideUrl).startsWith("blob:")) {
+    try { URL.revokeObjectURL(riggingPdfOverrideUrl); } catch (err) {}
+  }
+
+  const url = URL.createObjectURL(file);
+  setRiggingPdfOverrideUrl(url);
+  setRiggingPdfOverrideName(file.name || "selected.pdf");
+};
+
+const handleResetRiggingPdf = () => {
+  if (riggingPdfOverrideUrl && String(riggingPdfOverrideUrl).startsWith("blob:")) {
+    try { URL.revokeObjectURL(riggingPdfOverrideUrl); } catch (err) {}
+  }
+  setRiggingPdfOverrideUrl("");
+  setRiggingPdfOverrideName("");
+};
+
+function RiggingDiagramPanel({ hint = "" }) {
+  const viewerId = `rigging_viewer_${String(hint || "main").replace(/[^a-z0-9]+/gi, "_")}`;
+
+  // GitHub Pages friendly base path (e.g. "/repo-name/") via Vite BASE_URL
+  const baseUrl = (import.meta?.env?.BASE_URL ?? "/").replace(/\/?$/, "/");
+  const riggingFolderUrl = `${baseUrl}trimdb/${(riggingBaseDir || "ozone").toLowerCase()}/_rigging_pdfs/`;
+  const riggingFolderIndexUrl = `${riggingFolderUrl}index.html`;
+
+  const riggingDropdownOptions = useMemo(() => {
+    const out = [];
+    const byModel = riggingManifest?.by_model_size || {};
+    Object.keys(byModel).forEach((model) => {
+      const sizes = byModel[model]?.sizes || {};
+      Object.keys(sizes).forEach((size) => {
+        const entry = sizes[size];
+        if (entry?.matched && entry?.pdf_filename) {
+          out.push({
+            label: `${model} — ${size}`,
+            filename: entry.pdf_filename,
+          });
+        }
+      });
+    });
+    out.sort((a, b) => a.label.localeCompare(b.label));
+    return out;
+  }, [riggingManifest]);
+
+  const riggingDropdownValue =
+    riggingPdfOverrideUrl && riggingPdfOverrideUrl.startsWith(riggingFolderUrl) ? (riggingPdfOverrideName || "") : "";
+
+  const pillBtn = (enabled = true) => ({
+    border: `1px solid ${theme.border}`,
+    background: theme.bg2,
+    borderRadius: 999,
+    padding: "8px 10px",
+    display: "inline-flex",
+    gap: 10,
+    alignItems: "center",
+    cursor: enabled ? "pointer" : "default",
+    color: theme.text,
+    fontWeight: 950,
+    opacity: enabled ? 1 : 0.5,
+    userSelect: "none",
+    appearance: "none",
+    WebkitAppearance: "none",
+    MozAppearance: "none",
+    outline: "none",
+  });
+
+  return (
+    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10, marginBottom: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ fontWeight: 950 }}>Rigging diagram (PDF){hint ? ` — ${hint}` : ""}</div>
+
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => {
+              if (!effectiveRiggingPdfUrl) return;
+              const el = document.getElementById(viewerId);
+              if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+            disabled={!effectiveRiggingPdfUrl}
+            style={pillBtn(!!effectiveRiggingPdfUrl)}
+            title="Show the PDF below"
+          >
+            Open PDF
+          </button>
+
+
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <div style={{ fontWeight: 900, opacity: 0.8, fontSize: 12 }}>Rigging PDF</div>
+            <select
+              value={riggingDropdownValue}
+              onChange={(e) => {
+                const filename = e.target.value;
+                if (!filename) return;
+                setRiggingPdfOverrideUrl(`${riggingFolderUrl}${filename}`);
+                setRiggingPdfOverrideName(filename);
+                // reveal viewer
+                setTimeout(() => {
+                  const el = document.getElementById(viewerId);
+                  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                }, 50);
+              }}
+              style={{
+                border: `1px solid ${theme.border}`,
+                background: theme.bg2,
+                color: theme.text,
+                borderRadius: 12,
+                padding: "8px 10px",
+                fontWeight: 900,
+                minWidth: 220,
+                appearance: "none",
+                WebkitAppearance: "none",
+                MozAppearance: "none",
+                outline: "none",
+              }}
+              title="Select a rigging PDF from the site folder"
+            >
+              <option value="">Select…</option>
+              {riggingDropdownOptions.length === 0 && (
+                <option value="" disabled>
+                  No PDFs found (manifest not loaded or empty)
+                </option>
+              )}
+              {riggingDropdownOptions.map((o) => (
+                <option key={o.filename} value={o.filename}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              // Open your hosted index.html in the rigging PDFs folder
+              try { localStorage.setItem("rigging_return_step", String(step)); } catch {}
+              window.open(riggingFolderIndexUrl, "_blank", "noopener,noreferrer");
+            }}
+            style={pillBtn(true)}
+            title="Browse the rigging PDFs folder on the site"
+          >
+            Choose file
+          </button>
+
+          <label style={pillBtn(true)} title="Upload a local PDF from your computer">
+            Upload PDF
+            <input type="file" accept="application/pdf" onChange={handleSelectRiggingPdfFile} style={{ display: "none" }} />
+          </label>
+
+          <button
+            type="button"
+            onClick={handleResetRiggingPdf}
+            disabled={!riggingPdfOverrideUrl}
+            style={pillBtn(!!riggingPdfOverrideUrl)}
+            title="Clear uploaded override and use factory match again"
+          >
+            Use factory match
+          </button>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        {riggingPdfOverrideName ? <div style={{ fontWeight: 900, opacity: 0.85 }}>Uploaded: {riggingPdfOverrideName}</div> : null}
+        {!effectiveRiggingPdfUrl && !riggingManifestErr ? (
+          <div style={{ fontWeight: 900, opacity: 0.75 }}>No rigging PDF selected (choose a Factory DB wing, browse rigging PDFs, or upload a PDF).</div>
+        ) : null}
+        {riggingManifestErr ? <div style={{ color: theme.bad, fontWeight: 950 }}>{riggingManifestErr}</div> : null}
+      </div>
+
+      {effectiveRiggingPdfUrl ? (
+        <div id={viewerId} style={{ marginTop: 10, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: "hidden" }}>
+          <object data={effectiveRiggingPdfUrl} type="application/pdf" width="100%" height="520">
+            <div style={{ padding: 12, fontWeight: 900, opacity: 0.9 }}>
+              PDF preview not available in this browser.{" "}
+              <a href={effectiveRiggingPdfUrl} target="_blank" rel="noopener noreferrer" style={{ color: "rgba(59,130,246,0.95)" }}>
+                Open the rigging diagram
+              </a>
+              .
+            </div>
+          </object>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 
 
   // Keep dependent dropdowns valid
@@ -5832,36 +6100,7 @@ onPaste={(e) => {
                   </div>
                 </div>
 
-
-                {/* Rigging diagram viewer (Step 2) — shows when a Factory DB wing is selected */}
-                {(dbMake && dbModel && dbSize) ? (
-                  riggingPdfUrl ? (
-                    <div style={{ marginTop: 10, border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10 }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                        <div style={{ fontWeight: 950 }}>Rigging diagram (PDF)</div>
-                        <a href={riggingPdfUrl} target="_blank" rel="noopener noreferrer" style={{ color: "rgba(59,130,246,0.95)", fontWeight: 950 }}>
-                          Open in new tab
-                        </a>
-                      </div>
-
-                      <div style={{ marginTop: 10, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: "hidden" }}>
-                        <object data={riggingPdfUrl} type="application/pdf" width="100%" height="520">
-                          <div style={{ padding: 12, fontWeight: 900, opacity: 0.9 }}>
-                            PDF preview not available.{" "}
-                            <a href={riggingPdfUrl} target="_blank" rel="noopener noreferrer" style={{ color: "rgba(59,130,246,0.95)" }}>
-                              Open the rigging diagram
-                            </a>
-                            .
-                          </div>
-                        </object>
-                      </div>
-                    </div>
-                  ) : riggingManifestErr ? (
-                    <div style={{ marginTop: 10, color: theme.bad, fontWeight: 950 }}>
-                      {riggingManifestErr}
-                    </div>
-                  ) : null
-                ) : null}
+                <RiggingDiagramPanel />
 
                 <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
                   <div style={{ fontWeight: 950 }}>Defaults</div>
@@ -6003,6 +6242,9 @@ onPaste={(e) => {
                       Drag any line chip into another group bucket. Scrollbars are always visible (bottom + right).
                     </div>
                   </div>
+
+                  {/* Rigging diagram (PDF) */}
+                  <RiggingDiagramPanel hint="Baseline / Installed loops" />
 
                   <div id="baseline-loops-panel" style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -6870,37 +7112,7 @@ onPaste={(e) => {
                     Uses <b>frozen baseline</b> from Step 3. Step 3 edits will not affect this page until you Reset all.
                   </div>
 
-
-                  {/* Rigging diagram viewer (Step 4) — informational only */}
-                  {(dbMake && dbModel && dbSize) ? (
-                    riggingPdfUrl ? (
-                      <div style={{ marginTop: 10, border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10 }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                          <div style={{ fontWeight: 950 }}>Rigging diagram (PDF)</div>
-                          <a href={riggingPdfUrl} target="_blank" rel="noopener noreferrer" style={{ color: "rgba(59,130,246,0.95)", fontWeight: 950 }}>
-                            Open in new tab
-                          </a>
-                        </div>
-
-                        <div style={{ marginTop: 10, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: "hidden" }}>
-                          <object data={riggingPdfUrl} type="application/pdf" width="100%" height="520">
-                            <div style={{ padding: 12, fontWeight: 900, opacity: 0.9 }}>
-                              PDF preview not available.{" "}
-                              <a href={riggingPdfUrl} target="_blank" rel="noopener noreferrer" style={{ color: "rgba(59,130,246,0.95)" }}>
-                                Open the rigging diagram
-                              </a>
-                              .
-                            </div>
-                          </object>
-                        </div>
-                      </div>
-                    ) : riggingManifestErr ? (
-                      <div style={{ marginTop: 10, color: theme.bad, fontWeight: 950 }}>
-                        {riggingManifestErr}
-                      </div>
-                    ) : null
-                  ) : null}
-
+                  <RiggingDiagramPanel hint="Trim adjustments" />
 
                   {groupsInUse.length === 0 ? (
                     <div style={{ marginTop: 10, opacity: 0.75 }}>No groups detected. Complete Step 2 mapping first.</div>
