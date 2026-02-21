@@ -1,0 +1,8200 @@
+// Project policy:
+// - Modern JS is allowed (spread, optional chaining, template literals)
+// - Build target: es2018+
+// - No ES5 hardening unless explicitly required
+
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import * as XLSX from "xlsx";
+
+import {
+  SITE_VERSION, DEFAULT_LOOP_SIZES, LOOP_TYPES, theme, PALETTE,
+  DIAGRAM_SCALE, DIAGRAM_W, DIAGRAM_H, ATTACHED_TEST_CSV,
+  clamp, safeNum, median, deepClone,
+  bandForDelta, severity, chipColorFromLineId, groupColor,
+  rowsFromCSVText, rowsFromSheetAOA, parseWideTableFromRows,
+  makeDefaultRanges, buildInitialLineToGroup, getGroupOptions,
+  downloadJSON, readFileText,
+  playBeep,
+} from "./utils/index.js";
+
+import {
+  Panel, WarningBanner, NumInput, Select, Toggle, FactorySelect,
+  ImportStatusRadio, StatPill, ControlPill, TogglePill, SegTabs,
+} from "./components/ui/index.jsx";
+
+import { RearViewChart } from "./components/charts/RearViewChart.jsx";
+import { WingPitchViz } from "./components/charts/WingPitchViz.jsx";
+import { PitchTrimChart } from "./components/charts/PitchTrimChart.jsx";
+import { DeltaLineChart } from "./components/charts/DeltaLineChart.jsx";
+import { WingProfileChart } from "./components/charts/WingProfileChart.jsx";
+
+const EXAMPLE_FILE_URL = new URL("./Example.file.csv", import.meta.url).href;
+
+
+function DiagramPreview({ lineToGroup, prefixByLetter, groupCountByLetter, showWingOutline, compactLayout, setLineToGroupFromDrag, changedLineIds }) {
+  const W = DIAGRAM_W;
+  const H = DIAGRAM_H;
+  const cx = W / 2;
+  // Extra horizontal margin so the wing outline/background covers outer buckets (e.g. AR3/BR3/CR3/DR3)
+  const M = Math.round(360 * DIAGRAM_SCALE);
+  const [drag, setDrag] = useState({ active: false });
+
+  const rowY = {
+    A: Math.round(170 * DIAGRAM_SCALE),
+    B: Math.round(375 * DIAGRAM_SCALE),
+    C: Math.round(580 * DIAGRAM_SCALE),
+    D: Math.round(785 * DIAGRAM_SCALE),
+  };
+
+  const centerGap = compactLayout ? Math.round(26 * DIAGRAM_SCALE) : Math.round(34 * DIAGRAM_SCALE);
+  const bucketSpacing = compactLayout ? Math.round(8 * DIAGRAM_SCALE) : Math.round(12 * DIAGRAM_SCALE);
+
+  const chip = compactLayout
+    ? { w: Math.round(86 * DIAGRAM_SCALE), h: Math.round(32 * DIAGRAM_SCALE), gapX: Math.round(10 * DIAGRAM_SCALE), gapY: Math.round(8 * DIAGRAM_SCALE) }
+    : { w: Math.round(90 * DIAGRAM_SCALE), h: Math.round(34 * DIAGRAM_SCALE), gapX: Math.round(10 * DIAGRAM_SCALE), gapY: Math.round(8 * DIAGRAM_SCALE) };
+
+  const maxCols = compactLayout ? 7 : 8;
+  function chooseCols(n) {
+    if (n <= 1) return 1;
+    const ideal = Math.ceil(Math.sqrt(n) * 1.15);
+    return clamp(ideal, 2, maxCols);
+  }
+  function boxSizeForLines(lines) {
+    const n = lines.length;
+    const cols = n <= 1 ? 1 : chooseCols(n);
+    const rows = Math.max(1, Math.ceil(n / cols));
+    const innerW = cols * chip.w + (cols - 1) * chip.gapX;
+    const innerH = rows * chip.h + (rows - 1) * chip.gapY;
+    const padW = compactLayout ? Math.round(28 * DIAGRAM_SCALE) : Math.round(32 * DIAGRAM_SCALE);
+    const padH = compactLayout ? Math.round(46 * DIAGRAM_SCALE) : Math.round(50 * DIAGRAM_SCALE);
+    var minBw = Math.round((compactLayout ? 240 : 280) * DIAGRAM_SCALE);
+    return { bw: Math.max(innerW + padW, minBw), bh: innerH + padH, cols };
+  }
+
+  const layout = useMemo(() => {
+    const zones = [];
+    const blocks = [];
+    for (const letter of ["A", "B", "C", "D"]) {
+      const prefix = prefixByLetter[letter] || `${letter}R`;
+      const count = Number(groupCountByLetter[letter] || 3);
+
+      for (const side of ["L", "R"]) {
+        const groups = [];
+        for (let b = 1; b <= count; b++) {
+          const groupId = `${prefix}${b}${side}`;
+          const lines = Object.keys(lineToGroup || {}).filter((lineId) => lineToGroup[lineId] === groupId);
+
+          const sorted = lines
+            .slice()
+            .sort((a, b2) => {
+              const ai = Number(String(a).match(/(\d+)/)[1] || 0);
+              const bi = Number(String(b2).match(/(\d+)/)[1] || 0);
+              return side === "L" ? bi - ai : ai - bi;
+            });
+
+          groups.push({ bucket: b, groupId, lines: sorted });
+        }
+
+        const y = rowY[letter];
+        const measured = groups.map((g) => ({ ...g, ...boxSizeForLines(g.lines) }));
+
+        if (side === "R") {
+          let x = cx + centerGap;
+          for (const g of measured) {
+            const boxX = x;
+            const boxY = y - g.bh / 2;
+            zones.push({ groupId: g.groupId, x: boxX, y: boxY, w: g.bw, h: g.bh });
+            blocks.push({ letter, side, groupId: g.groupId, boxX, boxY, bw: g.bw, bh: g.bh, lines: g.lines, cols: g.cols, bucketNum: g.bucket });
+            x = x + g.bw + bucketSpacing;
+          }
+        } else {
+          let x = cx - centerGap;
+          for (const g of measured) {
+            const boxX = x - g.bw;
+            const boxY = y - g.bh / 2;
+            zones.push({ groupId: g.groupId, x: boxX, y: boxY, w: g.bw, h: g.bh });
+            blocks.push({ letter, side, groupId: g.groupId, boxX, boxY, bw: g.bw, bh: g.bh, lines: g.lines, cols: g.cols, bucketNum: g.bucket });
+            x = x - g.bw - bucketSpacing;
+          }
+        }
+      }
+    }
+    return { zones, blocks };
+  }, [lineToGroup, prefixByLetter, groupCountByLetter, compactLayout]);
+
+  function screenToSvgPoint(e) {
+    const svg = e.currentTarget.ownerSVGElement || e.currentTarget;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const m = svg.getScreenCTM();
+    if (!m) return { x: 0, y: 0 };
+    const p = pt.matrixTransform(m.inverse());
+    return { x: p.x, y: p.y };
+  }
+  function findZoneAt(x, y) {
+    return layout.zones.find((z) => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) || null;
+  }
+
+  function onPointerDownChip(e, payload) {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
+    const { x, y } = screenToSvgPoint(e);
+    setDrag({ active: true, ...payload, x, y });
+  }
+  function onPointerMove(e) {
+    if (!drag.active) return;
+    const { x, y } = screenToSvgPoint(e);
+    setDrag((d) => ({ ...d, x, y }));
+  }
+  function onPointerUp(e) {
+    if (!drag.active) return;
+    const { x, y } = screenToSvgPoint(e);
+    const zone = findZoneAt(x, y);
+    if (zone.groupId) setLineToGroupFromDrag(drag.lineId, zone.groupId);
+    setDrag({ active: false });
+  }
+
+  const items = [];
+  items.push(<rect key="bg" x={-M} y={0} width={W + M * 2} height={H} fill="rgba(0,0,0,0)" />);
+
+  if (showWingOutline) {
+    items.push(
+      <path
+        key="wing"
+        d={`M ${W / 2} ${Math.round(62 * DIAGRAM_SCALE)}
+           C ${W / 2 - Math.round(740 * DIAGRAM_SCALE)} ${Math.round(88 * DIAGRAM_SCALE)}, ${W / 2 - Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(260 * DIAGRAM_SCALE)}, ${W / 2 - Math.round(1460 * DIAGRAM_SCALE)} ${Math.round(470 * DIAGRAM_SCALE)}
+           C ${W / 2 - Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(720 * DIAGRAM_SCALE)}, ${W / 2 - Math.round(740 * DIAGRAM_SCALE)} ${Math.round(860 * DIAGRAM_SCALE)}, ${W / 2} ${Math.round(900 * DIAGRAM_SCALE)}
+           C ${W / 2 + Math.round(740 * DIAGRAM_SCALE)} ${Math.round(860 * DIAGRAM_SCALE)}, ${W / 2 + Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(720 * DIAGRAM_SCALE)}, ${W / 2 + Math.round(1460 * DIAGRAM_SCALE)} ${Math.round(470 * DIAGRAM_SCALE)}
+           C ${W / 2 + Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(260 * DIAGRAM_SCALE)}, ${W / 2 + Math.round(740 * DIAGRAM_SCALE)} ${Math.round(88 * DIAGRAM_SCALE)}, ${W / 2} ${Math.round(62 * DIAGRAM_SCALE)}`}
+        fill="none"
+        stroke="rgba(255,255,255,0.18)"
+        strokeWidth={Math.max(2, Math.round(4 * DIAGRAM_SCALE))}
+      />
+    );
+  }
+
+  items.push(<line key="center" x1={cx} y1={20} x2={cx} y2={H - 20} stroke="rgba(255,255,255,0.14)" strokeWidth={2} />);
+
+  for (const b of layout.blocks) {
+    const bucketNum = Number(String(b.groupId).match(/(\d+)/)[1] || b.bucketNum || 1);
+    const bucketStroke = groupColor(b.letter, bucketNum);
+
+    items.push(
+      <rect
+        key={`box-${b.groupId}-${b.side}-${b.boxX}`}
+        x={b.boxX}
+        y={b.boxY}
+        width={b.bw}
+        height={b.bh}
+        rx={18}
+        ry={18}
+        fill={bucketStroke}
+        opacity={0.09}
+        stroke={bucketStroke}
+        strokeOpacity={0.92}
+        strokeWidth={2}
+      />
+    );
+
+    const title = b.groupId;
+    const pillW = Math.max(120, title.length * 10);
+    const pillH = 30;
+    const pillX = b.boxX + (b.bw - pillW) / 2;
+
+    items.push(
+      <g key={`title-${b.groupId}-${b.side}-${b.boxX}`}>
+        <rect x={pillX} y={b.boxY + 8} width={pillW} height={pillH} rx={16} ry={16} fill="rgba(0,0,0,0.58)" stroke={bucketStroke} strokeOpacity={0.85} />
+        <text x={pillX + pillW / 2} y={b.boxY + 30} textAnchor="middle" fill={bucketStroke} fontWeight={950} fontSize={18}>
+          {title}
+        </text>
+      </g>
+    );
+
+    const innerX = b.boxX + 16;
+    const innerY = b.boxY + 44;
+    const cols = b.cols || 1;
+
+    for (let i = 0; i < b.lines.length; i++) {
+      const lineId = b.lines[i];
+      const rr = Math.floor(i / cols);
+      const ccRaw = i % cols;
+      const cc = b.side === "L" ? cols - 1 - ccRaw : ccRaw;
+      const x = innerX + cc * (chip.w + chip.gapX);
+      const yy = innerY + rr * (chip.h + chip.gapY);
+
+      const chipStroke = chipColorFromLineId(lineId);
+      const moved = !!changedLineIds.has(lineId);
+      const chipText = moved ? theme.bad : "rgba(255,255,255,0.93)";
+
+      items.push(
+        <g key={`chip-${b.groupId}-${lineId}`}>
+          <rect x={x} y={yy} width={chip.w} height={chip.h} rx={12} ry={12} fill="rgba(255,255,255,0.10)" stroke={chipStroke} strokeOpacity={0.60} />
+          <text x={x + chip.w / 2} y={yy + chip.h * 0.74} textAnchor="middle" fill={chipText} fontSize={18} fontWeight={950}>
+            {lineId}
+          </text>
+          <rect x={x} y={yy} width={chip.w} height={chip.h} rx={12} ry={12} fill="transparent" style={{ cursor: "grab" }} onPointerDown={function (e) { onPointerDownChip(e, { lineId: lineId, color: chipStroke }); }} />
+        </g>
+      );
+    }
+  }
+
+  return (
+    <div style={{ width: "100%", border: `1px solid ${theme.border}`, borderRadius: 18, background: "rgba(0,0,0,0.38)", overflow: "hidden" }}>
+      <svg
+        width="100%"
+        viewBox={`${-M} 0 ${W + M * 2} ${H}`}
+        style={{ display: "block", touchAction: "none" }}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onPointerLeave={onPointerUp}
+      >
+        {items}
+      </svg>
+
+        {null}
+
+    </div>
+  );
+}
+
+// ---------------- UI atoms ----------------
+
+function BlockTable({ title, rows, theme, th, td, showCorrected, tolerance = 10, step4LineCorr, setStep4LineCorr }) {
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+
+  const cellStyle = (band) => {
+    if (band === "good") return { background: "rgba(34,197,94,0.14)", borderColor: "rgba(34,197,94,0.35)" };
+    if (band === "warn") return { background: "rgba(234,179,8,0.14)", borderColor: "rgba(234,179,8,0.35)" };
+    if (band === "bad") return { background: "rgba(239,68,68,0.14)", borderColor: "rgba(239,68,68,0.35)" };
+    return {};
+  };
+
+  const fmt = (v, digits = 0) => (v == null || !Number.isFinite(Number(v)) ? "—" : Number(v).toFixed(digits));
+
+  var bandFromDelta = (delta) => {
+    const d = Number(delta);
+    if (!Number.isFinite(d)) return "";
+    const a = Math.abs(d);
+    if (a <= 4) return "good";
+    if (a < Number(tolerance)) return "warn";
+    return "bad";
+  };
+  const textColorForBand = (band) => {
+    if (band === "good") return "rgba(34,197,94,0.95)";
+    if (band === "warn") return "rgba(234,179,8,0.95)";
+    if (band === "bad") return "rgba(239,68,68,0.95)";
+    return theme.text;
+  };
+
+  return (
+    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ fontWeight: 950 }}>{title}</div>
+        <div style={{ opacity: 0.78, fontSize: 12 }}>
+          Display: <b>{showCorrected ? "corrected" : "raw"}</b>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 6, fontSize: 11, opacity: 0.6, fontWeight: 900, textAlign: "right" }} className="resp-table-hint">
+        ← scroll to see all columns →
+      </div>
+      <div className="resp-table-wrap" style={{ marginTop: 10, overflow: "auto", width: "100%", maxWidth: "100%",
+          minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 12, WebkitOverflowScrolling: "touch" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
+          <thead>
+            <tr>
+              <th style={th}>Line</th>
+              <th style={th}>Nominal</th>
+
+              <th style={th}>L {showCorrected ? "Val" : "Raw"}</th>
+              <th style={th}>L Corr (mm)</th>
+              <th style={th}>L Before</th>
+              <th style={th}>L After</th>
+              <th style={th}>L Δ</th>
+
+              <th style={th}>R {showCorrected ? "Val" : "Raw"}</th>
+              <th style={th}>R Corr (mm)</th>
+              <th style={th}>R Before</th>
+              <th style={th}>R After</th>
+              <th style={th}>R Δ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const L = r.L;
+              const R = r.R;
+              return (
+                <tr key={r.lineBase}>
+                  <td style={Object.assign({}, td, { fontWeight: 900 })}>{r.lineBase}</td>
+                  <td style={td}>{fmt(r.nominal)}</td>
+
+                  <td style={td}>{fmt(L.corrected)}</td>
+                  <td style={td}>
+                    <input
+                      type="number"
+                      value={Number(step4LineCorr[`${r.lineBase}L`] || 0)}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        setStep4LineCorr((prev) => ({ ...prev, [`${r.lineBase}L`]: Number.isFinite(v) ? v : 0 }));
+                      }}
+                      style={{ width: 86, padding: "6px 8px", borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.panel, color: measureTextColor, outline: "none" }}
+                    />
+                  </td>
+                  <td style={td}>{fmt(L.before)}</td>
+                  <td style={td}>{fmt(L.afterVal)}</td>
+                  <td style={Object.assign({}, td, cellStyle(bandFromDelta(L.delta)), { border: "1px solid " + theme.border, color: textColorForBand(bandFromDelta(L.delta)), fontWeight: 900 })}>{fmt(L.delta)}</td>
+
+                  <td style={td}>{fmt(R.corrected)}</td>
+                  <td style={td}>
+                    <input
+                      type="number"
+                      value={Number(step4LineCorr[`${r.lineBase}R`] || 0)}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        setStep4LineCorr((prev) => ({ ...prev, [`${r.lineBase}R`]: Number.isFinite(v) ? v : 0 }));
+                      }}
+                      style={{ width: 86, padding: "6px 8px", borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.panel, color: theme.text, outline: "none" }}
+                    />
+                  </td>
+                  <td style={td}>{fmt(R.before)}</td>
+                  <td style={td}>{fmt(R.afterVal)}</td>
+                  <td style={Object.assign({}, td, cellStyle(bandFromDelta(R.delta)), { border: "1px solid " + theme.border, color: textColorForBand(bandFromDelta(R.delta)), fontWeight: 900 })}>{fmt(R.delta)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ marginTop: 8, opacity: 0.72, fontSize: 12 }}>
+        Colors: <span style={{ color: "rgb(34,197,94)" }}>green</span> ≤ ±4mm,{" "}
+        <span style={{ color: "rgb(234,179,8)" }}>yellow</span> &gt; ±4mm but within tolerance,{" "}
+        <span style={{ color: "rgb(239,68,68)" }}>red</span> ≥ tolerance.
+      </div>
+    </div>
+  );
+}
+
+
+export default function App() {
+
+// --- Front-end login gate (UI-only) ---
+// NOTE: This is a simple client-side gate (not secure authentication).
+const LOGIN_USERNAME = "Wingtrim";
+const LOGIN_PASSWORD = "xxx";
+
+const [isAuthed, setIsAuthed] = useState(() => {
+  try {
+    return window.localStorage.getItem("wingtrim_authed") === "1";
+  } catch {
+    return false;
+  }
+});
+const [loginUser, setLoginUser] = useState("");
+const [loginPass, setLoginPass] = useState("");
+const [loginErr, setLoginErr] = useState("");
+
+const handleLogin = (e) => {
+  e?.preventDefault?.();
+  const u = String(loginUser || "").trim();
+  const p = String(loginPass || "");
+  if (u === LOGIN_USERNAME && p === LOGIN_PASSWORD) {
+    setLoginErr("");
+    setIsAuthed(true);
+    try {
+      window.localStorage.setItem("wingtrim_authed", "1");
+    } catch {}
+  } else {
+    setLoginErr("Invalid username or password.");
+    setIsAuthed(false);
+    try {
+      window.localStorage.removeItem("wingtrim_authed");
+    } catch {}
+  }
+};
+
+const handleLogout = () => {
+  setIsAuthed(false);
+  setLoginUser("");
+  setLoginPass("");
+  setLoginErr("");
+  try {
+    window.localStorage.removeItem("wingtrim_authed");
+  } catch {}
+};
+
+
+  const buildManualWideRows = () => {
+    const groups = Array.isArray(manualGroups) && manualGroups.length ? manualGroups : ["A", "B", "C", "D"];
+
+    // Wide header row (matches wide import parser expectations)
+    const wideHeader = [];
+    groups.forEach((g) => {
+      wideHeader.push(g, "Factory", g === "B" ? "L" : "Ist L", g === "B" ? "R" : "Ist R");
+    });
+
+    // Metadata rows (pad to match header length)
+    const padCount = Math.max(0, wideHeader.length - 4);
+    const metaRow1 = ["Make ", "Model", "tolerance ", "correction", ...Array(padCount).fill("")];
+    const metaRow2 = [
+      (meta && meta.make) ? meta.make : "",
+      (meta && meta.model) ? meta.model : "",
+      measureTolerance ?? "",
+      measureCorrection ?? "",
+      ...Array(padCount).fill(""),
+    ];
+
+    // Build rows exactly like a wide CSV/XLSX import: 2 meta rows + header + data
+    const rows = [metaRow1, metaRow2, wideHeader];
+
+    const rowCount = Math.max(0, Number(manualRowCount || 0));
+    for (let i = 0; i < rowCount; i++) {
+      const rowNum = i + 1;
+      const row = [];
+      groups.forEach((g) => {
+        // Manual grid stores keys like: "A1_line", "A1_soll", "A1_l", "A1_r"
+        const kLine = `${g}${rowNum}_line`;
+        const kSoll = `${g}${rowNum}_soll`;
+        const kL = `${g}${rowNum}_l`;
+        const kR = `${g}${rowNum}_r`;
+
+        row.push(
+          manualGrid?.[kLine] ?? "",
+          manualGrid?.[kSoll] ?? "",
+          manualGrid?.[kL] ?? "",
+          manualGrid?.[kR] ?? ""
+        );
+      });
+      rows.push(row);
+    }
+
+    return { rows, groups };
+  };
+
+  const commitManualWideGridToStep2 = () => {
+    try {
+      const { rows } = buildManualWideRows();
+      const parsed = parseWideTableFromRows(rows);
+      applyParsedImport(parsed, "Manual Grid");
+      setShowMeasureMode(false);
+      setShowManualGrid(false);
+      setStep(2);
+    } catch (e) {
+      setImportStatus({ ok: false, name: "", err: String(e?.message || e) });
+    }
+  };
+
+
+
+  const exportManualCSV = () => {
+    console.log("Export CSV triggered");
+    try {
+      const groups = Array.isArray(manualGroups) && manualGroups.length ? manualGroups : ["A", "B", "C", "D"];
+
+      // Wide header row
+      const wideHeader = [];
+      groups.forEach((g) => {
+        wideHeader.push(g, "Factory", g === "B" ? "L" : "Ist L", g === "B" ? "R" : "Ist R");
+      });
+
+      const rows = [];
+
+      // Metadata rows (pad to match wide header length)
+      const padCount = Math.max(0, wideHeader.length - 4);
+      rows.push(["Make ", "Model", "tolerance ", "correction", ...Array(padCount).fill("")]);
+      rows.push([
+        (meta && meta.make) ? meta.make : "",
+        (meta && meta.model) ? meta.model : "",
+        measureTolerance ?? "",
+        measureCorrection ?? "",
+        ...Array(padCount).fill(""),
+      ]);
+
+      // Header row
+      rows.push(wideHeader);
+
+      // Data rows: use manualRowCount for row count if available, else infer from keys
+      const rowCount = (typeof manualRowCount === "number" && manualRowCount > 0)
+        ? manualRowCount
+        : Math.max(
+            0,
+            ...groups.map((g) => {
+              const re = new RegExp("^" + String(g) + "(\\d+)_");
+              let mx = 0;
+              Object.keys(manualGrid || {}).forEach((k) => {
+                const mm = k.match(re);
+                if (mm) mx = Math.max(mx, Number(mm[1] || 0));
+              });
+              return mx;
+            })
+          );
+
+      for (let i = 0; i < rowCount; i++) {
+        const r = [];
+        groups.forEach((g) => {
+          const base = `${g}${i + 1}_`;
+          const line = (manualGrid && manualGrid[base + "line"] != null) ? manualGrid[base + "line"] : `${g}${i + 1}`;
+          const factory = (manualGrid && manualGrid[base + "soll"] != null) ? manualGrid[base + "soll"] : "";
+          const left = (manualGrid && manualGrid[base + "l"] != null) ? manualGrid[base + "l"] : "";
+          const right = (manualGrid && manualGrid[base + "r"] != null) ? manualGrid[base + "r"] : "";
+          r.push(line ?? "", factory ?? "", left ?? "", right ?? "");
+        });
+        rows.push(r);
+      }
+
+      const csv = rows
+        .map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
+        .join("\n");
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.style.display = "none";
+      a.href = url;
+      a.rel = "noopener";
+      a.download = "manual_entry_export.csv";
+      document.body.appendChild(a);
+      console.log("Export CSV click()", { bytes: blob.size });
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2500);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+
+  const [step, setStep] = useState(1);
+
+  // Report (A4 preview) — generated from Step 4 data (no step navigation)
+  const [showReport, setShowReport] = useState(false);
+
+  // Factory trim database (public/trimdb/*) — pre-generated offline. No browser scraping.
+// We load a small index.json, then lazy-load the selected manufacturer's JSON (e.g. Ozone.json).
+const [trimIndex, setTrimIndex] = useState(null);
+const [trimIndexErr, setTrimIndexErr] = useState("");
+const [trimMakeDb, setTrimMakeDb] = useState(null); // currently loaded make file
+const [trimMakeErr, setTrimMakeErr] = useState("");
+
+// Rigging diagram manifest + viewer (informational only; no trim math coupling)
+const [riggingManifest, setRiggingManifest] = useState(null);
+const [riggingBaseDir, setRiggingBaseDir] = useState(""); // e.g. "ozone"
+const [riggingManifestErr, setRiggingManifestErr] = useState("");
+const [riggingPdfUrl, setRiggingPdfUrl] = useState("");
+const [riggingPdfOverrideUrl, setRiggingPdfOverrideUrl] = useState("");
+const [riggingPdfOverrideName, setRiggingPdfOverrideName] = useState("");
+
+const [dbMake, setDbMake] = useState("");
+const [dbModel, setDbModel] = useState("");
+const [dbSize, setDbSize] = useState("");
+
+
+// If arriving from rigging index.html (GitHub Pages) with ?riggingPdf=...&riggingMakeDir=...,
+// load that PDF inline (as an override) and return to the step the user was on when they clicked "Choose file".
+useEffect(() => {
+  try {
+    const params = new URLSearchParams(window.location.search || "");
+    const pdf = params.get("riggingPdf");
+    const makeDir = params.get("riggingMakeDir");
+    if (!pdf) return;
+
+    const base = (import.meta?.env?.BASE_URL ?? "/").replace(/\/?$/, "/");
+    const dir = (makeDir || riggingBaseDir || "ozone").toLowerCase();
+    const pdfUrl = `${base}trimdb/${dir}/_rigging_pdfs/${pdf}`;
+
+    setRiggingBaseDir(dir);
+    setRiggingPdfOverrideName(pdf);
+    setRiggingPdfOverrideUrl(pdfUrl);
+
+    const rs = localStorage.getItem("rigging_return_step");
+    const rsNum = rs ? parseInt(rs, 10) : NaN;
+    if (!Number.isNaN(rsNum)) setStep(rsNum);
+
+    // Clean URL (remove query params) without reload
+    window.history.replaceState({}, "", window.location.pathname);
+  } catch {
+    // no-op
+  }
+  // run once
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+
+  // Step 1 manual entry grid (wide CSV-style). UI-only; does not affect import or Step 3/4.
+  const MANUAL_DEFAULT_ROWS = 16;
+  const MANUAL_DEFAULT_GROUPS = ["A", "B", "C", "D"];
+
+  const [showManualGrid, setShowManualGrid] = useState(false);
+  const [manualPasteBox, setManualPasteBox] = useState("");
+  const [manualPasteOpen, setManualPasteOpen] = useState(false);
+  const [showMeasureMode, setShowMeasureMode] = useState(false);
+
+
+  // Load trim database index once (served from /public). Safe + offline; no scraping.
+useEffect(() => {
+  let cancelled = false;
+  (async () => {
+    try {
+      setTrimIndexErr("");
+      const base = (import.meta.env?.BASE_URL ?? "/");
+      const baseNorm = base.endsWith("/") ? base : `${base}/`;
+      const indexUrl = `${baseNorm}trimdb/index.json`;
+      const res = await fetch(indexUrl, { cache: "no-store" });
+      if (!res.ok) throw new Error(`Failed to load trimdb/index.json (${res.status})`);
+      const data = await res.json();
+      if (!cancelled) setTrimIndex(data);
+    } catch (e) {
+      if (!cancelled) setTrimIndexErr(String(e?.message || e));
+    }
+  })();
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
+// Lazy-load the selected manufacturer's DB when Make changes.
+useEffect(() => {
+  let cancelled = false;
+  (async () => {
+    try {
+      setTrimMakeErr("");
+      setTrimMakeDb(null);
+
+      if (!dbMake) return;
+
+      const entry = (trimIndex?.makes || []).find((x) => String(x?.make) === String(dbMake));
+      if (!entry?.file) throw new Error(`No database file for make: ${dbMake}`);
+
+      const base = (import.meta.env?.BASE_URL ?? "/");
+      const baseNorm = base.endsWith("/") ? base : `${base}/`;
+      const makeUrl = `${baseNorm}trimdb/${entry.file}`;
+      const res = await fetch(makeUrl, { cache: "no-store" });
+      if (!res.ok) throw new Error(`Failed to load trimdb/${entry.file} (${res.status})`);
+      const data = await res.json();
+      if (!cancelled) setTrimMakeDb(data);
+    } catch (e) {
+      if (!cancelled) setTrimMakeErr(String(e?.message || e));
+    }
+  })();
+  return () => {
+    cancelled = true;
+  };
+}, [trimIndex, dbMake]);
+
+// Fallback: if no Factory DB make is selected yet, load a default rigging manifest (so the rigging PDF dropdown isn't empty).
+// This keeps behavior deterministic and does not touch trim/pitch/baseline logic.
+useEffect(() => {
+  let cancelled = false;
+  (async () => {
+    try {
+      if (dbMake) return;                // primary loader will handle when a make is selected
+      if (riggingManifest) return;       // already loaded
+      if (riggingManifestErr) return;    // don't spam retries
+
+      const base = (import.meta.env?.BASE_URL ?? "/");
+      const baseNorm = base.endsWith("/") ? base : `${base}/`;
+      const defaultDir = "ozone";
+      const url = `${baseNorm}trimdb/${defaultDir}/_exports/rigging_manifest.json`;
+
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) return;
+
+      const data = await res.json();
+      if (!cancelled) {
+        setRiggingBaseDir(defaultDir);
+        setRiggingManifest(data);
+      }
+    } catch (e) {
+      // silent: this is only a convenience for the dropdown
+    }
+  })();
+  return () => { cancelled = true; };
+}, [dbMake, riggingManifest, riggingManifestErr]);
+
+
+
+
+// Lazy-load rigging manifest for the selected manufacturer (served from /public; offline generated).
+useEffect(() => {
+  let cancelled = false;
+  (async () => {
+    try {
+      setRiggingManifestErr("");
+      setRiggingManifest(null);
+      setRiggingBaseDir("");
+      setRiggingPdfUrl("");
+
+      if (!dbMake || !trimIndex) return;
+
+      const entry = (trimIndex?.makes || []).find((x) => String(x?.make) === String(dbMake));
+      const file = String(entry?.file || "");
+      const dirFromFile = file.includes("/") ? file.split("/")[0] : "";
+      const fallbackDir = String(dbMake || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+      const rigDir = dirFromFile || fallbackDir;
+      if (!cancelled) setRiggingBaseDir(rigDir);
+
+      const base = (import.meta.env?.BASE_URL ?? "/");
+      const baseNorm = base.endsWith("/") ? base : `${base}/`;
+
+      // Primary (matches our offline export convention)
+      const url1 = `${baseNorm}trimdb/${rigDir}/_exports/rigging_manifest.json`;
+
+      let res = await fetch(url1, { cache: "no-store" });
+      if (!res.ok) {
+        // Secondary fallback: if entry.file already includes a dir path, try full dirname
+        const parts = file.split("/").filter(Boolean);
+        const dir2 = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
+        const url2 = dir2 ? `${baseNorm}trimdb/${dir2}/_exports/rigging_manifest.json` : "";
+        if (url2) res = await fetch(url2, { cache: "no-store" });
+      }
+      if (!res.ok) throw new Error(`Failed to load rigging_manifest.json for ${dbMake} (${res.status})`);
+
+      const data = await res.json();
+      if (!cancelled) setRiggingManifest(data);
+    } catch (e) {
+      if (!cancelled) setRiggingManifestErr(String(e?.message || e));
+    }
+  })();
+  return () => { cancelled = true; };
+}, [trimIndex, dbMake]);
+
+
+  const dbMakes = useMemo(() => {
+  const arr = (trimIndex?.makes || []).map((x) => String(x?.make || "")).filter(Boolean);
+  return Array.from(new Set(arr)).sort((a, b) => a.localeCompare(b));
+}, [trimIndex]);
+
+const dbModels = useMemo(() => {
+  const modelsObj = trimMakeDb?.models || {};
+  return Object.keys(modelsObj).sort((a, b) => a.localeCompare(b));
+}, [trimMakeDb]);
+
+const dbSizes = useMemo(() => {
+  const sizesObj = trimMakeDb?.models?.[dbModel]?.sizes || {};
+  return Object.keys(sizesObj).sort((a, b) => a.localeCompare(b));
+}, [trimMakeDb, dbModel]);
+
+
+// Derive rigging PDF URL deterministically from manifest when a factory DB wing is selected.
+// Informational only; does not affect trim/pitch/baseline logic.
+useEffect(() => {
+  if (!riggingManifest || !dbModel || !dbSize) {
+    setRiggingPdfUrl("");
+    return;
+  }
+  const modelEntry = riggingManifest?.by_model_size?.[dbModel];
+  const sizeEntry = modelEntry?.sizes?.[dbSize];
+  const pdfFilename = sizeEntry?.matched ? String(sizeEntry?.pdf_filename || "") : "";
+  if (!pdfFilename) {
+    setRiggingPdfUrl("");
+    return;
+  }
+
+  const base = (import.meta.env?.BASE_URL ?? "/");
+  const baseNorm = base.endsWith("/") ? base : `${base}/`;
+  setRiggingPdfUrl(`${baseNorm}trimdb/${String(riggingBaseDir || String(dbMake || "").toLowerCase().replace(/[^a-z0-9]+/g, ""))}/_rigging_pdfs/${pdfFilename}`);
+}, [riggingManifest, riggingBaseDir, dbMake, dbModel, dbSize]);
+
+// Rigging PDF manual override (local file selection)
+const effectiveRiggingPdfUrl = riggingPdfOverrideUrl || riggingPdfUrl;
+
+useEffect(() => {
+  // Cleanup object URL on unmount
+  return () => {
+    if (riggingPdfOverrideUrl && String(riggingPdfOverrideUrl).startsWith("blob:")) {
+      try { URL.revokeObjectURL(riggingPdfOverrideUrl); } catch (e) {}
+    }
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+
+const handleSelectRiggingPdfFile = (e) => {
+  const file = e?.target?.files?.[0];
+  if (!file) return;
+
+  if (riggingPdfOverrideUrl && String(riggingPdfOverrideUrl).startsWith("blob:")) {
+    try { URL.revokeObjectURL(riggingPdfOverrideUrl); } catch (err) {}
+  }
+
+  const url = URL.createObjectURL(file);
+  setRiggingPdfOverrideUrl(url);
+  setRiggingPdfOverrideName(file.name || "selected.pdf");
+};
+
+const handleResetRiggingPdf = () => {
+  if (riggingPdfOverrideUrl && String(riggingPdfOverrideUrl).startsWith("blob:")) {
+    try { URL.revokeObjectURL(riggingPdfOverrideUrl); } catch (err) {}
+  }
+  setRiggingPdfOverrideUrl("");
+  setRiggingPdfOverrideName("");
+};
+
+function TrimWorkflow({ hint = "" }) {
+  const viewerId = `rigging_viewer_${String(hint || "main").replace(/[^a-z0-9]+/gi, "_")}`;
+
+  // GitHub Pages friendly base path (e.g. "/repo-name/") via Vite BASE_URL
+  const baseUrl = (import.meta?.env?.BASE_URL ?? "/").replace(/\/?$/, "/");
+  const riggingFolderUrl = `${baseUrl}trimdb/${(riggingBaseDir || "ozone").toLowerCase()}/_rigging_pdfs/`;
+  const riggingFolderIndexUrl = `${riggingFolderUrl}index.html`;
+
+  const riggingDropdownOptions = useMemo(() => {
+    const out = [];
+    const byModel = riggingManifest?.by_model_size || {};
+    Object.keys(byModel).forEach((model) => {
+      const sizes = byModel[model]?.sizes || {};
+      Object.keys(sizes).forEach((size) => {
+        const entry = sizes[size];
+        if (entry?.matched && entry?.pdf_filename) {
+          out.push({
+            label: `${model} — ${size}`,
+            filename: entry.pdf_filename,
+          });
+        }
+      });
+    });
+    out.sort((a, b) => a.label.localeCompare(b.label));
+    return out;
+  }, [riggingManifest]);
+
+  const riggingDropdownValue =
+    riggingPdfOverrideUrl && riggingPdfOverrideUrl.startsWith(riggingFolderUrl) ? (riggingPdfOverrideName || "") : "";
+
+  const pillBtn = (enabled = true) => ({
+    border: "1px solid rgba(70,140,255,0.65)",
+    background: "rgba(70,140,255,0.25)",
+    borderRadius: 999,
+    padding: "8px 10px",
+    display: "inline-flex",
+    gap: 10,
+    alignItems: "center",
+    cursor: enabled ? "pointer" : "default",
+    color: theme.text,
+    fontWeight: 950,
+    opacity: enabled ? 1 : 0.5,
+    userSelect: "none",
+    appearance: "none",
+    WebkitAppearance: "none",
+    MozAppearance: "none",
+    outline: "none",
+  });
+
+  return (
+    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 10, marginBottom: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ fontWeight: 950 }}>Rigging diagram (PDF){hint ? ` — ${hint}` : ""}</div>
+
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => {
+              if (!effectiveRiggingPdfUrl) return;
+              const el = document.getElementById(viewerId);
+              if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+            disabled={!effectiveRiggingPdfUrl}
+            style={pillBtn(!!effectiveRiggingPdfUrl)}
+            title="Show the PDF below"
+          >
+            Open PDF
+          </button>
+
+
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <div style={{ fontWeight: 900, opacity: 0.8, fontSize: 12 }}>Rigging PDF</div>
+            <select
+              value={riggingDropdownValue}
+              onChange={(e) => {
+                const filename = e.target.value;
+                if (!filename) return;
+                setRiggingPdfOverrideUrl(`${riggingFolderUrl}${filename}`);
+                setRiggingPdfOverrideName(filename);
+                // reveal viewer
+                setTimeout(() => {
+                  const el = document.getElementById(viewerId);
+                  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                }, 50);
+              }}
+              style={{
+                border: `1px solid ${theme.border}`,
+                background: theme.bg2,
+                color: theme.text,
+                borderRadius: 12,
+                padding: "8px 10px",
+                fontWeight: 900,
+                minWidth: 220,
+                appearance: "none",
+                WebkitAppearance: "none",
+                MozAppearance: "none",
+                outline: "none",
+              }}
+              title="Select a rigging PDF from the site folder"
+            >
+              <option value="">Select…</option>
+              {riggingDropdownOptions.length === 0 && (
+                <option value="" disabled>
+                  No PDFs found (manifest not loaded or empty)
+                </option>
+              )}
+              {riggingDropdownOptions.map((o) => (
+                <option key={o.filename} value={o.filename}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              // Open your hosted index.html in the rigging PDFs folder
+              try { localStorage.setItem("rigging_return_step", String(step)); } catch {}
+              window.open(riggingFolderIndexUrl, "_blank", "noopener,noreferrer");
+            }}
+            style={pillBtn(true)}
+            title="Browse the rigging PDFs folder on the site"
+          >
+            Open in new tab
+          </button>
+
+          <label style={pillBtn(true)} title="Upload a local PDF from your computer">
+            Upload PDF
+            <input type="file" accept="application/pdf" onChange={handleSelectRiggingPdfFile} style={{ display: "none" }} />
+          </label>
+
+          <button
+            type="button"
+            onClick={handleResetRiggingPdf}
+            disabled={!riggingPdfOverrideUrl}
+            style={pillBtn(!!riggingPdfOverrideUrl)}
+            title="Clear uploaded override and use factory match again"
+          >
+            Use factory match
+          </button>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        {riggingPdfOverrideName ? <div style={{ fontWeight: 900, opacity: 0.85 }}>Uploaded: {riggingPdfOverrideName}</div> : null}
+        {!effectiveRiggingPdfUrl && !riggingManifestErr ? (
+          <div style={{ fontWeight: 900, opacity: 0.75 }}>No rigging PDF selected (choose a Factory DB wing, browse rigging PDFs, or upload a PDF).</div>
+        ) : null}
+        {riggingManifestErr ? <div style={{ color: theme.bad, fontWeight: 950 }}>{riggingManifestErr}</div> : null}
+      </div>
+
+      {effectiveRiggingPdfUrl ? (
+        <div id={viewerId} style={{ marginTop: 10, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: "hidden" }}>
+          <object data={effectiveRiggingPdfUrl} type="application/pdf" width="100%" height="520">
+            <div style={{ padding: 12, fontWeight: 900, opacity: 0.9 }}>
+              PDF preview not available in this browser.{" "}
+              <a href={effectiveRiggingPdfUrl} target="_blank" rel="noopener noreferrer" style={{ color: "rgba(59,130,246,0.95)" }}>
+                Open the rigging diagram
+              </a>
+              .
+            </div>
+          </object>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+
+
+  // Keep dependent dropdowns valid
+useEffect(() => {
+  if (!dbMake) {
+    setDbModel("");
+    setDbSize("");
+    return;
+  }
+  // If make changed, we clear model/size immediately; models will repopulate once make DB loads.
+  setDbModel("");
+  setDbSize("");
+}, [dbMake]);
+
+useEffect(() => {
+  if (!dbModel) {
+    setDbSize("");
+    return;
+  }
+  if (dbSize && !trimMakeDb?.models?.[dbModel]?.sizes?.[dbSize]) setDbSize("");
+}, [trimMakeDb, dbModel, dbSize]);
+
+  function buildWideRowsFromTrimDbWing(make, model, size, wingSizeObj) {
+    const tol = wingSizeObj?.tolerance ?? "";
+    const corr = wingSizeObj?.correction ?? "";
+    const groups = wingSizeObj?.groups || {};
+    const orderIds = (obj) =>
+      Object.keys(obj || {}).sort((a, b) => {
+        const na = parseInt(String(a).replace(/\D+/g, ""), 10);
+        const nb = parseInt(String(b).replace(/\D+/g, ""), 10);
+        if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+        return String(a).localeCompare(String(b));
+      });
+
+    const A = groups.A || {};
+    const B = groups.B || {};
+    const C = groups.C || {};
+    const D = groups.D || {};
+    const BR = groups.BR || {};
+
+    const idsA = orderIds(A);
+    const idsB = orderIds(B);
+    const idsC = orderIds(C);
+    const idsD = orderIds(D);
+    const idsBR = orderIds(BR);
+
+    const max = Math.max(idsA.length, idsB.length, idsC.length, idsD.length, idsBR.length, 0);
+
+    const rows = [];
+    rows.push(["Make", "Model", "Tolerance", "Correction"]);
+    rows.push([make, model, tol, corr]);
+    rows.push([
+      "A",
+      "Factory",
+      "Ist L",
+      "Ist R",
+      "B",
+      "Factory",
+      "Ist L",
+      "Ist R",
+      "C",
+      "Factory",
+      "Ist L",
+      "Ist R",
+      "D",
+      "Factory",
+      "Ist L",
+      "Ist R",
+      "BR",
+      "Factory",
+      "Ist L",
+      "Ist R",
+    ]);
+
+    for (let i = 0; i < max; i++) {
+      const r = new Array(20).fill("");
+      if (i < idsA.length) {
+        const id = idsA[i];
+        r[0] = id;
+        r[1] = A[id] ?? "";
+      }
+      if (i < idsB.length) {
+        const id = idsB[i];
+        r[4] = id;
+        r[5] = B[id] ?? "";
+      }
+      if (i < idsC.length) {
+        const id = idsC[i];
+        r[8] = id;
+        r[9] = C[id] ?? "";
+      }
+      if (i < idsD.length) {
+        const id = idsD[i];
+        r[12] = id;
+        r[13] = D[id] ?? "";
+      }
+      if (i < idsBR.length) {
+        const id = idsBR[i];
+        r[16] = id;
+        r[17] = BR[id] ?? "";
+      }
+      // Ist L / Ist R remain blank for factory import
+      rows.push(r);
+    }
+
+    return rows;
+  }
+
+  function importFactoryFromTrimDb() {
+    try {
+      if (!trimIndex) throw new Error("trimdb/index.json not loaded");
+      if (!trimMakeDb) throw new Error("Manufacturer database not loaded");
+      if (!dbMake || !dbModel || !dbSize) throw new Error("Select Make, Model and Size");
+      const wingSizeObj = trimMakeDb?.models?.[dbModel]?.sizes?.[dbSize];
+      if (!wingSizeObj) throw new Error("Selected entry not found in trim database");
+
+      // Open the manual grid immediately so the user sees the edit view.
+      // We also re-open it after applyParsedImport, because applyParsedImport resets this flag.
+      setShowMeasureMode(false);
+      setShowManualGrid(true);
+
+      const rows = buildWideRowsFromTrimDbWing(dbMake, dbModel, dbSize, wingSizeObj);
+      const parsed = parseWideTableFromRows(rows);
+      parsed.meta.size = String(dbSize || "");
+      applyParsedImport(parsed, `trimdb: ${dbMake} / ${dbModel} / ${dbSize}`);
+
+      // ALSO seed the Manual entry (wide grid) so the user can immediately type measured values.
+      // Factory values go into the "Factory" (soll) cells; measured L/R remain blank.
+      const groupsObj = wingSizeObj?.groups || {};
+      const orderIds = (obj) =>
+        Object.keys(obj || {}).sort((a, b) => {
+          const na = parseInt(String(a).replace(/\D+/g, ""), 10);
+          const nb = parseInt(String(b).replace(/\D+/g, ""), 10);
+          if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+          return String(a).localeCompare(String(b));
+        });
+
+      const present = ["A", "B", "C", "D", "BR"].filter(
+        (g) => groupsObj[g] && Object.keys(groupsObj[g] || {}).length > 0
+      );
+      const nextGroups = present.length ? present : ["A", "B", "C", "D"]; // sensible default
+
+      // Determine row count across selected groups
+      const idsByGroup = {};
+      for (const g of nextGroups) {
+        idsByGroup[g] = orderIds(groupsObj[g] || {});
+      }
+      const maxRows = Math.max(1, ...nextGroups.map((g) => (idsByGroup[g] || []).length));
+
+      const nextGrid = {};
+      for (const g of nextGroups) {
+        const ids = idsByGroup[g] || [];
+        for (let i = 0; i < maxRows; i++) {
+          const base = `${g}${i + 1}_`;
+          const lineId = i < ids.length ? String(ids[i] || "") : `${g}${i + 1}`;
+          const factory = i < ids.length ? (groupsObj[g]?.[ids[i]] ?? "") : "";
+          nextGrid[base + "line"] = lineId;
+          nextGrid[base + "soll"] = factory;
+          // Leave measured values blank for user input
+          nextGrid[base + "l"] = "";
+          nextGrid[base + "r"] = "";
+        }
+      }
+
+      setManualGroups(nextGroups);
+      setManualRowCount(maxRows);
+      setManualGrid(nextGrid);
+      setManualActivePos({ row: 0, col: 0 });
+
+      // Re-open on next tick in case applyParsedImport closed it in the same render pass.
+      setTimeout(() => {
+        try {
+          setShowMeasureMode(false);
+          setShowManualGrid(true);
+        } catch (err) {}
+      }, 0);
+    } catch (e) {
+      setImportStatus({ ok: false, name: "", err: String(e?.message || e) });
+    }
+  }
+
+  // --- GLM50C Web Bluetooth (Windows Chrome/Edge) ---
+  // Web Bluetooth is BLE (GATT) only. Some devices do not advertise the custom service UUID,
+  // so we filter by name prefix and use optionalServices. On Windows, some Bosch firmware variants
+  // notify on a different characteristic/service, so we subscribe across ALL primary services.
+  const GLM_SERVICE_UUID = "00005301-0000-0041-5253-534f46540000";
+  const GLM_CHAR_UUID = "00004301-0000-0041-5253-534f46540000";
+  const BATTERY_SERVICE_UUID = "0000180f-0000-1000-8000-00805f9b34fb";
+
+  const AUTOSYNC_ENABLE = new Uint8Array([0xC0, 0x55, 0x02, 0x01, 0x00, 0x1A]);
+
+  const [glmBtState, setGlmBtState] = useState("disconnected"); // disconnected | connecting | connected | error
+
+  const [beepMuted, setBeepMuted] = useState(() => {
+    try { return localStorage.getItem("ttBeepMuted") === "1"; } catch { return false; }
+  });
+  const toggleBeepMuted = () => {
+    setBeepMuted((m) => {
+      const next = !m;
+      window.__ttBeepMuted = next;
+      try { localStorage.setItem("ttBeepMuted", next ? "1" : "0"); } catch {}
+      return next;
+    });
+  };
+  // Keep global flag in sync on mount
+  React.useEffect(() => { window.__ttBeepMuted = beepMuted; }, [beepMuted]);
+  const [glmBtName, setGlmBtName] = useState("");
+  const [glmBtInfo, setGlmBtInfo] = useState("");
+  const [glmLastMm, setGlmLastMm] = useState(null);
+  const [glmRxCount, setGlmRxCount] = useState(0);
+  const [glmSubCount, setGlmSubCount] = useState(0);
+  const [glmLastRxHex, setGlmLastRxHex] = useState("");
+
+  const glmBtDeviceRef = useRef(null);
+  const glmBtSubscribedCharsRef = useRef([]); // subscribed characteristics (all services)
+  const glmBtOnValueRef = useRef(null);
+
+  function glmHex(bytes, max = 24) {
+    if (!bytes) return "";
+    const n = Math.min(bytes.length, max);
+    let s = "";
+    for (let i = 0; i < n; i++) s += bytes[i].toString(16).padStart(2, "0").toUpperCase() + (i === n - 1 ? "" : " ");
+    if (bytes.length > n) s += " …";
+    return s;
+  }
+
+  function glmDecodeDistanceMm(bytes) {
+    if (!bytes || bytes.length < 11) return null;
+    if (bytes[0] !== 0xC0 || bytes[1] !== 0x55) return null;
+    if (bytes[2] !== 0x10 || bytes[3] !== 0x06 || bytes[4] !== 0x08) return null;
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const meters = dv.getFloat32(7, true);
+    if (!Number.isFinite(meters) || meters <= 0 || meters > 200) return null;
+    return Math.round(meters * 1000);
+  }
+
+  async function glmRequestDeviceFiltered() {
+    return await navigator.bluetooth.requestDevice({
+      filters: [
+        { namePrefix: "Bosch GLM50C" },
+        { namePrefix: "Bosch" },
+        { namePrefix: "GLM50C" },
+      ],
+      optionalServices: [GLM_SERVICE_UUID, BATTERY_SERVICE_UUID],
+    });
+  }
+
+  async function glmRequestDeviceAll() {
+    return await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: [GLM_SERVICE_UUID, BATTERY_SERVICE_UUID],
+    });
+  }
+
+  async function glmDisconnect() {
+    try {
+      const dev = glmBtDeviceRef.current;
+      const onv = glmBtOnValueRef.current;
+      const chars = glmBtSubscribedCharsRef.current || [];
+      if (onv) {
+        chars.forEach((ch) => {
+          try { ch.removeEventListener("characteristicvaluechanged", onv); } catch (_) {}
+        });
+      }
+      glmBtOnValueRef.current = null;
+      glmBtSubscribedCharsRef.current = [];
+      if (dev?.gatt?.connected) dev.gatt.disconnect();
+    } catch (_) {
+      // ignore
+    } finally {
+      glmBtDeviceRef.current = null;
+      setGlmBtState("disconnected");
+      setGlmBtName("");
+      setGlmBtInfo("");
+      setGlmSubCount(0);
+      setGlmRxCount(0);
+      setGlmLastMm(null);
+      setGlmLastRxHex("");
+    }
+  }
+
+  async function glmSubscribeAllServices(server) {
+    const services = await server.getPrimaryServices();
+    const subscribed = [];
+    for (const svc of services) {
+      let chars = [];
+      try { chars = await svc.getCharacteristics(); } catch (_) { chars = []; }
+      for (const ch of chars) {
+        try {
+          await ch.startNotifications();
+          subscribed.push(ch);
+        } catch (_) {
+          // ignore non-notifiable / permission issues
+        }
+      }
+    }
+    return subscribed;
+  }
+
+  async function glmTryWriteAutosync(glmService) {
+    const chars = await glmService.getCharacteristics();
+    const preferred = chars.find((c) => (c.uuid || "").toLowerCase() === GLM_CHAR_UUID);
+    const order = preferred ? [preferred, ...chars.filter((c) => c !== preferred)] : chars;
+
+    for (const ch of order) {
+      try {
+        try { await ch.writeValueWithoutResponse(AUTOSYNC_ENABLE); }
+        catch (_) { await ch.writeValue(AUTOSYNC_ENABLE); }
+        return ch;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  async function glmConnect(mode = "filtered") {
+    try {
+      if (!("bluetooth" in navigator)) {
+        alert("Web Bluetooth is not available. Use Chrome/Edge on Windows and HTTPS/localhost.");
+        return;
+      }
+      await glmDisconnect();
+      setGlmBtState("connecting");
+      setGlmBtInfo("Choose device…");
+
+      const device = mode === "all" ? await glmRequestDeviceAll() : await glmRequestDeviceFiltered();
+      glmBtDeviceRef.current = device;
+      setGlmBtName(device?.name || "");
+      setGlmBtInfo("Connecting…");
+
+      device.addEventListener("gattserverdisconnected", () => {
+        setGlmBtState("disconnected");
+        setGlmBtInfo("Disconnected");
+      });
+
+      const server = await device.gatt.connect();
+      setGlmBtInfo("Connected. Subscribing (all services)…");
+
+      const subscribed = await glmSubscribeAllServices(server);
+      glmBtSubscribedCharsRef.current = subscribed;
+      setGlmSubCount(subscribed.length);
+
+      // Listener for any subscribed characteristic
+      const onValue = (ev) => {
+        const v = ev?.target?.value;
+        if (!v) return;
+
+        const bytes = new Uint8Array(v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength));
+        setGlmRxCount((n) => n + 1);
+        setGlmLastRxHex(glmHex(bytes, 24));
+
+        const mm = glmDecodeDistanceMm(bytes);
+        if (mm == null) return;
+
+        setGlmLastMm(mm);
+
+        const pos =
+          (manualActiveRef && manualActiveRef.current) ? manualActiveRef.current
+          : (manualActivePosRef && manualActivePosRef.current) ? manualActivePosRef.current
+          : manualActivePos;
+
+        if (!pos) return;
+
+        try {
+          manualSetCell(pos.row, pos.col, String(mm));
+          const next = manualMeasureNextPos(pos.row, pos.col);
+          manualFocusCell(next.row, next.col);
+          if (showMeasureMode && measureInputRef && measureInputRef.current) {
+            try { measureInputRef.current.focus(); } catch (_) {}
+          }
+        } catch (_) {}
+      };
+
+      glmBtOnValueRef.current = onValue;
+      subscribed.forEach((ch) => {
+        try { ch.addEventListener("characteristicvaluechanged", onValue); } catch (_) {}
+      });
+
+      // Now get GLM service and send AutoSyncEnable
+      setGlmBtInfo("Getting GLM service…");
+      const glmService = await server.getPrimaryService(GLM_SERVICE_UUID);
+      setGlmBtInfo("Sending AutoSyncEnable…");
+
+      const writtenTo = await glmTryWriteAutosync(glmService);
+      if (!writtenTo) {
+        setGlmBtInfo("AutoSync write failed. Remove GLM from Windows Bluetooth devices and retry.");
+      } else {
+        // Kick: read the preferred characteristic once (some Windows stacks start delivering notifications after a read)
+        try {
+          const pref = await glmService.getCharacteristic(GLM_CHAR_UUID);
+          try { await pref.readValue(); } catch (_) {}
+        } catch (_) {}
+
+        setGlmBtInfo(`Subscribed=${subscribed.length}. AutoSync written (${writtenTo.uuid?.slice(0,8)}…). Press Measure.`);
+      }
+
+      setGlmBtState("connected");
+    } catch (err) {
+      console.error(err);
+      setGlmBtState("error");
+      setGlmBtInfo(String(err?.message || err));
+    }
+  }
+  // --- /GLM50C Web Bluetooth ---
+
+  const [measureCorrection, setMeasureCorrection] = useState(0);
+  const [measureTolerance, setMeasureTolerance] = useState(10);
+  const [manualRowCount, setManualRowCount] = useState(MANUAL_DEFAULT_ROWS);
+  const [manualGroups, setManualGroups] = useState(MANUAL_DEFAULT_GROUPS);
+  const MANUAL_SUBCOLS = [
+    { key: "line", labelA: "Line", labelBD: "Line" },
+    { key: "soll", labelA: "Factory", labelBD: "Factory" },
+    { key: "l", labelA: "Ist L", labelBD: "L" },
+    { key: "r", labelA: "Ist R", labelBD: "R" },
+  ];
+
+  const [manualGrid, setManualGrid] = useState(() => ({}));
+  const manualGridRefs = useRef({});
+  const manualActiveRef = useRef({ row: 0, col: 0 });
+  const measureInputRef = useRef(null);
+  const manualScrollRef = useRef(null);
+  const [manualActivePos, setManualActivePos] = useState({ row: 0, col: 0 });
+
+  // Keep latest manualActivePos available inside async callbacks (e.g., Web Bluetooth notifications)
+  const manualActivePosRef = useRef(manualActivePos);
+  useEffect(() => {
+    manualActivePosRef.current = manualActivePos;
+  }, [manualActivePos]);
+
+
+
+  // Manual grid multi-cell selection (drag to select)
+  const [manualSel, setManualSel] = useState(null); // { r0,c0,r1,c1 }
+  const [manualSelecting, setManualSelecting] = useState(false);
+
+  const manualNormSel = (sel) => {
+    if (!sel) return null;
+    const r0 = Math.min(sel.r0, sel.r1);
+    const r1 = Math.max(sel.r0, sel.r1);
+    const c0 = Math.min(sel.c0, sel.c1);
+    const c1 = Math.max(sel.c0, sel.c1);
+    return { r0, c0, r1, c1 };
+  };
+
+  const manualIsSelected = (r, c) => {
+    const s = manualNormSel(manualSel);
+    if (!s) return false;
+    return r >= s.r0 && r <= s.r1 && c >= s.c0 && c <= s.c1;
+  };
+
+  const manualClearSelection = () => setManualSel(null);
+
+  const manualClearSelectedCells = () => {
+    const s = manualNormSel(manualSel);
+    if (!s) return;
+    setManualGrid((prev) => {
+      const next = { ...prev };
+      for (let rr = s.r0; rr <= s.r1; rr++) {
+        for (let cc = s.c0; cc <= s.c1; cc++) {
+          const kk = manualCellKey(rr, cc);
+          const subKey = MANUAL_SUBCOLS[cc % MANUAL_SUBCOLS.length]?.key;
+          if (showMeasureMode && (subKey === "line" || subKey === "soll")) continue;
+          delete next[kk];
+        }
+      }
+      return next;
+    });
+  };
+
+  
+  useEffect(() => {
+    if (!manualSelecting) return;
+    const el = manualScrollRef.current;
+    if (!el) return;
+
+    const EDGE = 40;
+    const SPEED = 14;
+
+    const onMove = (e) => {
+      const rect = el.getBoundingClientRect();
+      const y = e.clientY;
+      if (y < rect.top + EDGE) {
+        el.scrollTop -= SPEED;
+      } else if (y > rect.bottom - EDGE) {
+        el.scrollTop += SPEED;
+      }
+    };
+
+    window.addEventListener("pointermove", onMove);
+    return () => window.removeEventListener("pointermove", onMove);
+  }, [manualSelecting]);
+
+useEffect(() => {
+    const up = () => setManualSelecting(false);
+    window.addEventListener("mouseup", up);
+    window.addEventListener("pointerup", up);
+    return () => {
+      window.removeEventListener("mouseup", up);
+      window.removeEventListener("pointerup", up);
+    };
+  }, []);
+
+
+  const manualColCount = manualGroups.length * MANUAL_SUBCOLS.length;
+
+
+  const manualColMeta = (colIdx) => {
+    const g = Math.floor(colIdx / MANUAL_SUBCOLS.length);
+    const s = colIdx % MANUAL_SUBCOLS.length;
+    const groupLetter = manualGroups[g] || "A";
+    const sub = MANUAL_SUBCOLS[s]?.key || "soll";
+    const label = MANUAL_SUBCOLS[s]?.labelA || sub;
+    return { groupLetter, sub, label, groupIndex: g, subIndex: s };
+  };
+
+  const manualCellKey = (rowIdx, colIdx) => {
+    const meta = manualColMeta(colIdx);
+    const groupLetter = meta && meta.groupLetter ? meta.groupLetter : "A";
+    const sub = meta && meta.sub ? meta.sub : "soll";
+    return `${groupLetter}${rowIdx + 1}_${sub}`;
+  };
+
+  const manualFocusCell = (r, c) => {
+    manualActiveRef.current = { row: r, col: c };
+    setManualActivePos({ row: r, col: c });
+    setTimeout(() => {
+      const el = document.getElementById(`manualCell_${r}_${c}`);
+      if (el && el.focus) el.focus();
+      if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }, 0);
+  };
+
+  const manualSetCell = (r, c, v) => {
+    const k = manualCellKey(r, c);
+    const subKey = MANUAL_SUBCOLS[c % MANUAL_SUBCOLS.length]?.key;
+
+    // Sanitize numeric measurement inputs: remove letters, trim decimals.
+    let nextVal = v ?? "";
+    if (subKey === "soll" || subKey === "l" || subKey === "r") {
+      const raw = `${nextVal ?? ""}`.trim();
+      const noDec = raw.split(".")[0].split(",")[0];
+      let cleaned = noDec.replace(/[^0-9-]/g, "");
+      // keep only a single leading minus
+      cleaned = cleaned.replace(/(?!^)-/g, "");
+      nextVal = cleaned;
+    }
+
+    setManualGrid((prev) => {
+      // avoid state updates if unchanged
+      const cur = prev[k] ?? "";
+      const nextS = nextVal ?? "";
+      if (cur === nextS) return prev;
+      return { ...prev, [k]: nextS };
+    });
+  };
+
+
+
+
+  const manualPosLabel = (rowIdx, colIdx) => {
+    const meta = manualColMeta(colIdx);
+    const side = meta.sub === "l" ? "Left" : meta.sub === "r" ? "Right" : "";
+    return `${meta.groupLetter}${rowIdx + 1} ${meta.label}${side ? ` (${side})` : ""}`;
+  };
+
+  const manualNextPos = (rowIdx, colIdx) => {
+    const nextRow = rowIdx + 1;
+    if (nextRow < manualRowCount) return { row: nextRow, col: colIdx };
+    const nextCol = colIdx + 1;
+    if (nextCol < manualColCount) return { row: 0, col: nextCol };
+    return { row: rowIdx, col: colIdx };
+  };
+
+  const manualPrevPos = (rowIdx, colIdx) => {
+    const prevRow = rowIdx - 1;
+    if (prevRow >= 0) return { row: prevRow, col: colIdx };
+    const prevCol = colIdx - 1;
+    if (prevCol >= 0) return { row: manualRowCount - 1, col: prevCol };
+    return { row: rowIdx, col: colIdx };
+  };
+
+    const manualMeasureRowHasLineAndFactory = (groupLetter, rowIdx) => {
+    const lineKey = `${groupLetter}${rowIdx + 1}_line`;
+    const factoryKey = `${groupLetter}${rowIdx + 1}_soll`;
+    const lineVal = manualGrid[lineKey];
+    const factoryNum = Number(manualGrid[factoryKey]);
+    return Boolean(String(lineVal ?? "").trim()) && Number.isFinite(factoryNum);
+  };
+
+  const manualMeasureNextPos = (rowIdx, colIdx) => {
+    const stepOnce = (r0, c0) => {
+      const meta = manualColMeta(c0);
+      const groupIndex = meta.groupIndex;
+      const sub = meta.sub;
+
+      const colFor = (gIndex, subKey) => {
+        const sIndex = MANUAL_SUBCOLS.findIndex((s) => s.key === subKey);
+        return gIndex * MANUAL_SUBCOLS.length + (sIndex >= 0 ? sIndex : 0);
+      };
+
+      // Measurement mode order:
+      // A Left down rows -> A Right down rows -> B Left down rows -> B Right down rows -> ...
+      if (sub === "l") {
+        const nextRow = r0 + 1;
+        if (nextRow < manualRowCount) return { row: nextRow, col: colFor(groupIndex, "l") };
+        return { row: 0, col: colFor(groupIndex, "r") };
+      }
+
+      if (sub === "r") {
+        const nextRow = r0 + 1;
+        if (nextRow < manualRowCount) return { row: nextRow, col: colFor(groupIndex, "r") };
+        const nextGroup = groupIndex + 1;
+        if (nextGroup < manualGroups.length) return { row: 0, col: colFor(nextGroup, "l") };
+        return { row: r0, col: c0 };
+      }
+
+      return { row: r0, col: colFor(groupIndex, "l") };
+    };
+
+    let cur = { row: rowIdx, col: colIdx };
+    let guard = 0;
+    const guardMax = Math.max(1, manualRowCount * manualGroups.length * 4);
+
+    while (guard < guardMax) {
+      const cand = stepOnce(cur.row, cur.col);
+      const meta = manualColMeta(cand.col);
+      const subKey = meta.sub;
+      const groupLetter = meta.groupLetter;
+
+      // Only validate measurement cells (L/R). Non L/R shouldn't be target here; if it is, just keep stepping.
+      if ((subKey === "l" || subKey === "r") && manualMeasureRowHasLineAndFactory(groupLetter, cand.row)) {
+        return cand;
+      }
+
+      // If missing line/factory, skip ahead (effectively jumps through empty sections until a valid row is found)
+      cur = cand;
+      guard += 1;
+    }
+
+    return stepOnce(rowIdx, colIdx);
+  };
+
+  function manualMeasurePrevPos(rowIdx, colIdx) {
+    const stepOnce = (r0, c0) => {
+      const meta = manualColMeta(c0);
+      const groupIndex = meta.groupIndex;
+      const sub = meta.sub;
+
+      const colFor = (gIndex, subKey) => {
+        const sIndex = MANUAL_SUBCOLS.findIndex((s) => s.key === subKey);
+        return gIndex * MANUAL_SUBCOLS.length + (sIndex >= 0 ? sIndex : 0);
+      };
+
+      // Reverse of measurement mode order:
+      // ... -> B Right up rows -> B Left up rows -> A Right up rows -> A Left up rows
+      if (sub === "r") {
+        const prevRow = r0 - 1;
+        if (prevRow >= 0) return { row: prevRow, col: colFor(groupIndex, "r") };
+        return { row: manualRowCount - 1, col: colFor(groupIndex, "l") };
+      }
+
+      if (sub === "l") {
+        const prevRow = r0 - 1;
+        if (prevRow >= 0) return { row: prevRow, col: colFor(groupIndex, "l") };
+        const prevGroup = groupIndex - 1;
+        if (prevGroup >= 0) return { row: manualRowCount - 1, col: colFor(prevGroup, "r") };
+        return { row: r0, col: c0 };
+      }
+
+      return { row: r0, col: colFor(groupIndex, "l") };
+    };
+
+    let cur = { row: rowIdx, col: colIdx };
+    let guard = 0;
+    const guardMax = Math.max(1, manualRowCount * manualGroups.length * 4);
+
+    while (guard < guardMax) {
+      const cand = stepOnce(cur.row, cur.col);
+      const meta = manualColMeta(cand.col);
+      const subKey = meta.sub;
+      const groupLetter = meta.groupLetter;
+
+      if ((subKey === "l" || subKey === "r") && manualMeasureRowHasLineAndFactory(groupLetter, cand.row)) {
+        return cand;
+      }
+
+      cur = cand;
+      guard += 1;
+    }
+
+    return { row: rowIdx, col: colIdx };
+  };
+
+  const manualEnsureLineLabels = () => {
+    setManualGrid((prev) => {
+      let next = prev;
+      for (let r = 0; r < manualRowCount; r++) {
+        for (let g = 0; g < manualGroups.length; g++) {
+          const lineKey = `${manualGroups[g]}${r + 1}_line`;
+          // Only set if truly unset (undefined). If blank string exists, treat as intentionally blank.
+          if (next[lineKey] === undefined) {
+            next = { ...next, [lineKey]: `${manualGroups[g]}${r + 1}` };
+          }
+        }
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!showManualGrid) return;
+    manualEnsureLineLabels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showManualGrid, manualRowCount, manualGroups]);
+
+
+  useEffect(() => {
+    if (!showMeasureMode) return;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setShowMeasureMode(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showMeasureMode, manualActivePos.row, manualActivePos.col]);
+
+
+  useEffect(() => {
+    if (!showMeasureMode) return;
+    const t = setTimeout(() => {
+      try {
+        if (measureInputRef.current) measureInputRef.current.focus();
+      } catch (e) {}
+    }, 0);
+    return () => clearTimeout(t);
+  }, [showMeasureMode]);
+
+
+
+  const manualPasteIntoGrid = (startRow, startCol, textValue) => {
+    const raw0 = `${textValue ?? ""}`.replace(/\r\n?/g, "\n").trimEnd();
+    if (!raw0) return;
+
+    // Detect delimiter-based blocks (TSV/CSV) vs a vertical "token stream" (one value per line),
+    // which is common when copying from some CSV viewers/editors.
+    const linesAll = raw0.split("\n").map((l) => l.trim());
+    const lines = linesAll.filter((l) => l.length > 0);
+    if (lines.length === 0) return;
+
+    const sample = lines[0] ?? "";
+    const hasTabs = raw0.includes("\t");
+    const hasComma = sample.includes(",");
+    const hasSemi = sample.includes(";");
+    const isTokenStream = !hasTabs && !hasComma && !hasSemi;
+
+    // Helper: get group + subcol from a flat col index.
+    const colToGroupAndSub = (colIdx) => {
+      const g = Math.floor(colIdx / MANUAL_SUBCOLS.length);
+      const s = colIdx % MANUAL_SUBCOLS.length;
+      return { groupIndex: g, subIndex: s };
+    };
+
+    // TOKEN STREAM MODE:
+    // Example token sequence:
+    //  6717, 7240, 7232, B1, 6635, 7132, 7145, C1, ...
+    // We interpret:
+    //  - Row markers like B12 / C3 / D1 reset the current target (group letter + row number) and subcol to 0.
+    //  - Numeric values fill Factory, L, R in order for the current group+row.
+    //  - A-rows are often missing explicit A1/A2 markers; when we finish a D-row triplet and see the next number,
+    //    we infer the next row starts at group A.
+    if (isTokenStream) {
+      const { groupIndex: baseGroupIndex, subIndex: baseSubIndex } = colToGroupAndSub(startCol);
+      const baseGroupLetter = manualGroups[baseGroupIndex] || "A";
+      const baseRowOffset = startRow;
+
+      const markerRe = /^[A-Za-z]\d+$/;
+      const numRe = /^-?\d+(?:\.\d+)?$/;
+
+      let curGroupLetter = baseGroupLetter;
+      let curRowIdx = baseRowOffset; // 0-based
+      let curSub = Math.max(baseSubIndex, 1); // start subcol within group (skip Line for numeric stream)
+
+      const setFromMarker = (tok) => {
+        const letter = tok[0].toUpperCase();
+        const n = parseInt(tok.slice(1), 10);
+        if (!Number.isFinite(n)) return false;
+        curGroupLetter = letter;
+        curRowIdx = baseRowOffset + (n - 1);
+        curSub = 1;
+        return true;
+      };
+
+      setManualGrid((prev) => {
+        let next = prev;
+
+        for (let i = 0; i < lines.length; i++) {
+          const tok = lines[i];
+
+          if (markerRe.test(tok) && !numRe.test(tok)) {
+            // Only treat as marker if it has a valid group letter we currently have.
+            const letter = tok[0].toUpperCase();
+            if (manualGroups.includes(letter)) {
+              setFromMarker(tok);
+
+              // Write the line marker into the dedicated Line column for this group+row.
+              const gIndex = manualGroups.indexOf(letter);
+              if (gIndex >= 0) {
+                const lineColIdx = gIndex * MANUAL_SUBCOLS.length + 0;
+                if (curRowIdx >= 0 && curRowIdx < manualRowCount && lineColIdx >= 0 && lineColIdx < manualColCount) {
+                  const lk = manualCellKey(curRowIdx, lineColIdx);
+                  if (next[lk] !== tok) next = { ...next, [lk]: tok };
+                }
+              }
+
+              continue;
+            }
+          }
+
+          // Numeric payload
+          if (numRe.test(tok)) {
+            // If we've run past row bounds, stop.
+            if (curRowIdx < 0 || curRowIdx >= manualRowCount) break;
+
+            // Ensure current group exists in our column groups.
+            if (!manualGroups.includes(curGroupLetter)) continue;
+
+            const gIndex = manualGroups.indexOf(curGroupLetter);
+            const colIdx = gIndex * MANUAL_SUBCOLS.length + curSub;
+
+            if (colIdx >= 0 && colIdx < manualColCount) {
+              const lk = manualCellKey(curRowIdx, gIndex * MANUAL_SUBCOLS.length + 0);
+              if (next[lk] === "") {
+                // Blank Line cell means "no data" for this group+row; skip numeric values.
+              } else {
+                const v = tok.trim();
+                const k = manualCellKey(curRowIdx, colIdx);
+                if (next[k] !== v) next = { ...next, [k]: v };
+              }
+            }
+
+            curSub += 1;
+
+            // After Factory/L/R, advance within row:
+            if (curSub >= MANUAL_SUBCOLS.length) {
+              curSub = 1;
+
+              // If we just finished a D-row (common in the pasted token stream),
+              // and the next token is a number (meaning next row begins) without an explicit marker,
+              // infer next row starts at group A.
+              if (curGroupLetter === "D") {
+                curGroupLetter = "A";
+                curRowIdx += 1;
+                curSub = 1;
+              } else {
+                // Otherwise, keep the same group and wait for a marker, OR advance group if next token isn't a marker.
+                // We do NOT auto-advance group here because the stream usually includes Bx/Cx/Dx markers.
+              }
+            }
+
+            continue;
+          }
+
+          // Unknown token: ignore
+        }
+
+        return next;
+      });
+
+      return;
+    }
+
+    // DELIMITER MODE (TSV/CSV): fill a matrix starting at the active cell.
+    let delim = "";
+    if (hasTabs) delim = "\t";
+    else if (hasComma) delim = ",";
+    else if (hasSemi) delim = ";";
+
+    const rows = raw0
+      .split("\n")
+      .filter((l) => l.trim().length > 0)
+      .map((ln) => (delim ? ln.split(delim) : [ln]));
+
+    setManualGrid((prev) => {
+      let next = prev;
+      for (let r = 0; r < rows.length; r++) {
+        const rowIdx = startRow + r;
+        if (rowIdx < 0 || rowIdx >= manualRowCount) break;
+        for (let c = 0; c < rows[r].length; c++) {
+          const colIdx = startCol + c;
+          if (colIdx < 0 || colIdx >= manualColCount) break;
+          const v = `${rows[r][c] ?? ""}`.trim();
+          const k = manualCellKey(rowIdx, colIdx);
+          if (next[k] !== v) next = { ...next, [k]: v };
+        }
+      }
+      return next;
+    });
+  };
+
+
+  // Step 3 sub-page view (keeps Step 3 from getting too busy)
+  const [step3View, setStep3View] = useState("diagram");
+  const [step3Step4WarnOpen, setStep3Step4WarnOpen] = useState(false);
+
+  // Step 3 baseline loops (installed on maillon groups)
+  const [loopSizes, setLoopSizes] = useState(() => deepClone(DEFAULT_LOOP_SIZES));
+  const [groupLoopSetup, setGroupLoopSetup] = useState({});
+
+  // Step 4 (trim) — frozen snapshot of Step 3 baseline loops (set ONCE when entering Step 4)
+  const [groupLoopBaseline, setGroupLoopBaseline] = useState(null); // Record<groupId, loopType> | null
+
+  // Step 4 editable state (must NOT affect Step 3 baseline)
+  const [groupLoopChange, setGroupLoopChange] = useState({}); // optional override: Record<groupId, loopType>
+  const [groupAdjustments, setGroupAdjustments] = useState({}); // mm adjust: Record<groupId, number>
+
+  // Step 4 per-line correction (mm). Applies to corrected value in Step 4 only.
+  const [step4LineCorr, setStep4LineCorr] = useState({}); // Record<lineId, number>
+
+  // Step 4 view options
+  const [showCorrected, setShowCorrected] = useState(true);
+  const [includeBrakeBlock, setIncludeBrakeBlock] = useState(true);
+  const [showLoopModeCounts, setShowLoopModeCounts] = useState(false);
+  const [groupPitchTol, setGroupPitchTol] = useState(4);
+  const [pitchAdvOpen, setPitchAdvOpen] = useState(false);
+  const [pitchAdvEnabled, setPitchAdvEnabled] = useState(false);
+  const [pitchRefRow, setPitchRefRow] = useState("B");
+  const [pitchCompare, setPitchCompare] = useState({ A: true, B: false, C: true, D: true });
+  const [pitchRowCfg, setPitchRowCfg] = useState({
+    A: { groups: [], include: [], exclude: [] },
+    B: { groups: [], include: [], exclude: [] },
+    C: { groups: [], include: [], exclude: [] },
+    D: { groups: [], include: [], exclude: [] },
+  });
+  const [autoLoopStatus, setAutoLoopStatus] = useState(null); // "factory" | "minimal" | null
+  const [autoDecision, setAutoDecision] = useState(null); // { mode, corr, loopChangeCount, outliers, maxOver } | null
+
+  const [step4LetterFilter, setStep4LetterFilter] = useState({ A: true, B: true, C: true, D: true, BR: true });
+
+
+  // Step 1
+  const [meta, setMeta] = useState({ make: "", model: "", size: "", serial: "", checkedBy: "", date: "", tolerance: 10, correction: 0 });
+  const [measurementProtocol, setMeasurementProtocol] = useState("preTension22kg_thenMeasure5kg");
+  const [brakeConvention, setBrakeConvention] = useState("knotToKnot");
+  const [wideRows, setWideRows] = useState([]);
+  const [importStatus, setImportStatus] = useState({ ok: false, name: "", err: "" });
+  const [tab, setTab] = useState("import");
+  const fileInputRef = useRef(null);
+  function getFirstFileFromRef(refObj) {
+    var inputEl = refObj && refObj.current ? refObj.current : null;
+    var files = inputEl && inputEl.files ? inputEl.files : null;
+    if (files && files.item) return files.item(0);
+    return null;
+  }
+  function clickRef(refObj) {
+    if (refObj && refObj.current) refObj.current.click();
+  }
+  function importMeasurementFileFromRef() {
+    var f = getFirstFileFromRef(fileInputRef);
+    handleFile(f);
+  }
+  function clickMeasurementFilePicker() {
+    clickRef(fileInputRef);
+  }
+
+  // Step 2
+  const [prefixByLetter, setPrefixByLetter] = useState({ A: "AR", B: "BR", C: "CR", D: "DR" });
+  const [groupCountByLetter, setGroupCountByLetter] = useState({ A: 3, B: 3, C: 3, D: 3 });
+  const [maxByLetter, setMaxByLetter] = useState({ A: 0, B: 0, C: 0, D: 0 });
+  const [rangesByLetter, setRangesByLetter] = useState({
+    A: makeDefaultRanges(1, 3),
+    B: makeDefaultRanges(1, 3),
+    C: makeDefaultRanges(1, 3),
+    D: makeDefaultRanges(1, 3),
+  });
+  const [lineToGroup, setLineToGroup] = useState({});
+  const [rangeTab, setRangeTab] = useState("A");
+  const [showOverrides, setShowOverrides] = useState(true);
+
+  const [resetAllWarnOpen, setResetAllWarnOpen] = useState(false);
+
+  // Step 3 diagram + summary
+  const [diagramZoom, setDiagramZoom] = useState(1.0);
+  const [diagramWingOutline, setDiagramWingOutline] = useState(true);
+  const [diagramCompact, setDiagramCompact] = useState(false);
+  const diagramBoxRef = useRef(null);
+
+  // Step 3 baseline (installed loops by group) view controls (cosmetic only)
+  const [baselineZoom, setBaselineZoom] = useState(0.65);
+  const baselineBoxRef = useRef(null);
+  const baselineInnerRef = useRef(null);
+
+  // Baseline mapping snapshot for “changes summary”
+  const [defaultMappingSnapshot, setDefaultMappingSnapshot] = useState(null);
+
+  // Profile JSON
+  const [profileName, setProfileName] = useState("");
+  const profileImportRef = useRef(null);
+  function importWingProfileFromRef() {
+    var f = getFirstFileFromRef(profileImportRef);
+    importWingProfileJSON(f);
+  }
+  function clickProfileImportPicker() {
+    clickRef(profileImportRef);
+  }
+
+  function resetAll() {
+    setStep(1);
+    setTab("import");
+    setShowMeasureMode(false);
+    setShowManualGrid(false);
+    setMeta({ make: "", model: "", tolerance: 10, correction: 0 });
+    setMeasurementProtocol("preTension22kg_thenMeasure5kg");
+    setBrakeConvention("knotToKnot");
+    setWideRows([]);
+    setImportStatus({ ok: false, name: "", err: "" });
+
+    setPrefixByLetter({ A: "AR", B: "BR", C: "CR", D: "DR" });
+    setGroupCountByLetter({ A: 3, B: 3, C: 3, D: 3 });
+    setMaxByLetter({ A: 0, B: 0, C: 0, D: 0 });
+    setRangesByLetter({
+      A: makeDefaultRanges(1, 3),
+      B: makeDefaultRanges(1, 3),
+      C: makeDefaultRanges(1, 3),
+      D: makeDefaultRanges(1, 3),
+    });
+    setLineToGroup({});
+    setStep3View("diagram");
+    setLoopSizes(deepClone(DEFAULT_LOOP_SIZES));
+    setGroupLoopSetup({});
+    setGroupLoopBaseline(null);
+    setGroupLoopChange({});
+    setGroupAdjustments({});
+			                        setAutoLoopStatus(null);
+                    setAutoDecision(null);
+    setStep4LineCorr({});
+    setShowCorrected(true);
+    setStep4LetterFilter({ A: true, B: true, C: true, D: true, BR: true });
+    setRangeTab("A");
+    setShowOverrides(true);
+
+    setDiagramZoom(1.0);
+    setDiagramWingOutline(true);
+    setDiagramCompact(false);
+
+    // Advanced pitch config (UI only)
+    setPitchAdvOpen(false);
+    setPitchAdvEnabled(false);
+    setPitchRefRow("B");
+    setPitchCompare({ A: true, B: false, C: true, D: true });
+    setPitchRowCfg({
+      A: { groups: [], include: [], exclude: [] },
+      B: { groups: [], include: [], exclude: [] },
+      C: { groups: [], include: [], exclude: [] },
+      D: { groups: [], include: [], exclude: [] },
+    });
+
+    setDefaultMappingSnapshot(null);
+    setProfileName("");
+  }
+
+  function openResetAllWarn() {
+    setResetAllWarnOpen(true);
+  }
+
+
+  function applyParsedImport(parsed, name) {
+    setMeta(parsed.meta);
+    setWideRows(parsed.wideRows);
+    setImportStatus({ ok: true, name, err: "" });
+
+    const maxCore = { A: 0, B: 0, C: 0, D: 0 };
+    let maxBR = 0;
+
+    // Step 2 Defaults should reflect the *factory* line set only.
+    // Important: Number("") === 0 in JS, so treat blanks as missing (null) explicitly.
+    const hasFactory = (v) => {
+      if (v === null || v === undefined) return false;
+      const s = String(v).trim();
+      if (s === "") return false;
+      const n = Number(s);
+      return Number.isFinite(n);
+    };
+
+    for (const r of parsed.wideRows) {
+      // Only count rows that actually have a factory (nominal) value
+      if (!hasFactory(r.nominal)) continue;
+
+      const L = String(r.letter || "").toUpperCase();
+      if (r.idx == null) continue;
+      const ix = Number(String(r.idx).trim());
+      if (!Number.isFinite(ix)) continue;
+
+      if (L === "BR") {
+        maxBR = Math.max(maxBR, ix);
+        continue;
+      }
+      if (!Object.prototype.hasOwnProperty.call(maxCore, L)) continue;
+      maxCore[L] = Math.max(maxCore[L] || 0, ix);
+    }
+    setMaxByLetter({ ...maxCore, BR: maxBR });
+
+    const newRanges = {
+      A: makeDefaultRanges(maxCore.A || 1, groupCountByLetter.A || 3),
+      B: makeDefaultRanges(maxCore.B || 1, groupCountByLetter.B || 3),
+      C: makeDefaultRanges(maxCore.C || 1, groupCountByLetter.C || 3),
+      D: makeDefaultRanges(maxCore.D || 1, groupCountByLetter.D || 3),
+    };
+    setRangesByLetter(newRanges);
+
+    const initMap = buildInitialLineToGroup({
+      maxByLetter: maxCore,
+      groupCountByLetter,
+      prefixByLetter,
+      rangesByLetter: newRanges,
+    });
+
+    setLineToGroup(initMap);
+    setDefaultMappingSnapshot(deepClone(initMap));
+    setRangeTab("A");
+    setStep(1);
+    setTab("import");
+    setShowMeasureMode(false);
+    setShowManualGrid(false);
+  }
+
+  async function handleFile(file) {
+    if (!file) return;
+    resetAll();
+
+    const name = file.name || "file";
+    const lower = name.toLowerCase();
+
+    try {
+      if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: "array" });
+        const sheetName = wb.SheetNames[0];
+        const sheet = wb.Sheets[sheetName];
+        const rows = rowsFromSheetAOA(sheet);
+        const parsed = parseWideTableFromRows(rows);
+        applyParsedImport(parsed, name);
+      } else {
+        const text = await file.text();
+        const rows = rowsFromCSVText(text);
+        const parsed = parseWideTableFromRows(rows);
+        applyParsedImport(parsed, name);
+      }
+      setTab("import");
+    } catch (e) {
+      console.error("Import error:", e);
+      resetAll();
+      setImportStatus({ ok: false, name, err: "Import failed. Check file format." });
+      alert("Import failed. Please check the file format.");
+    }
+  }
+
+  function loadAttachedTestData() {
+    resetAll();
+    const rows = rowsFromCSVText(ATTACHED_TEST_CSV);
+    const parsed = parseWideTableFromRows(rows);
+    applyParsedImport(parsed, "Speedster3 ML.csv (attached)");
+    setTab("testdata");
+  }
+
+  const loaded = importStatus.ok && wideRows.length > 0;
+
+  const summary = useMemo(() => {
+    const maxCore = { A: 0, B: 0, C: 0, D: 0 };
+    let maxBR = 0;
+    for (const r of wideRows) {
+      const L = String(r.letter || "").toUpperCase();
+      if (r.idx == null) continue;
+      const ix = Number(r.idx || 0);
+      if (!Number.isFinite(ix)) continue;
+      if (L === "BR") {
+        maxBR = Math.max(maxBR, ix);
+        continue;
+      }
+      if (!maxCore.hasOwnProperty(L)) continue;
+      maxCore[L] = Math.max(maxCore[L] || 0, ix);
+    }
+    const totalLines = (maxCore.A + maxCore.B + maxCore.C + maxCore.D) * 2;
+    return { max: { ...maxCore, BR: maxBR }, totalLines };
+  }, [wideRows]);
+
+  const groupsInUse = useMemo(() => {
+    const vals = Object.values(lineToGroup || {}).filter(Boolean);
+    const uniq = Array.from(new Set(vals));
+    const parse = (s) => {
+      const m = String(s || "").match(/^([A-Z]+)(\d+)([LR])$/i);
+      if (!m) return { p: String(s || ""), n: 0, side: "" };
+      return { p: m[1].toUpperCase(), n: Number(m[2] || 0), side: m[3].toUpperCase() };
+    };
+    uniq.sort((a, b) => {
+      const A = parse(a);
+      const B = parse(b);
+      if (A.p !== B.p) return A.p.localeCompare(B.p);
+      if (A.n !== B.n) return A.n - B.n;
+      return (A.side || "").localeCompare(B.side || "");
+    });
+    return uniq;
+  }, [lineToGroup]);
+
+  const zeroingStats = useMemo(() => {
+    const all = [];
+    const left = [];
+    const right = [];
+    for (const r of wideRows || []) {
+      const nominal = typeof r.nominal === "number" ? r.nominal : safeNum(r.nominal);
+      const ml = typeof r.measuredL === "number" ? r.measuredL : safeNum(r.measuredL);
+      const mr = typeof r.measuredR === "number" ? r.measuredR : safeNum(r.measuredR);
+      if (Number.isFinite(nominal) && Number.isFinite(ml)) {
+        const d = nominal - ml;
+        all.push(d);
+        left.push(d);
+      }
+      if (Number.isFinite(nominal) && Number.isFinite(mr)) {
+        const d = nominal - mr;
+        all.push(d);
+        right.push(d);
+      }
+    }
+    const wholeMedian = median(all);
+    const leftMedian = median(left);
+    const rightMedian = median(right);
+    return {
+      wholeMedian,
+      leftMedian,
+      rightMedian,
+      nAll: all.length,
+      nLeft: left.length,
+      nRight: right.length,
+    };
+  }, [wideRows]);
+
+
+  const groupOptionsForSelect = useMemo(() => {
+    const opts = getGroupOptions(prefixByLetter, groupCountByLetter);
+    return opts.map((g) => ({ value: g, label: g }));
+  }, [prefixByLetter, groupCountByLetter]);
+
+  const loopTypeOptions = useMemo(() => LOOP_TYPES.map((t) => ({ value: t, label: t })), []);
+
+  // Step 4 baseline freeze: take a snapshot of Step 3 loops ONCE when Step 4 is first entered.
+  useEffect(() => {
+    if (step !== 4) return;
+    if (groupLoopBaseline !== null) return;
+    // Freeze exactly once per reset/import session.
+    setGroupLoopBaseline(deepClone(groupLoopSetup || {}));
+  }, [step, groupLoopBaseline, groupLoopSetup]);
+
+  const letterIdxRows = useMemo(() => {
+    const out = [];
+    for (const L of ["A", "B", "C", "D"]) {
+      const m = Number(maxByLetter[L] || 0);
+      for (let i = 1; i <= m; i++) out.push({ letter: L, idx: i });
+    }
+    return out;
+  }, [maxByLetter]);
+
+
+  const step4LineRows = useMemo(() => {
+    // Build per-line rows for the whole wing. Each side is a separate entity (A1L, A1R, ...).
+    if (!Array.isArray(wideRows) || wideRows.length === 0) return [];
+    const out = [];
+    const tol = Number(meta.tolerance || 0);
+    const corr = Number(meta.correction || 0);
+
+    const loopMm = (t) => Number(loopSizes[t] || 0);
+
+    for (const r of wideRows) {
+      const letter = String(r.letter || "").toUpperCase();
+      if (!step4LetterFilter[letter]) continue;
+
+      const idx = Number(r.idx);
+      if (!Number.isFinite(idx)) continue;
+
+      const base = `${letter}${idx}`;
+      const nominal = Number.isFinite(Number(r.nominal)) ? Number(r.nominal) : null;
+
+      for (const side of ["L", "R"]) {
+        const lineId = `${base}${side}`;
+        const measured = side === "L" ? r.measuredL : r.measuredR;
+        const raw = Number.isFinite(Number(measured)) ? Number(measured) : null;
+
+        const lineCorr = Number(step4LineCorr[lineId] || 0);
+
+        const groupId = String(lineToGroup[lineId] || "");
+
+        const baseLoop = groupLoopBaseline && groupLoopBaseline[groupId] ? groupLoopBaseline[groupId] : "SL";
+        const override = groupLoopChange && groupLoopChange[groupId] ? groupLoopChange[groupId] : "";
+        const afterLoop = override || baseLoop;
+
+        const adj = Number((groupAdjustments && groupAdjustments[groupId]) || 0);
+
+        const corrected = raw == null ? null : raw + lineCorr + (showCorrected ? corr : 0);
+
+        // IMPORTANT: Baseline loops are the *installed* state on the wing.
+        // Step 4 must not change the underlying measurements when you set baseline loops in Step 3.
+        // We apply ONLY the *difference* when an override loop is selected.
+        const loopDelta = override ? (loopMm(override) - loopMm(baseLoop)) : 0;
+
+        const before = corrected;
+        const afterVal = corrected == null ? null : corrected + loopDelta + adj;
+
+        const delta = nominal == null || afterVal == null ? null : afterVal - nominal;
+
+        var band = bandForDelta(delta, tol);
+
+        let sev = "na";
+        if (delta != null) {
+          const ad = Math.abs(delta);
+          if (ad >= tol) sev = "bad";
+          else if (ad <= 4) sev = "green";
+          else if (ad >= Math.max(0, tol - 3)) sev = "warn";
+          else sev = "good";
+        }
+
+        out.push({
+          lineId,
+          lineBase: base,
+          letter,
+          idx,
+          side,
+          groupId,
+          nominal,
+          raw,
+          corrected,
+          baseLoop,
+          afterLoop,
+          adj,
+          before,
+          after: afterVal,
+          delta,
+          sev,
+        });
+      }
+    }
+
+    // Sort: A..D, then idx ascending, then L before R
+    out.sort((a, b) => {
+      if (a.letter !== b.letter) return a.letter.localeCompare(b.letter);
+      if (a.idx !== b.idx) return a.idx - b.idx;
+      return a.side.localeCompare(b.side);
+    });
+    return out;
+  }, [
+    wideRows,
+    lineToGroup,
+    groupLoopBaseline,
+    groupLoopChange,
+    groupAdjustments,
+    loopSizes,
+    meta.tolerance,
+    meta.correction,
+    showCorrected,
+    step4LetterFilter,
+  ]);
+
+
+  
+
+
+
+// --- Chart data (uses ONLY Step 4 derived rows; never reads Step 3) ---
+const chartPointsByLetter = useMemo(() => {
+  const out = { A: [], B: [], C: [], D: [] };
+  const maxIdx = {
+    A: Number(maxByLetter.A || 0),
+    B: Number(maxByLetter.B || 0),
+    C: Number(maxByLetter.C || 0),
+    D: Number(maxByLetter.D || 0),
+  };
+
+  const sevAfterFor = (sev) => {
+    if (sev === 'bad') return 'red';
+    if (sev === 'warn') return 'yellow';
+    if (sev === 'green') return 'ok';
+    if (sev === 'good') return 'ok';
+    return 'na';
+  };
+
+  for (const r of step4LineRows) {
+    const L = String(r.letter || '').toUpperCase();
+    if (!out[L]) continue;
+    const nominal = Number.isFinite(r.nominal) ? r.nominal : null;
+    const beforeAbs = Number.isFinite(r.before) ? r.before : null;
+    const afterDelta = Number.isFinite(r.delta) ? r.delta : null;
+    const beforeDelta = nominal != null && beforeAbs != null ? beforeAbs - nominal : null;
+
+    const m = maxIdx[L] || 0;
+    // xIndex spans left tip -> right tip for each letter.
+    const xIndex = r.side === 'L' ? (m - (r.idx || 0)) : (m + (r.idx || 0) - 1);
+
+    out[L].push({
+      id: r.lineId,
+      line: r.lineId,
+      side: r.side,
+      xIndex,
+      before: beforeDelta,
+      after: afterDelta,
+      sevAfter: sevAfterFor(r.sev),
+    });
+  }
+
+  for (const k of Object.keys(out)) {
+    out[k].sort((a, b) => a.xIndex - b.xIndex);
+  }
+  return out;
+}, [step4LineRows, maxByLetter]);
+
+const step4Summary = useMemo(() => {
+  let red = 0, yellow = 0, green = 0, na = 0;
+  for (const r of step4LineRows) {
+    if (r.sev === "bad") red++;
+    else if (r.sev === "warn") yellow++;
+    else if (r.sev === "green" || r.sev === "good") green++;
+    else na++;
+  }
+  const total = step4LineRows.length;
+  const measured = total - na;
+  return { red, yellow, green, na, total, measured };
+}, [step4LineRows]);
+
+const step4GroupStats = useMemo(() => {
+  // Average Δ before/after per group + side.
+  const acc = new Map();
+  for (const r of step4LineRows) {
+    const groupName = String(r.groupId || '').trim();
+    if (!groupName) continue;
+    const key = `${groupName}|${r.side}`;
+    if (!acc.has(key)) acc.set(key, { groupName, side: r.side, n: 0, sumAfter: 0, sumBefore: 0, nBefore: 0 });
+    const a = acc.get(key);
+    if (Number.isFinite(r.delta)) {
+      a.sumAfter += r.delta;
+      a.n += 1;
+    }
+    const nominal = Number.isFinite(r.nominal) ? r.nominal : null;
+    const beforeAbs = Number.isFinite(r.before) ? r.before : null;
+    if (nominal != null && beforeAbs != null) {
+      a.sumBefore += (beforeAbs - nominal);
+      a.nBefore += 1;
+    }
+  }
+  const out = [];
+  for (const a of acc.values()) {
+    out.push({
+      groupName: a.groupName,
+      side: a.side,
+      before: a.nBefore ? a.sumBefore / a.nBefore : null,
+      after: a.n ? a.sumAfter / a.n : null,
+    });
+  }
+  out.sort((x, y) => {
+    const gx = String(x.groupName);
+    const gy = String(y.groupName);
+    if (gx !== gy) return gx.localeCompare(gy);
+    return String(x.side).localeCompare(String(y.side));
+  });
+  return out;
+}, [step4LineRows]);
+
+
+
+  const step4BlockRowsByLetter = useMemo(() => {
+    const byBase = new Map();
+    for (const r of step4LineRows) {
+      const base = r.lineBase;
+      if (!base) continue;
+      let rec = byBase.get(base);
+      if (!rec) {
+        rec = { letter: r.letter, idx: r.idx, lineBase: base, nominal: r.nominal || null, sides: {} };
+        byBase.set(base, rec);
+      }
+      rec.sides[r.side] = r;
+    }
+    const out = { A: [], B: [], C: [], D: [] };
+    for (const rec of byBase.values()) {
+      const L = rec.sides.L || null;
+      const R = rec.sides.R || null;
+      const letter = String(rec.letter || "").toUpperCase();
+      if (!out[letter]) continue;
+      out[letter].push({ ...rec, L, R });
+    }
+    for (const k of Object.keys(out)) {
+      out[k].sort((a, b) => (a.idx || 0) - (b.idx || 0));
+    }
+    return out;
+  }, [step4LineRows]);
+
+  
+// Step 4 — Spreadsheet-style A/B/C/D summary (Factory / Left / Right / Δ / Sym)
+const step4SheetByLetter = useMemo(() => {
+  const letters = ["A", "B", "C", "D", "BR"];
+  const byLetter = {};
+  for (const L of letters) byLetter[L] = [];
+
+  // --- Step 4 safe numeric parsing ---
+  // IMPORTANT: JS Number("") === 0, so blanks must be treated as missing (null).
+  const toNumOrNull = (v) => {
+    if (v === null || v === undefined) return null;
+    const s = String(v).trim();
+    if (s === "") return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  // Measured "after" values can never be 0mm; if 0 appears it is almost certainly coerced blank.
+  const toAfterOrNull = (v) => {
+    const n = toNumOrNull(v);
+    return n === 0 ? null : n;
+  };
+
+  // Collect per (letter, idx) with left/right pivot
+  const map = new Map(); // key = `${letter}:${idx}`
+  for (const r of step4LineRows) {
+    const letter = String(r.letter || "").toUpperCase();
+    if (!byLetter[letter]) continue;
+
+    const idx = Number(r.idx);
+    if (!Number.isFinite(idx)) continue;
+
+    const key = `${letter}:${idx}`;
+    const cur = map.get(key) || {
+      letter,
+      idx,
+      // factory length can never be 0mm; treat 0 as missing too
+      factory: (() => {
+        const n = toNumOrNull(r.nominal);
+        return n === 0 ? null : n;
+      })(),
+      L: null,
+      R: null,
+      dL: null,
+      dR: null,
+    };
+
+    // Prefer the nominal from whichever side has it
+    if (cur.factory == null) {
+      const nf = toNumOrNull(r.nominal);
+      cur.factory = nf === 0 ? null : nf;
+    }
+
+    // Store measured "after" (L/R) safely
+    if (r.side === "L") {
+      cur.L = toAfterOrNull(r.after);
+    } else if (r.side === "R") {
+      cur.R = toAfterOrNull(r.after);
+    }
+
+    // Compute deltas ONLY when both values exist
+    cur.dL = cur.factory == null || cur.L == null ? null : cur.L - cur.factory;
+    cur.dR = cur.factory == null || cur.R == null ? null : cur.R - cur.factory;
+
+    map.set(key, cur);
+  }
+
+  for (const v of map.values()) {
+    // Symmetry should be ΔL - ΔR (not afterL - afterR)
+    const sym = v.dL == null || v.dR == null ? null : v.dL - v.dR;
+    byLetter[v.letter].push({ ...v, sym });
+  }
+
+  for (const L of Object.keys(byLetter)) {
+    byLetter[L].sort((a, b) => a.idx - b.idx);
+  }
+
+  // Max difference per letter for dL/dR/sym (spread = max - min), ignoring missing
+  const maxDiff = {};
+  const spread = (arr) => {
+    const nums = arr
+      .map(toNumOrNull)
+      .filter((x) => x !== null);
+    if (nums.length === 0) return null;
+    return Math.max(...nums) - Math.min(...nums);
+  };
+
+  for (const L of letters) {
+    const rows = byLetter[L];
+    maxDiff[L] = {
+      dL: spread(rows.map((r) => r.dL)),
+      dR: spread(rows.map((r) => r.dR)),
+      sym: spread(rows.map((r) => r.sym)),
+    };
+  }
+
+  return { byLetter, maxDiff };
+}, [step4LineRows]);
+
+var abcAverages = useMemo(() => {
+  const letters = ["A", "B", "C", "D"];
+  const out = {};
+  for (const L of letters) {
+    out[L] = { L: { avg: null, n: 0 }, R: { avg: null, n: 0 }, sym: null };
+    for (const side of ["L", "R"]) {
+      const vals = step4LineRows
+        .filter((r) => r.letter === L && r.side === side && Number.isFinite(r.delta) && Number.isFinite(r.after) && Number(r.after) !== 0)
+        .map((r) => Number(r.delta));
+      const n = vals.length;
+      const avg = n ? vals.reduce((a, b) => a + b, 0) / n : null;
+      out[L][side] = { avg, n };
+    }
+    const aL = out[L].L.avg;
+    const aR = out[L].R.avg;
+    out[L].sym = Number.isFinite(aL) && Number.isFinite(aR) ? aL - aR : null;
+  }
+  return out;
+}, [step4LineRows]);
+
+
+var pitchAverages = useMemo(() => {
+  if (!pitchAdvEnabled) return abcAverages;
+
+  const effectiveIds = (rowLetter) => {
+    const cfg = pitchRowCfg && pitchRowCfg[rowLetter] ? pitchRowCfg[rowLetter] : { groups: [], include: [], exclude: [] };
+    const groups = Array.isArray(cfg.groups) ? cfg.groups : [];
+    const include = Array.isArray(cfg.include) ? cfg.include : [];
+    const exclude = Array.isArray(cfg.exclude) ? cfg.exclude : [];
+
+    const hasAny = groups.length || include.length || exclude.length;
+
+    const out = [];
+    for (const r of step4LineRows) {
+      if (r.letter !== rowLetter) continue;
+      const idx = r.idx == null ? null : Number(r.idx);
+      if (!Number.isFinite(idx)) continue;
+      const side = r.side;
+      if (side !== "L" && side !== "R") continue;
+      const lineId = `${rowLetter}${idx}${side}`;
+      if (exclude.includes(lineId)) continue;
+
+      if (!hasAny) {
+        out.push(lineId);
+        continue;
+      }
+
+      const g = lineToGroup && lineToGroup[lineId] ? String(lineToGroup[lineId]) : "";
+      if ((g && groups.includes(g)) || include.includes(lineId)) out.push(lineId);
+    }
+    return out;
+  };
+
+  const letters = ["A", "B", "C", "D"];
+  const out = {};
+  for (const L of letters) {
+    out[L] = { L: { avg: null, n: 0 }, R: { avg: null, n: 0 }, sym: null };
+    const ids = new Set(effectiveIds(L));
+    for (const side of ["L", "R"]) {
+      const vals = step4LineRows
+        .filter((r) => r.letter === L && r.side === side && Number.isFinite(r.delta) && Number.isFinite(r.after) && Number(r.after) !== 0)
+        .filter((r) => {
+          const idx = r.idx == null ? null : Number(r.idx);
+          if (!Number.isFinite(idx)) return false;
+          const lineId = `${L}${idx}${side}`;
+          return ids.has(lineId);
+        })
+        .map((r) => Number(r.delta));
+      const n = vals.length;
+      const avg = n ? vals.reduce((a, b) => a + b, 0) / n : null;
+      out[L][side] = { avg, n };
+    }
+    const aL = out[L].L.avg;
+    const aR = out[L].R.avg;
+    out[L].sym = Number.isFinite(aL) && Number.isFinite(aR) ? aL - aR : null;
+  }
+  return out;
+}, [pitchAdvEnabled, pitchRowCfg, step4LineRows, abcAverages, lineToGroup]);
+
+
+
+const pitchStats = useMemo(() => {
+  // "Pitch" here is derived from relative front-to-rear group deltas (After Δ vs nominal).
+  // Larger + values generally indicate the front groups (A/B) are longer relative to rear (C/D) -> lower AoA / faster trim.
+  const getAvg = (letter, side) => {
+    const g = pitchAverages && pitchAverages[letter] ? pitchAverages[letter] : null;
+    const s = g && g[side] ? g[side] : null;
+    const v = s && Number.isFinite(Number(s.avg)) ? Number(s.avg) : null;
+    return v;
+  };
+
+  const mean2 = (a, b) => (Number.isFinite(a) && Number.isFinite(b) ? (a + b) / 2 : (Number.isFinite(a) ? a : (Number.isFinite(b) ? b : null)));
+
+  const row = (letter) => {
+    const L = getAvg(letter, "L");
+    const R = getAvg(letter, "R");
+    const both = mean2(L, R);
+    return { letter, L, R, both };
+  };
+
+  const A = row("A");
+  const B = row("B");
+  const C = row("C");
+  const D = row("D");
+
+  // Whole-wing pitch proxy: mean(front) - mean(rear)
+  const front = { L: mean2(A.L, B.L), R: mean2(A.R, B.R), both: mean2(A.both, B.both) };
+  const rear = { L: mean2(C.L, D.L), R: mean2(C.R, D.R), both: mean2(C.both, D.both) };
+  const pitchWhole = {
+    L: Number.isFinite(front.L) && Number.isFinite(rear.L) ? front.L - rear.L : null,
+    R: Number.isFinite(front.R) && Number.isFinite(rear.R) ? front.R - rear.R : null,
+    both: Number.isFinite(front.both) && Number.isFinite(rear.both) ? front.both - rear.both : null,
+  };
+
+  // Per-line-group "slope" (adjacent differences)
+  const seg = (x, y) => ({
+    L: Number.isFinite(x.L) && Number.isFinite(y.L) ? x.L - y.L : null,
+    R: Number.isFinite(x.R) && Number.isFinite(y.R) ? x.R - y.R : null,
+    both: Number.isFinite(x.both) && Number.isFinite(y.both) ? x.both - y.both : null,
+  });
+
+  return {
+    rows: [A, B, C, D],
+    pitchWhole,
+    segments: { AB: seg(A, B), BC: seg(B, C), CD: seg(C, D) },
+    comparisons: (() => {
+      const refRow = pitchAdvEnabled ? pitchRefRow : "B";
+      const flags = pitchAdvEnabled ? pitchCompare : { A: true, B: false, C: true, D: true };
+      const out = {};
+      for (const k of ["A", "B", "C", "D"]) {
+        if (!flags || !flags[k]) continue;
+        if (k === refRow) continue;
+        out[`${k}v${refRow}`] = seg(row(k), row(refRow));
+      }
+      // Back-compat keys when factory mode is used
+      if (!pitchAdvEnabled || refRow === "B") {
+        out.AvB = seg(A, B);
+        out.CvB = seg(C, B);
+        out.DvB = seg(D, B);
+      }
+      return out;
+    })(),
+    comparisonsList: (() => {
+      const refRow = pitchAdvEnabled ? pitchRefRow : "B";
+      const flags = pitchAdvEnabled ? pitchCompare : { A: true, B: false, C: true, D: true };
+      const out = [];
+      for (const k of ["A", "B", "C", "D"]) {
+        if (!flags || !flags[k]) continue;
+        if (k === refRow) continue;
+        out.push({ key: `${k}v${refRow}`, label: `${k} − ${refRow}`, v: seg(row(k), row(refRow)) });
+      }
+      // Factory default fallback if none selected
+      if (!out.length && (!pitchAdvEnabled || refRow === "B")) {
+        out.push({ key: "AvB", label: "A − B", v: seg(A, B) });
+        out.push({ key: "CvB", label: "C − B", v: seg(C, B) });
+        out.push({ key: "DvB", label: "D − B", v: seg(D, B) });
+      }
+      return out;
+    })(),
+    front,
+    rear,
+  };
+}, [pitchAverages, pitchAdvEnabled, pitchRefRow, pitchCompare]);
+
+
+
+const step4HasLoopEdits = useMemo(() => {
+  const changes = groupLoopChange || {};
+  for (const [gid, v] of Object.entries(changes)) {
+    if (v == null || v === "") continue;
+    const base = groupLoopBaseline[gid];
+    if (v !== base) return true;
+  }
+  return false;
+}, [groupLoopChange, groupLoopBaseline]);
+
+
+const abcLoopModeCounts = useMemo(() => {
+  // Counts of loop types currently in effect per letter+side (A/B/C only).
+  // "Currently in effect" means: groupLoopChange overrides baseline, else baseline.
+  const letters = ["A", "B", "C", "D"];
+  const out = {};
+  for (const L of letters) {
+    out[L] = { L: {}, R: {} };
+    for (const side of ["L", "R"]) out[L][side] = {};
+  }
+
+  for (const r of step4LineRows) {
+    const L = r.letter;
+    const side = r.side;
+    if (!out[L] || !out[L][side]) continue;
+    const gid = String(r.groupId || "").trim();
+    if (!gid) continue;
+    const curLoop = step4HasLoopEdits
+      ? ((groupLoopChange && groupLoopChange[gid]) || (groupLoopBaseline && groupLoopBaseline[gid]) || "SL")
+      : ((groupLoopBaseline && groupLoopBaseline[gid]) || "SL");
+    out[L][side][curLoop] = (out[L][side][curLoop] || 0) + 1;
+  }
+  return out;
+}, [step4LineRows, groupLoopBaseline, groupLoopChange]);
+
+const abcSuggestions = useMemo(() => {
+  const letters = ["A", "B", "C", "D"];
+  const tol = Number(meta.tolerance || 0);
+
+  const loopMm = (t) => Number(loopSizes[t] || 0);
+
+  const loopTypesSorted = [...LOOP_TYPES].sort((a, b) => loopMm(a) - loopMm(b));
+
+  const pickModeLoop = (countsObj) => {
+    // Pick most frequent loop; tie-break on smallest mm.
+    let best = "SL";
+    let bestCount = -1;
+    let bestMm = loopMm(best);
+    for (const lt of Object.keys(countsObj || {})) {
+      const c = Number(countsObj[lt] || 0);
+      const mm = loopMm(lt);
+      if (c > bestCount || (c === bestCount && mm < bestMm)) {
+        best = lt;
+        bestCount = c;
+        bestMm = mm;
+      }
+    }
+    return best;
+  };
+
+  const clampAdj = (v) => {
+    if (!Number.isFinite(v)) return null;
+    if (!Number.isFinite(tol)) return Math.round(v);
+    return Math.round(clamp(v, -tol, tol));
+  };
+
+  const out = {};
+  for (const L of letters) {
+    out[L] = { L: null, R: null };
+    for (const side of ["L", "R"]) {
+      const avg = abcAverages[L][side].avg;
+      if (!Number.isFinite(avg)) {
+        out[L][side] = null;
+        continue;
+      }
+
+      const neededMm = -Number(avg);
+
+      const counts = abcLoopModeCounts[L][side] || {};
+      const repLoop = pickModeLoop(counts);
+      const repMm = loopMm(repLoop);
+
+      let bestLoop = repLoop;
+      let bestLoopDelta = 0;
+      let bestErr = Infinity;
+
+      for (const cand of loopTypesSorted) {
+        const d = loopMm(cand) - repMm;
+        const err = Math.abs(neededMm - d);
+        if (err < bestErr) {
+          bestErr = err;
+          bestLoop = cand;
+          bestLoopDelta = d;
+        }
+      }
+
+      const residual = neededMm - bestLoopDelta;
+      const suggestedAdjMm = clampAdj(residual);
+      const residualAfterAdj = Number.isFinite(suggestedAdjMm) ? residual - suggestedAdjMm : residual;
+
+      out[L][side] = {
+        avgAfterDelta: avg,
+        neededMm,
+        repLoop,
+        bestLoop,
+        loopDeltaMm: bestLoopDelta,
+        suggestedAdjMm,
+        residualAfterAdj,
+      };
+    }
+  }
+  return out;
+}, [abcAverages, abcLoopModeCounts, loopSizes, meta.tolerance]);
+
+  function applyAutoLoopPlan(kind) {
+    // kind: "factory" (closest to factory) or "minimal" (within tolerance with least loop changes)
+    if (step !== 4) return;
+    if (!groupLoopBaseline) return;
+
+    var tol = Number(meta && meta.tolerance != null ? meta.tolerance : 0);
+    if (!isFinite(tol)) tol = 0;
+
+    // Build avg delta per maillon group using BASELINE loops only (no overrides, no fine adjust).
+    var sums = {};
+    var counts = {};
+
+    var i;
+    for (i = 0; i < (step4LineRows || []).length; i++) {
+      var r = step4LineRows[i];
+      if (!r) continue;
+      var gid = String(r.groupId || "").trim();
+      if (!gid) continue;
+
+      var nominal = r.nominal;
+      var corrected = r.corrected;
+      if (nominal == null || !isFinite(Number(nominal))) continue;
+      if (corrected == null || !isFinite(Number(corrected))) continue;
+
+      var baseLoop = (groupLoopBaseline && groupLoopBaseline[gid]) ? groupLoopBaseline[gid] : (r.baseLoop || "SL");
+      var baseMm = Number(loopSizes && loopSizes[baseLoop] != null ? loopSizes[baseLoop] : 0);
+      if (!isFinite(baseMm)) baseMm = 0;
+
+      var after0 = Number(corrected) + baseMm;
+      var d0 = after0 - Number(nominal);
+      if (!isFinite(d0)) continue;
+
+      sums[gid] = (sums[gid] || 0) + d0;
+      counts[gid] = (counts[gid] || 0) + 1;
+    }
+
+    var changes = {};
+    var gids = Object.keys(sums);
+
+    for (i = 0; i < gids.length; i++) {
+      var gid2 = gids[i];
+      var n = counts[gid2] || 0;
+      if (!n) continue;
+
+      var avgDelta = sums[gid2] / n;
+      if (!isFinite(avgDelta)) continue;
+
+      var baseLoop2 = (groupLoopBaseline && groupLoopBaseline[gid2]) ? groupLoopBaseline[gid2] : "SL";
+      var baseMm2 = Number(loopSizes && loopSizes[baseLoop2] != null ? loopSizes[baseLoop2] : 0);
+      if (!isFinite(baseMm2)) baseMm2 = 0;
+
+      var best = baseLoop2;
+      var bestAbs = Math.abs(avgDelta);
+      var bestShiftAbs = 0;
+
+      // For "minimal": if already within tolerance, keep baseline.
+      if (kind === "minimal" && tol > 0 && Math.abs(avgDelta) <= tol) {
+        best = baseLoop2;
+      } else {
+        var j;
+        var foundWithin = false;
+        for (j = 0; j < (LOOP_TYPES || []).length; j++) {
+          var cand = LOOP_TYPES[j];
+          var candMm = Number(loopSizes && loopSizes[cand] != null ? loopSizes[cand] : 0);
+          if (!isFinite(candMm)) candMm = 0;
+          var shift = candMm - baseMm2;
+          var afterDelta = avgDelta + shift;
+          var absAfter = Math.abs(afterDelta);
+          var shiftAbs = Math.abs(shift);
+
+          if (kind === "minimal" && tol > 0) {
+            if (absAfter <= tol) {
+              if (!foundWithin || shiftAbs < bestShiftAbs || (shiftAbs === bestShiftAbs && absAfter < bestAbs)) {
+                foundWithin = true;
+                best = cand;
+                bestAbs = absAfter;
+                bestShiftAbs = shiftAbs;
+              }
+            } else if (!foundWithin) {
+              // If none within tol so far, track the best improvement (closest) with smallest shift.
+              if (absAfter < bestAbs || (absAfter === bestAbs && shiftAbs < bestShiftAbs)) {
+                best = cand;
+                bestAbs = absAfter;
+                bestShiftAbs = shiftAbs;
+              }
+            }
+          } else {
+            // "factory": just minimize residual.
+            if (absAfter < bestAbs || (absAfter === bestAbs && shiftAbs < bestShiftAbs)) {
+              best = cand;
+              bestAbs = absAfter;
+              bestShiftAbs = shiftAbs;
+            }
+          }
+        }
+      }
+
+      if (best && best !== baseLoop2) {
+        changes[gid2] = best;
+      }
+    }
+
+    // Apply: loops only. Do NOT write fine adjust values here.
+    setGroupAdjustments({});
+    setGroupLoopChange(changes);
+    setAutoLoopStatus(kind === "minimal" ? "minimal" : "factory");
+    setAutoDecision({ mode: kind === "minimal" ? "minimal" : "factory", corr: Number(meta && meta.correction != null ? meta.correction : 0), loopChangeCount: Object.keys(changes || {}).length });
+  }
+
+  function applyAutoZeroAndMinimalLoops() {
+    // Combine zeroing (meta.correction) + minimal loop changes.
+    // Objective: find the correction value that results in the fewest loop changes while bringing the wing into tolerance.
+    // Preference: if an outlier remains, it's better to have one longer outlier line (line insert) than multiple outliers.
+
+    if (step !== 4) return;
+    if (!groupLoopBaseline) return;
+
+    var tol = Number(meta && meta.tolerance != null ? meta.tolerance : 0);
+    if (!isFinite(tol)) tol = 0;
+
+    var center = null;
+    if (zeroingStats && Number.isFinite(Number(zeroingStats.wholeMedian))) center = Math.round(Number(zeroingStats.wholeMedian));
+    if (center == null) {
+      var cur = Number(meta && meta.correction != null ? meta.correction : 0);
+      if (!isFinite(cur)) cur = 0;
+      center = Math.round(cur);
+    }
+
+    // Search around the suggested correction. Keep the range conservative to avoid unexpected jumps.
+    var start = center - 20;
+    var end = center + 20;
+
+    var best = { score: Infinity, corr: center, changes: {}, details: null };
+
+    var loopMm = function (t) {
+      var v = Number(loopSizes && loopSizes[t] != null ? loopSizes[t] : 0);
+      return isFinite(v) ? v : 0;
+    };
+
+    var isLetterEnabled = function (letter) {
+      var L = String(letter || "").toUpperCase();
+      return !!(step4LetterFilter && step4LetterFilter[L]);
+    };
+
+    var computePlanForCorrection = function (corrVal) {
+      // Build avg delta per maillon group using BASELINE loops only (no overrides, no fine adjust).
+      var sums = {};
+      var counts = {};
+
+      var i;
+      for (i = 0; i < (wideRows || []).length; i++) {
+        var wr = wideRows[i];
+        if (!wr) continue;
+        var letter = String(wr.letter || "").toUpperCase();
+        if (!isLetterEnabled(letter)) continue;
+
+        var idx = Number(wr.idx);
+        if (!isFinite(idx)) continue;
+
+        var base = "" + letter + idx;
+        var nominal = Number(wr.nominal);
+        if (!isFinite(nominal)) continue;
+
+        var si;
+        for (si = 0; si < 2; si++) {
+          var side = si === 0 ? "L" : "R";
+          var lineId = base + side;
+          var measured = side === "L" ? wr.measuredL : wr.measuredR;
+          var raw = Number(measured);
+          if (!isFinite(raw)) continue;
+
+          var lineCorr = Number(step4LineCorr && step4LineCorr[lineId] != null ? step4LineCorr[lineId] : 0);
+          if (!isFinite(lineCorr)) lineCorr = 0;
+
+          var groupId = String(lineToGroup && lineToGroup[lineId] != null ? lineToGroup[lineId] : "");
+          var gid = String(groupId || "").trim();
+          if (!gid) continue;
+
+          var baseLoop = (groupLoopBaseline && groupLoopBaseline[gid]) ? groupLoopBaseline[gid] : "SL";
+          var baseMm = loopMm(baseLoop);
+
+          // Use correction for the evaluation (zeroing is the point of this feature).
+          var corrected = raw + lineCorr + Number(corrVal || 0);
+          if (!isFinite(corrected)) continue;
+
+          var after0 = corrected + baseMm;
+          var d0 = after0 - nominal;
+          if (!isFinite(d0)) continue;
+
+          sums[gid] = (sums[gid] || 0) + d0;
+          counts[gid] = (counts[gid] || 0) + 1;
+        }
+      }
+
+      var changes = {};
+      var gids = Object.keys(sums);
+      var j;
+
+      for (j = 0; j < gids.length; j++) {
+        var gid2 = gids[j];
+        var n = counts[gid2] || 0;
+        if (!n) continue;
+
+        var avgDelta = sums[gid2] / n;
+        if (!isFinite(avgDelta)) continue;
+
+        var baseLoop2 = (groupLoopBaseline && groupLoopBaseline[gid2]) ? groupLoopBaseline[gid2] : "SL";
+        var baseMm2 = loopMm(baseLoop2);
+
+        var bestLoop = baseLoop2;
+        var bestAbs = Math.abs(avgDelta);
+        var bestShiftAbs = 0;
+
+        // If already within tolerance, keep baseline.
+        if (tol > 0 && Math.abs(avgDelta) <= tol) {
+          bestLoop = baseLoop2;
+        } else {
+          var foundWithin = false;
+          var k;
+          for (k = 0; k < (LOOP_TYPES || []).length; k++) {
+            var cand = LOOP_TYPES[k];
+            var candMm = loopMm(cand);
+            var shift = candMm - baseMm2;
+            var afterDelta = avgDelta + shift;
+            var absAfter = Math.abs(afterDelta);
+            var shiftAbs = Math.abs(shift);
+
+            if (tol > 0) {
+              if (absAfter <= tol) {
+                if (!foundWithin || shiftAbs < bestShiftAbs || (shiftAbs === bestShiftAbs && absAfter < bestAbs)) {
+                  foundWithin = true;
+                  bestLoop = cand;
+                  bestAbs = absAfter;
+                  bestShiftAbs = shiftAbs;
+                }
+              } else if (!foundWithin) {
+                if (absAfter < bestAbs || (absAfter === bestAbs && shiftAbs < bestShiftAbs)) {
+                  bestLoop = cand;
+                  bestAbs = absAfter;
+                  bestShiftAbs = shiftAbs;
+                }
+              }
+            } else {
+              if (absAfter < bestAbs || (absAfter === bestAbs && shiftAbs < bestShiftAbs)) {
+                bestLoop = cand;
+                bestAbs = absAfter;
+                bestShiftAbs = shiftAbs;
+              }
+            }
+          }
+        }
+
+        if (bestLoop && bestLoop !== baseLoop2) changes[gid2] = bestLoop;
+      }
+
+      // Evaluate per-line outliers after applying the loop changes (still no fine adjust).
+      var outliers = 0;
+      var sumOver = 0;
+      var maxOver = 0;
+
+      var ii;
+      for (ii = 0; ii < (wideRows || []).length; ii++) {
+        var wr2 = wideRows[ii];
+        if (!wr2) continue;
+        var letter2 = String(wr2.letter || "").toUpperCase();
+        if (!isLetterEnabled(letter2)) continue;
+
+        var idx2 = Number(wr2.idx);
+        if (!isFinite(idx2)) continue;
+
+        var base2 = "" + letter2 + idx2;
+        var nominal2 = Number(wr2.nominal);
+        if (!isFinite(nominal2)) continue;
+
+        var si2;
+        for (si2 = 0; si2 < 2; si2++) {
+          var side2 = si2 === 0 ? "L" : "R";
+          var lineId2 = base2 + side2;
+          var measured2 = side2 === "L" ? wr2.measuredL : wr2.measuredR;
+          var raw2 = Number(measured2);
+          if (!isFinite(raw2)) continue;
+
+          var lineCorr2 = Number(step4LineCorr && step4LineCorr[lineId2] != null ? step4LineCorr[lineId2] : 0);
+          if (!isFinite(lineCorr2)) lineCorr2 = 0;
+
+          var gid3 = String(lineToGroup && lineToGroup[lineId2] != null ? lineToGroup[lineId2] : "");
+          gid3 = String(gid3 || "").trim();
+          if (!gid3) continue;
+
+          var baseLoop3 = (groupLoopBaseline && groupLoopBaseline[gid3]) ? groupLoopBaseline[gid3] : "SL";
+          var override3 = (changes && changes[gid3]) ? changes[gid3] : "";
+          var loopDelta3 = override3 ? (loopMm(override3) - loopMm(baseLoop3)) : 0;
+
+          var corrected2 = raw2 + lineCorr2 + Number(corrVal || 0);
+          if (!isFinite(corrected2)) continue;
+          var after2 = corrected2 + loopDelta3;
+          var delta2 = after2 - nominal2;
+          if (!isFinite(delta2)) continue;
+
+          if (tol > 0 && Math.abs(delta2) > tol) {
+            outliers += 1;
+            var over = Math.abs(delta2) - tol;
+            sumOver += over;
+            if (over > maxOver) maxOver = over;
+          }
+        }
+      }
+
+      var loopChangeCount = Object.keys(changes).length;
+      // Scoring: prioritize getting within tolerance first (fewest outliers),
+      // then minimize loop changes. If any outliers remain, prefer a single outlier over multiple (line insert preference).
+      var score = (outliers * 1000000000) + (loopChangeCount * 1000000);
+      if (outliers > 0) score += (outliers - 1) * 100000; // extra penalty beyond the first outlier
+      score += sumOver;
+
+      return {
+        score: score,
+        corr: Number(corrVal || 0),
+        changes: changes,
+        details: { loopChangeCount: loopChangeCount, outliers: outliers, sumOver: sumOver, maxOver: maxOver },
+      };
+    };
+
+    var c;
+    for (c = start; c <= end; c++) {
+      var res = computePlanForCorrection(c);
+      if (!res) continue;
+
+      if (res.score < best.score) {
+        best = res;
+      } else if (res.score === best.score) {
+        var d1 = Math.abs(Number(res.corr) - Number(center));
+        var d2 = Math.abs(Number(best.corr) - Number(center));
+        if (d1 < d2) best = res;
+      }
+    }
+
+    // Apply: correction + loops only. Do NOT write fine adjust values here.
+    setGroupAdjustments({});
+    setGroupLoopChange(best.changes || {});
+    setMeta((p) => Object.assign({}, p, { correction: Math.round(Number(best.corr || 0)) }));
+    if (!showCorrected) setShowCorrected(true);
+    setAutoDecision({ mode: "zero+minimal", corr: Number(best && best.corr != null ? best.corr : 0), loopChangeCount: best && best.details ? best.details.loopChangeCount : null, outliers: best && best.details ? best.details.outliers : null, maxOver: best && best.details ? best.details.maxOver : null });
+    setAutoLoopStatus("zero+minimal");
+  }
+  function applyAutoZeroForBestTrimPitch() {
+    // Auto: optimize pitch using closest factory loops, then set zeroing (meta.correction) to best overall centering value.
+    // Pitch comparisons are factory-style (A vs B, C vs B, D vs B). A global correction cannot change those comparisons by itself,
+    // so this mode is allowed to adjust loops (factory discrete) first.
+    if (step !== 4) return;
+    if (!groupLoopBaseline) return;
+
+    // 1) Choose closest factory loops (this is what actually influences pitch).
+    applyAutoLoopPlan("factory");
+
+    // 2) Apply best zeroing value for overall trim centering (does not affect pitch comparisons).
+    var center = null;
+    if (zeroingStats && Number.isFinite(Number(zeroingStats.wholeMedian))) center = Math.round(Number(zeroingStats.wholeMedian));
+    if (center == null) {
+      var cur = Number(meta && meta.correction != null ? meta.correction : 0);
+      if (!isFinite(cur)) cur = 0;
+      center = Math.round(cur);
+    }
+
+    setMeta((p) => Object.assign({}, p, { correction: center }));
+    if (!showCorrected) setShowCorrected(true);
+  }
+
+
+
+function setRange(letter, bucket, field, value) {
+    setRangesByLetter((prev) => {
+      const next = { ...(prev || {}) };
+      const maxIdx = Math.max(1, Number(maxByLetter[letter] || 1));
+      const count = Number(groupCountByLetter[letter] || 3);
+      const cur = next[letter] || makeDefaultRanges(maxIdx, count);
+
+      const b = Number(bucket);
+      const v = Number(value);
+      if (!Number.isFinite(v)) return prev;
+
+      // Always enforce contiguous ranges:
+      // - Bucket 1 always starts at 1
+      // - Bucket b>1 always starts at prev.end + 1
+      // - Last bucket always ends at maxIdx
+      const out = { ...cur };
+
+      // Helper to read bucket values with sane defaults
+      const getS = (bb) => clamp(Number((out[bb] && out[bb].start) != null ? out[bb].start : 1), 1, maxIdx);
+      const getE = (bb) => clamp(Number((out[bb] && out[bb].end) != null ? out[bb].end : maxIdx), 1, maxIdx);
+
+      // Ensure bucket 1 start fixed
+      if (!out[1]) out[1] = { start: 1, end: Math.min(maxIdx, 4) };
+      out[1] = { ...out[1], start: 1 };
+
+      // Apply user edit: only allow editing END for any bucket except last,
+      // and allow editing END for last only if you want, but we clamp it to maxIdx anyway.
+      if (field === "end") {
+        const s = (b === 1) ? 1 : (getE(b - 1) + 1);
+        let e = clamp(v, 1, maxIdx);
+        if (e < s) e = s;
+        out[b] = { start: s, end: e };
+      } else {
+        // If they try to edit "start", we just re-enforce the rule.
+        const s = (b === 1) ? 1 : (getE(b - 1) + 1);
+        const e = getE(b);
+        out[b] = { start: s, end: Math.max(s, e) };
+      }
+
+      // Now reflow all buckets to keep them contiguous
+      for (let bb = 2; bb <= count; bb++) {
+        const prevEnd = getE(bb - 1);
+        const s = clamp(prevEnd + 1, 1, maxIdx);
+        let e = getE(bb);
+
+        // Last bucket always ends at maxIdx (rest)
+        if (bb === count) e = maxIdx;
+
+        if (e < s) e = s;
+        out[bb] = { start: s, end: e };
+      }
+
+      next[letter] = out;
+      return next;
+    });
+  }
+
+  function rebuildMappingFromRanges(resetOverridesToRanges = false) {
+    const initMap = buildInitialLineToGroup({
+      maxByLetter,
+      groupCountByLetter,
+      prefixByLetter,
+      rangesByLetter,
+    });
+
+    // "Reset to ranges" overwrites everything and sets the new baseline snapshot.
+    if (resetOverridesToRanges) {
+      setLineToGroup(initMap);
+      setDefaultMappingSnapshot(deepClone(initMap));
+      return;
+    }
+
+    // "Apply ranges" updates lines that are currently empty OR still equal to the previous baseline.
+    // This keeps any manual overrides you already made, but makes Step 3 + overrides reflect your new ranges.
+    setLineToGroup((prev) => {
+      const cur = prev || {};
+      const base = defaultMappingSnapshot || {};
+      const next = { ...cur };
+
+      Object.keys(initMap).forEach((k) => {
+        const curV = cur[k];
+        const baseV = base[k];
+        if (!curV || curV === "" || (baseV && curV === baseV)) {
+          next[k] = initMap[k] || "";
+        }
+      });
+
+      return next;
+    });
+
+    // Update the baseline snapshot to the new ranges layout.
+    setDefaultMappingSnapshot(deepClone(initMap));
+  }
+
+  function setLineToGroupFromDrag(lineId, newGroupId) {
+    if (!lineId || !newGroupId) return;
+    setLineToGroup((prev) => ({ ...(prev || {}), [lineId]: newGroupId }));
+  }
+
+  function fitDiagramToScreen() {
+    const el = diagramBoxRef.current;
+    if (!el) return;
+    const available = Math.max(320, el.clientWidth - 24);
+    const z = clamp(available / DIAGRAM_W, 0.4, 1.8);
+    setDiagramZoom(Number(z.toFixed(2)));
+    // Centre scroll after zoom is applied
+    setTimeout(() => {
+      const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+      el.scrollLeft = Math.round(maxLeft / 2);
+      el.scrollTop = 0;
+    }, 60);
+  }
+
+  function fitBaselineToScreen() {
+    const outer = baselineBoxRef.current;
+    const inner = baselineInnerRef.current;
+    if (!outer || !inner) return;
+    const availableW = Math.max(320, outer.clientWidth - 24);
+    const availableH = Math.max(240, outer.clientHeight - 24);
+    const contentW = Math.max(1, inner.scrollWidth || inner.clientWidth || 1);
+    const contentH = Math.max(1, inner.scrollHeight || inner.clientHeight || 1);
+    const z = clamp(Math.min(availableW / contentW, availableH / contentH), 0.4, 2.0);
+    setBaselineZoom(Number(z.toFixed(2)));
+  }
+  useEffect(() => {
+    if (step !== 3) return;
+
+    // Default baseline view on entry: 65% zoom and scroll positioned so buckets are visible.
+    setBaselineZoom(0.65);
+
+    const t = setTimeout(() => {
+      const el = baselineBoxRef.current;
+      if (!el) return;
+
+      // Center horizontally; start at top vertically.
+ const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+const maxTop  = Math.max(0, el.scrollHeight - el.clientHeight);
+
+el.scrollLeft = Math.round(maxLeft / 2) - 585;
+el.scrollTop  = Math.round(maxTop / 2) - 60;
+
+    }, 80);
+
+    return () => clearTimeout(t);
+  }, [step, diagramWingOutline, diagramCompact]);
+  useEffect(() => {
+    if (step !== 3) return;
+    const t = setTimeout(() => {
+      fitDiagramToScreen();
+      // Centre scroll horizontally after zoom is applied
+      const el = diagramBoxRef.current;
+      if (!el) return;
+      // Short extra delay so zoom has been applied and scrollWidth is up to date
+      setTimeout(() => {
+        const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+        el.scrollLeft = Math.round(maxLeft / 2);
+        el.scrollTop = 0;
+      }, 60);
+    }, 80);
+    return () => clearTimeout(t);
+  }, [step]);
+
+  const changes = useMemo(() => {
+    const base = defaultMappingSnapshot || {};
+    const cur = lineToGroup || {};
+    const keys = Object.keys(cur).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const out = [];
+    for (const k of keys) {
+      const from = base[k] || "";
+      const to = cur[k] || "";
+      if (from && to && from !== to) out.push({ lineId: k, from, to });
+    }
+    return out;
+  }, [defaultMappingSnapshot, lineToGroup]);
+
+  const changedLineIdSet = useMemo(() => new Set((changes || []).map((c) => c.lineId)), [changes]);
+
+  function buildWingProfileJSON() {
+    return {
+      schema: "trim-tuning-wing-profile-v1",
+      exportedAt: new Date().toISOString(),
+      wing: { make: meta.make || "", model: meta.model || "" },
+      step2: {
+        prefixByLetter: deepClone(prefixByLetter),
+        groupCountByLetter: deepClone(groupCountByLetter),
+        rangesByLetter: deepClone(rangesByLetter),
+        lineToGroup: deepClone(lineToGroup),
+        defaultMappingSnapshot: deepClone(defaultMappingSnapshot),
+      },
+      diagram: { wingOutline: diagramWingOutline, compact: diagramCompact },
+    };
+  }
+  function exportWingProfileJSON() {
+    if (!loaded) return alert("Load a wing data file first.");
+    const name = String(profileName || "").trim() || `${meta.make || "Wing"}-${meta.model || "Profile"}`.replace(/\s+/g, "-");
+    downloadJSON(buildWingProfileJSON(), `${name}.json`);
+  }
+  async function importWingProfileJSON(file) {
+    if (!file) return;
+    if (!loaded) return alert("Import wing data first, then load a profile JSON.");
+    try {
+      const text = await readFileText(file);
+      const parsed = JSON.parse(text);
+      if (!parsed || parsed.schema !== "trim-tuning-wing-profile-v1") return alert("Not a valid wing profile JSON.");
+
+      const s2 = parsed.step2 || {};
+      if (s2.prefixByLetter) setPrefixByLetter((p) => ({ ...p, ...s2.prefixByLetter }));
+      if (s2.groupCountByLetter) setGroupCountByLetter((p) => ({ ...p, ...s2.groupCountByLetter }));
+      if (s2.rangesByLetter) setRangesByLetter((p) => ({ ...p, ...s2.rangesByLetter }));
+      if (s2.lineToGroup) setLineToGroup((p) => ({ ...(p || {}), ...s2.lineToGroup }));
+      if (s2.defaultMappingSnapshot) setDefaultMappingSnapshot(s2.defaultMappingSnapshot);
+
+      if (parsed.diagram && typeof parsed.diagram === "object") {
+        if (typeof parsed.diagram.wingOutline === "boolean") setDiagramWingOutline(parsed.diagram.wingOutline);
+        if (typeof parsed.diagram.compact === "boolean") setDiagramCompact(parsed.diagram.compact);
+      }
+
+      setStep(2);
+      alert("Profile loaded.");
+    } catch (e) {
+      console.error(e);
+      alert("Failed to load profile JSON.");
+    }
+  }
+
+  function PrefixTile({ letter }) {
+    // Reduced overall bucket width + aligned left
+    return (
+      <div
+        style={{
+          padding: 8,
+          borderRadius: 12,
+          border: `1px solid ${theme.border}`,
+          background: "rgba(255,255,255,0.03)",
+          // snug: avoid fixed widths that can overlap on smaller screens
+          width: "fit-content",
+          minWidth: 140,
+        }}
+      >
+        <div style={{ fontWeight: 950, fontSize: 11 }}>
+          {letter} prefix <span style={{ opacity: 0.7, fontWeight: 850 }}>({(prefixByLetter[letter] || "") + "1L"} / {(prefixByLetter[letter] || "") + "1R"})</span>
+        </div>
+        <div style={{ marginTop: 6 }}>
+          <input
+            value={prefixByLetter[letter] || ""}
+            onChange={(e) => setPrefixByLetter((p) => ({ ...p, [letter]: e.target.value.toUpperCase() }))}
+            style={{
+              width: 68,
+              padding: "7px 9px",
+              borderRadius: 12,
+              border: `1px solid ${theme.border}`,
+              background: "rgba(0,0,0,0.68)",
+              color: theme.text,
+              outline: "none",
+                                              userSelect: "auto",
+              fontWeight: 950,
+              textTransform: "uppercase",
+              fontSize: 12,
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  function RangeEditor({ L }) {
+    const count = Number(groupCountByLetter[L] || 3);
+    const r = rangesByLetter[L] || makeDefaultRanges(maxByLetter[L] || 1, count);
+
+    return (
+      <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 8, background: "rgba(0,0,0,0.38)" }}>
+        <div style={{ display: "flex", justifyContent: "flex-start", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontWeight: 950, fontSize: 14 }}>
+            {L} ranges <span style={{ opacity: 0.7, fontWeight: 850 }}>(max {maxByLetter[L] || 0})</span>
+          </div>
+          <Select
+            value={String(count)}
+            onChange={(v) => {
+              const nextCount = Number(v) === 4 ? 4 : 3;
+              setGroupCountByLetter((p) => ({ ...p, [L]: nextCount }));
+              setRangesByLetter((prev) => ({ ...prev, [L]: makeDefaultRanges(maxByLetter[L] || 1, nextCount) }));
+            }}
+            options={[
+              { value: "3", label: "3 groups" },
+              { value: "4", label: "4 groups" },
+            ]}
+            width={120}
+          />
+        </div>
+
+        {count === 4 && (
+          <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 14, border: `1px solid ${theme.border}`, background: "rgba(250,204,21,0.14)", color: "rgba(255,255,255,0.92)", fontWeight: 900, fontSize: 12 }}>
+            Remember to <b>Apply ranges</b> before moving to <b>Step 3</b>.
+          </div>
+        )}
+
+        <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
+
+          {Array.from({ length: count }, (_, i) => i + 1).map((bucket) => {
+            const col = groupColor(L, bucket);
+            const prefix = (prefixByLetter[L] || `${L}R`) + bucket;
+            return (
+              <div
+                key={`${L}-${bucket}`}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "86px 110px 110px",
+                  justifyContent: "start",
+                  gap: 8,
+                  alignItems: "center",
+                  padding: 8,
+                  borderRadius: 12,
+                  border: `1px solid ${theme.border}`,
+                  background: "rgba(255,255,255,0.03)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8, justifySelf: "start" }}>
+                  <span style={{ width: 9, height: 9, borderRadius: 999, background: col }} />
+                  <span style={{ fontWeight: 950, color: col, fontSize: 12 }}>{prefix}</span>
+                </div>
+
+                <div style={{ display: "flex", gap: 8, alignItems: "center", justifySelf: "start" }}>
+                  <span style={{ opacity: 0.72, fontWeight: 850, fontSize: 12 }}>S</span>
+                  <NumInput value={bucket === 1 ? 1 : (Number(r[bucket - 1].end || 0) + 1)} min={1} max={maxByLetter[L]} disabled={bucket !== 1} onChange={(vv) => setRange(L, bucket, "start", vv)} width={62} />
+                </div>
+
+                <div style={{ display: "flex", gap: 8, alignItems: "center", justifySelf: "start" }}>
+                  <span style={{ opacity: 0.72, fontWeight: 850, fontSize: 12 }}>E</span>
+                  <NumInput value={bucket === count ? (maxByLetter[L] || 1) : (r[bucket].end || (maxByLetter[L] || 1))} min={1} max={maxByLetter[L]} disabled={bucket === count} onChange={(vv) => setRange(L, bucket, "end", vv)} width={62} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ marginTop: 8, opacity: 0.76, fontSize: 12, fontWeight: 850 }}>
+          After changing ranges, click <b>Apply ranges</b>.
+        </div>
+      </div>
+    );
+  }
+
+  function ColoredRangeTabs() {
+    const tabs = ["A", "B", "C", "D"].map((L) => ({ L, color: PALETTE[L].base }));
+    return (
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-start" }}>
+        {tabs.map((t) => {
+          const active = rangeTab === t.L;
+          return (
+            <button
+              key={t.L}
+              onClick={() => setRangeTab(t.L)}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 999,
+                border: `1px solid ${theme.border}`,
+                background: active ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.30)",
+                color: theme.text,
+                cursor: "pointer",
+                fontWeight: 950,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                whiteSpace: "nowrap",
+              }}
+            >
+              <span style={{ width: 10, height: 10, borderRadius: 999, background: t.color }} />
+              {t.L} ranges
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  function DiagramScrollBox({ height, width }) {
+    // Fixed height + responsive width + obvious scrollbars
+    const PAD_X = 260; // extra canvas on each side so outer buckets are reachable
+    const PAD_Y = 0;
+    return (
+      <div
+        ref={diagramBoxRef}
+        className="diagramScrollBox"
+        style={{
+          border: diagramWingOutline ? `2px solid rgba(255,255,255,0.18)` : `1px solid ${theme.border}`,
+          borderRadius: 18,
+          overflow: "scroll",
+          height: height || 720,
+          width: width || "100%",
+          maxWidth: "100%",
+          minWidth: 0,
+          background: "rgba(0,0,0,0.34)",
+          boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.10)",
+        }}
+      >
+        <div
+        style={{
+          width: Math.max((DIAGRAM_W + 520 + PAD_X * 2) * diagramZoom, (width || 980) + 520 + PAD_X * 2),
+          height: Math.max((DIAGRAM_H + 220 + PAD_Y * 2) * diagramZoom, (height || 640) + 220 + PAD_Y * 2),
+        }}
+      >
+        <div
+          style={{
+            width: DIAGRAM_W + PAD_X * 2,
+            height: DIAGRAM_H + PAD_Y * 2,
+            transform: `translate(${PAD_X}px, ${PAD_Y}px) scale(${diagramZoom})`,
+            transformOrigin: "top left",
+          }}
+        >
+          <DiagramPreview
+            lineToGroup={lineToGroup}
+            prefixByLetter={prefixByLetter}
+            groupCountByLetter={groupCountByLetter}
+            showWingOutline={diagramWingOutline}
+            compactLayout={diagramCompact}
+            setLineToGroupFromDrag={setLineToGroupFromDrag}
+            changedLineIds={changedLineIdSet}
+          />
+        </div>
+      </div>
+      </div>
+    );
+  }
+
+  const stepTabs = [
+    { value: 1, label: "Step 1" },
+    { value: 2, label: "Step 2" },
+    { value: 3, label: "Step 3" },
+    { value: 4, label: "Step 4 (Trim)" },
+  ];
+
+
+  if (!isAuthed) {
+    return (
+      <div style={{ minHeight: "100vh", background: theme.bg, color: theme.text, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"' }}>
+        <div style={{ width: "min(520px, 100%)", maxWidth: "100%", border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel, padding: 16 }}>
+          <div style={{ fontSize: 26, fontWeight: 950, letterSpacing: -0.6 }}>WingTrim Login</div>
+          <div style={{ marginTop: 6, opacity: 0.82, fontSize: 13, fontWeight: 850 }}>
+            Enter credentials to access the trim tool.
+          </div>
+
+          <form onSubmit={handleLogin} style={{ marginTop: 14, display: "grid", gap: 10 }}>
+            <label style={{ display: "grid", gap: 6 }}>
+              <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.85 }}>Username</div>
+              <input
+                value={loginUser}
+                onChange={(e) => setLoginUser(e.target.value)}
+                autoComplete="username"
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: `1px solid ${theme.border}`,
+                  background: theme.panel2,
+                  color: theme.text,
+                  outline: "none",
+                  fontWeight: 850,
+                }}
+              />
+            </label>
+
+            <label style={{ display: "grid", gap: 6 }}>
+              <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.85 }}>Password</div>
+              <input
+                type="password"
+                value={loginPass}
+                onChange={(e) => setLoginPass(e.target.value)}
+                autoComplete="current-password"
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: `1px solid ${theme.border}`,
+                  background: theme.panel2,
+                  color: theme.text,
+                  outline: "none",
+                  fontWeight: 850,
+                }}
+              />
+            </label>
+
+            {loginErr ? (
+              <div style={{ padding: "10px 12px", borderRadius: 12, border: `1px solid ${theme.warnStroke}`, background: theme.warnBg, color: theme.text, fontWeight: 900 }}>
+                {loginErr}
+              </div>
+            ) : null}
+
+            <button
+              type="submit"
+              style={{
+                marginTop: 4,
+                padding: "12px 14px",
+                borderRadius: 12,
+                border: `1px solid ${theme.border}`,
+                background: "rgba(255,255,255,0.10)",
+                color: theme.text,
+                fontWeight: 950,
+                cursor: "pointer",
+              }}
+            >
+              Sign in
+            </button>
+
+            <div style={{ opacity: 0.7, fontSize: 12, fontWeight: 800, marginTop: 2 }}>
+              Note: this is a front-end gate (not secure authentication).
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", overflowX: "hidden", background: theme.bg, color: theme.text, padding: "clamp(8px, 3vw, 16px)", fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial' }}>
+      {/* scrollbars styling */}
+      <style>{`
+        .diagramScrollBox { scrollbar-width: auto; scrollbar-color: rgba(255,255,255,0.55) rgba(0,0,0,0.35); }
+        .diagramScrollBox::-webkit-scrollbar { height: 16px; width: 16px; }
+        .diagramScrollBox::-webkit-scrollbar-track { background: rgba(0,0,0,0.35); }
+        .diagramScrollBox::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.35); border: 3px solid rgba(0,0,0,0.35); border-radius: 999px; }
+        .diagramScrollBox::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.55); }
+      
+        .scrollBox { overflow: scroll; scrollbar-width: auto; scrollbar-color: rgba(255,255,255,0.55) rgba(0,0,0,0.35); scrollbar-gutter: stable both-edges; }
+        .scrollBox::-webkit-scrollbar { height: 16px; width: 16px; }
+        .scrollBox::-webkit-scrollbar-track { background: rgba(0,0,0,0.35); }
+        .scrollBox::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.35); border: 3px solid rgba(0,0,0,0.35); border-radius: 999px; }
+        .scrollBox::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.55); }
+
+        /* ── Responsive ─────────────────────────────────────── */
+        @media (max-width: 600px) {
+          .resp-title { font-size: 22px !important; letter-spacing: -0.4px !important; }
+          .resp-subtitle { font-size: 12px !important; }
+          .resp-header { padding: 10px !important; }
+          .resp-step-nav { flex-direction: column !important; align-items: stretch !important; }
+          .resp-step-btn { text-align: center !important; width: 100% !important; box-sizing: border-box !important; }
+          .resp-factory-row { flex-direction: column !important; align-items: stretch !important; }
+          .resp-factory-select { min-width: 0 !important; width: 100% !important; box-sizing: border-box !important; }
+          .resp-import-btns { flex-direction: column !important; align-items: stretch !important; }
+          .resp-import-btns button, .resp-import-btns label { text-align: center !important; width: 100% !important; box-sizing: border-box !important; }
+          .resp-table-hint { display: block !important; }
+          .resp-hide-mobile { display: none !important; }
+          .resp-padding { padding: 8px !important; }
+        }
+        @media (min-width: 601px) {
+          .resp-table-hint { display: none !important; }
+        }
+`}</style>
+
+      {/* reduced overall width to match overrides panel */}
+      <div style={step !== 4 ? { width: "100%", maxWidth: 920, margin: "0 auto", paddingLeft: 12, paddingRight: 12, display: "grid", gap: 10 } : { width: "100%", maxWidth: 1600, margin: "0 auto", paddingLeft: 12, paddingRight: 12, display: "grid", gap: 10 }}>
+        {/* Header */}
+        <div className="resp-header" style={{ border: `1px solid ${theme.border}`, borderRadius: 22, padding: 14, background: "linear-gradient(180deg, rgba(59,130,246,0.16), rgba(255,255,255,0.03))" }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <div>
+              <div className="resp-title" style={{ fontSize: 36, fontWeight: 950, letterSpacing: -0.9 }}>Paraglider Trim Tuning</div>
+              <div className="resp-subtitle" style={{ marginTop: 6, opacity: 0.86, fontSize: 14, fontWeight: 900 }}>
+                {SITE_VERSION} <span style={{ opacity: 0.7, fontWeight: 850 }}>• Step 1–4</span>
+              </div>
+
+              {/* Persistent import summary (visible across all steps) */}
+              <div
+                style={{
+                  marginTop: 10,
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 10,
+                  alignItems: "center",
+                  fontWeight: 900,
+                  fontSize: 12,
+                  opacity: 0.9,
+                }}
+              >
+                <span>
+                  Imported rows: <b>{loaded ? wideRows.length : "—"}</b> • Lines total (L+R): <b>{loaded ? summary.totalLines : "—"}</b>
+                </span>
+                <span>
+                  File: <b>{importStatus?.ok ? importStatus.name : "—"}</b>
+                </span>
+              </div>
+            </div>
+
+            <div className="resp-step-nav" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <ImportStatusRadio loaded={loaded} />
+              {/* Step navigation */}
+              <div style={{ display: "flex", gap: 6, alignItems: "center", background: "rgba(0,0,0,0.25)", borderRadius: 14, padding: "4px 6px", border: `1px solid ${theme.border}` }}>
+                {stepTabs.map((t) => {
+                  const disabled = t.value !== 1 && !loaded;
+                  const active = step === t.value;
+                  // Going to step 4 from step 3 needs the freeze warning
+                  const handleClick = () => {
+                    if (disabled) return;
+                    if (t.value === 4 && step === 3 && groupLoopBaseline === null) {
+                      setStep3Step4WarnOpen(true);
+                      return;
+                    }
+                    // Block going back to step 3 from step 4 (baseline already frozen)
+                    if (t.value <= 3 && step === 4) return;
+                    setStep(t.value);
+                  };
+                  const blockedBack = t.value <= 3 && step === 4;
+                  return (
+                    <button
+                      key={t.value}
+                      className="resp-step-btn"
+                      title={blockedBack ? "Use Reset all to go back from Step 4" : disabled ? "Import data first" : ""}
+                      style={{
+                        padding: "7px 14px",
+                        borderRadius: 10,
+                        border: active ? `1px solid rgba(59,130,246,0.7)` : "1px solid transparent",
+                        background: active ? "rgba(59,130,246,0.28)" : "transparent",
+                        color: active ? theme.text : `rgba(255,255,255,${disabled || blockedBack ? "0.3" : "0.75"})`,
+                        fontWeight: active ? 950 : 900,
+                        fontSize: 13,
+                        cursor: disabled || blockedBack ? "not-allowed" : "pointer",
+                        transition: "background 0.15s, border-color 0.15s",
+                        whiteSpace: "nowrap",
+                      }}
+                      onClick={handleClick}
+                    >
+                      {t.value === step ? `● ${t.label}` : t.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <button className="resp-step-btn" style={Object.assign({}, topBtn, { background: "rgba(239,68,68,0.16)" })} onClick={openResetAllWarn}>
+                Reset all
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        {resetAllWarnOpen ? (
+          <div
+            onClick={() => setResetAllWarnOpen(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: theme.bg,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 16,
+              zIndex: 999,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "100%",
+                maxWidth: 720,
+                borderRadius: 18,
+                border: `1px solid ${theme.border}`,
+                background: "rgba(18,21,27,0.98)",
+                boxShadow: "0 20px 60px rgba(0,0,0,0.55)",
+                overflow: "hidden",
+              }}
+            >
+              <div style={{ padding: 14, borderBottom: `1px solid ${theme.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ fontWeight: 950, fontSize: 16 }}>Reset everything?</div>
+                <button
+                  style={{
+                    border: `1px solid ${theme.border}`,
+                    background: "rgba(255,255,255,0.16)",
+        boxShadow: "inset 0 0 0 2px rgba(250,204,21,0.65)",
+                    color: theme.text,
+                    borderRadius: 12,
+                    padding: "8px 10px",
+                    fontWeight: 950,
+                    cursor: "pointer",
+                  }}
+                  onClick={() => setResetAllWarnOpen(false)}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={{ padding: 14, display: "grid", gap: 10 }}>
+                <div style={{ opacity: 0.9, lineHeight: 1.35 }}>
+                  This will reset <b>EVERYTHING</b> (imported data, mapping, baseline loops, frozen baseline, and all Step 4 adjustments).
+                </div>
+                <div style={{ opacity: 0.78, fontSize: 12, lineHeight: 1.35 }}>Continue?</div>
+              </div>
+
+              <div style={{ padding: 14, borderTop: `1px solid ${theme.border}`, display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
+                <button style={topBtn} onClick={() => setResetAllWarnOpen(false)}>
+                  Cancel
+                </button>
+                <button
+                  style={Object.assign({}, topBtn, { background: "rgba(239,68,68,0.18)" })}
+                  onClick={() => {
+                    setResetAllWarnOpen(false);
+                    resetAll();
+                  }}
+                >
+                  Reset everything
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {step === 3 && step3Step4WarnOpen ? (
+          <div
+            onClick={() => setStep3Step4WarnOpen(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: theme.bg,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 16,
+              zIndex: 999,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "100%",
+                maxWidth: 720,
+                borderRadius: 18,
+                border: `1px solid ${theme.border}`,
+                background: "rgba(18,21,27,0.98)",
+                boxShadow: "0 20px 60px rgba(0,0,0,0.55)",
+                overflow: "hidden",
+              }}
+            >
+              <div style={{ padding: 14, borderBottom: `1px solid ${theme.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ fontWeight: 950, fontSize: 16 }}>Set baseline loops before Step 4</div>
+                <button
+                  style={{
+                    border: `1px solid ${theme.border}`,
+                    background: "rgba(255,255,255,0.16)",
+        boxShadow: "inset 0 0 0 2px rgba(250,204,21,0.65)",
+                    color: theme.text,
+                    borderRadius: 12,
+                    padding: "8px 10px",
+                    fontWeight: 950,
+                    cursor: "pointer",
+                  }}
+                  onClick={() => setStep3Step4WarnOpen(false)}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={{ padding: 14, display: "grid", gap: 10 }}>
+                <div style={{ opacity: 0.9, lineHeight: 1.35 }}>
+                  Step 4 freezes a snapshot of your installed baseline loops. After you enter Step 4, you can’t return to Step 3 without using the full Reset.
+                </div>
+                <div style={{ opacity: 0.78, fontSize: 12, lineHeight: 1.35 }}>
+                  Make sure every group has an installed loop selected (Left and Right) before freezing Step 4.
+                </div>
+              </div>
+
+              <div style={{ padding: 14, borderTop: `1px solid ${theme.border}`, display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
+                <button style={topBtn} onClick={() => setStep3Step4WarnOpen(false)}>
+                  Cancel
+                </button>
+                <button
+                  style={Object.assign({}, topBtn, { background: "rgba(34,197,94,0.18)" })}
+                  onClick={() => {
+                    setStep3Step4WarnOpen(false);
+                    setStep(4);
+                  }}
+                >
+                  Proceed to Step 4
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {step !== 4 ? (
+          <div style={step123Wrap}>
+        {/* Step 1 */}
+        {step === 1 ? (
+          <Panel
+            tint
+            title={tab === "import" ? "Step 1 — Import CSV/XLSX" : "Step 1 — Test data (attached)"}
+            right={<SegTabs value={tab} onChange={setTab} tabs={[{ value: "import", label: "Import" }, { value: "testdata", label: "Test data" }]} />}
+          >
+            <div style={{ display: "grid", gap: 10 }}>
+              {tab === "import" ? (
+                <div className="resp-import-btns" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                    <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={importMeasurementFileFromRef} />
+                    <button style={loaded ? chooseBtn : { ...chooseBtn, background: "rgba(34,197,94,0.25)", border: "1px solid rgba(34,197,94,0.55)" }} onClick={clickMeasurementFilePicker}>
+                    Choose file…
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowManualGrid(true)}
+                    style={{
+                      ...chooseBtn,
+                      background: "rgba(19,41,112,0.95)",
+                      border: "1px solid rgba(147,197,253,0.95)",
+                      color: "rgba(255,255,255,0.98)",
+                      opacity: 0.98,
+                    }}
+                    title="Open manual entry grid (wide format)"
+                  >
+                    Manual entry…
+                  </button>
+
+
+                  {/* Factory database import (public/trimdb) */}
+                  <div
+                    className="resp-factory-row"
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      padding: "8px 10px",
+                      border: `1px solid ${theme.border}`,
+                      borderRadius: 12,
+                      background: "rgba(255,255,255,0.03)",
+                    }}
+                  >
+                    <div style={{ fontWeight: 950, opacity: 0.9 }}>Factory DB</div>
+
+                    <style>{`.factory-select option { background: #ffffff; color: #111111; }`}</style>
+
+                    <FactorySelect
+                      className="resp-factory-select"
+                      theme={theme}
+                      value={dbMake}
+                      onChange={(e) => {
+                        setDbMake(e.target.value);
+                        setDbModel("");
+                        setDbSize("");
+                      }}
+                      minWidth={160}
+                      title={trimIndex ? "Select manufacturer" : "Put /public/trimdb/index.json and reload"}
+                    >
+                      <option value="">Make…</option>
+                      {dbMakes.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </FactorySelect>
+
+                    <FactorySelect
+                      className="resp-factory-select"
+                      theme={theme}
+                      value={dbModel}
+                      onChange={(e) => {
+                        setDbModel(e.target.value);
+                        setDbSize("");
+                      }}
+                      disabled={!dbMake}
+                      minWidth={220}
+                      title={dbMake ? "Select model" : "Select make first"}
+                    >
+                      <option value="">Model…</option>
+                      {dbModels.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </FactorySelect>
+
+                    <FactorySelect
+                      className="resp-factory-select"
+                      theme={theme}
+                      value={dbSize}
+                      onChange={(e) => setDbSize(e.target.value)}
+                      disabled={!dbMake || !dbModel}
+                      minWidth={120}
+                      title={dbMake && dbModel ? "Select size" : "Select make + model first"}
+                    >
+                      <option value="">Size…</option>
+                      {dbSizes.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </FactorySelect>
+
+                    <button
+                      type="button"
+                      onClick={importFactoryFromTrimDb}
+                      disabled={!trimIndex || !trimMakeDb || !dbMake || !dbModel || !dbSize}
+                      style={{
+                        ...chooseBtn,
+                        background: "rgba(34,197,94,0.18)",
+                        opacity: !trimIndex || !trimMakeDb || !dbMake || !dbModel || !dbSize ? 0.55 : 1,
+                      }}
+                      title="Import factory nominal lengths from trimdb"
+                    >
+                      Import factory…
+                    </button>
+
+                    {trimIndexErr ? <div style={{ color: theme.bad, fontWeight: 950 }}>{trimIndexErr}</div> : null}
+                    {trimMakeErr ? <div style={{ color: theme.bad, fontWeight: 950 }}>{trimMakeErr}</div> : null}
+                  </div>
+
+                  <div style={{ opacity: 0.85, fontWeight: 900 }}>
+                    Imported rows: <b>{wideRows.length}</b> • Lines total (L+R): <b>{summary.totalLines}</b>
+                  </div>
+
+                  {importStatus.ok ? (
+                    <div style={{ opacity: 0.90, fontWeight: 900 }}>
+                      File: <b>{importStatus.name}</b>
+                    </div>
+                  ) : importStatus.err ? (
+                    <div style={{ color: theme.bad, fontWeight: 950 }}>{importStatus.err}</div>
+                  ) : null}
+
+{/* Manual entry grid popout (wide CSV-style) */}
+                  {showManualGrid ? (
+                    <div
+                      onClick={() => { setShowMeasureMode(false); setShowManualGrid(false); }}
+                      style={{
+                        position: "fixed",
+                        inset: 0,
+                        zIndex: 9999,
+                        background: theme.bg,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 18,
+                      }}
+                    >
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          width: "100%",
+                          maxWidth: "92vw",
+                          maxHeight: "88vh",
+                          borderRadius: 18,
+                          border: `2px solid ${theme.border}`,
+                          background: theme.panel,
+                          boxShadow: "0 24px 80px rgba(0,0,0,0.55)",
+                          overflow: "hidden",
+                          display: "flex",
+                          flexDirection: "column",
+                        }}
+                      >
+
+                        {showMeasureMode ? (
+                          <div
+                            onClick={() => setShowMeasureMode(false)}
+                            style={{
+                              position: "fixed",
+                              inset: 0,
+                              zIndex: 10010,
+                              background: theme.bg,
+                              color: theme.text,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              padding: 18,
+                            }}
+                          >
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                width: "100%",
+                                maxWidth: 980,
+                                borderRadius: 26,
+                                border: `3px solid ${theme.border}`,
+                                background: theme.panel,
+                                boxShadow: "0 30px 120px rgba(0,0,0,0.65)",
+                                padding: 18,
+                                display: "grid",
+                                gap: 14,
+                              }}
+                            >
+                              {(() => {
+                                const cur = manualActivePos;
+                                const prev = manualMeasurePrevPos(cur.row, cur.col);
+                                const next = manualMeasureNextPos(cur.row, cur.col);
+
+                                const curMeta = manualColMeta(cur.col);
+                                const curLineKey = `${curMeta.groupLetter}${cur.row + 1}_line`;
+                                const curFactoryKey = `${curMeta.groupLetter}${cur.row + 1}_soll`;
+                                const curSide = curMeta.sub === "l" ? "LEFT" : curMeta.sub === "r" ? "RIGHT" : "";
+
+                                const curValueKey = manualCellKey(cur.row, cur.col);
+                                const curValue = manualGrid[curValueKey] ?? "";
+
+                                const prevValue = manualGrid[manualCellKey(prev.row, prev.col)] ?? "";
+                                const nextValue = manualGrid[manualCellKey(next.row, next.col)] ?? "";
+
+
+                                const factoryRaw = manualGrid[curFactoryKey];
+                                const factoryNum = factoryRaw === "" || factoryRaw == null ? NaN : Number(factoryRaw);
+                                const measuredNum = curValue === "" || curValue == null ? NaN : Number(curValue);
+                                const corrNum = Number(measureCorrection || 0);
+                                const tolNum = Number(measureTolerance || 0);
+
+                                const delta = !Number.isFinite(factoryNum) || !Number.isFinite(measuredNum) ? NaN : (measuredNum + corrNum) - factoryNum;
+                                const absDelta = Number.isFinite(delta) ? Math.abs(delta) : NaN;
+
+                                let measureTextColor = theme.text;
+                                if (Number.isFinite(absDelta)) {
+                                  if (absDelta <= 4) measureTextColor = theme.good;
+                                  else if (Number.isFinite(tolNum) && tolNum > 0 && absDelta <= tolNum) measureTextColor = theme.warn;
+                                  else measureTextColor = theme.bad;
+                                }
+
+                                return (
+<>
+                                  <>
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                                      <div>
+                                        <div style={{ fontSize: 22, fontWeight: 950, letterSpacing: -0.3 }}>Measurement mode</div>
+                                        <div style={{ marginTop: 6, fontSize: 14, fontWeight: 900, opacity: 0.85 }}>
+                                          Current cell: <span style={{ fontWeight: 950 }}>{manualPosLabel(cur.row, cur.col)}</span>{" "}
+                                          {curSide ? (
+                                            <span style={{ marginLeft: 10, padding: "3px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.55)", fontWeight: 950 }}>
+                                              {curSide}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                        <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", fontWeight: 900 }}>
+                                          <div style={{ padding: "8px 12px", borderRadius: 14, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.55)" }}>
+                                            Line: <span style={{ fontWeight: 950 }}>{manualGrid[curLineKey] ?? "—"}</span>
+                                          </div>
+                                          <div style={{ padding: "8px 12px", borderRadius: 14, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.55)" }}>
+                                            Factory: <span style={{ fontWeight: 950 }}>{manualGrid[curFactoryKey] ?? "—"}</span>
+                                          </div>
+
+                                          <div style={{ padding: "8px 12px", borderRadius: 14, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", gap: 8 }}>
+                                            <span style={{ fontWeight: 950 }}>Correction</span>
+                                            <input
+                                              value={String(measureCorrection)}
+                                              onChange={(e) => {
+                                                const v = e.target.value;
+                                                const n = Number(v);
+                                                setMeasureCorrection(Number.isFinite(n) ? n : 0);
+                                              }}
+                                              style={{
+                                                width: 90,
+                                                padding: "6px 8px",
+                                                borderRadius: 10,
+                                                border: `1px solid ${theme.border}`,
+                                                background: theme.panel2,
+                                                color: theme.text,
+                                                fontWeight: 950,
+                                                outline: "none",
+                                              userSelect: "auto",
+                                                textAlign: "right",
+                                              }}
+                                              inputMode="numeric"
+                                            />
+                                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                              <button
+                                                type="button"
+                                                onClick={() => setMeasureCorrection((v) => Number(v || 0) + 1)}
+                                                style={{
+                                                  width: 28,
+                                                  height: 18,
+                                                  borderRadius: 8,
+                                                  border: `1px solid ${theme.border}`,
+                                                  background: theme.panel2,
+                                                  color: theme.text,
+                                                  fontWeight: 950,
+                                                  cursor: "pointer",
+                                                  lineHeight: "16px",
+                                                }}
+                                                title="Increase"
+                                              >
+                                                ▲
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => setMeasureCorrection((v) => Number(v || 0) - 1)}
+                                                style={{
+                                                  width: 28,
+                                                  height: 18,
+                                                  borderRadius: 8,
+                                                  border: `1px solid ${theme.border}`,
+                                                  background: theme.panel2,
+                                                  color: theme.text,
+                                                  fontWeight: 950,
+                                                  cursor: "pointer",
+                                                  lineHeight: "16px",
+                                                }}
+                                                title="Decrease"
+                                              >
+                                                ▼
+                                              </button>
+                                            </div>
+
+                                            <span style={{ opacity: 0.8, fontWeight: 900 }}>mm</span>
+                                          </div>
+
+                                          <div style={{ padding: "8px 12px", borderRadius: 14, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", gap: 8 }}>
+                                            <span style={{ fontWeight: 950 }}>Tolerance</span>
+                                            <input
+                                              value={String(measureTolerance)}
+                                              onChange={(e) => {
+                                                const v = e.target.value;
+                                                const n = Number(v);
+                                                setMeasureTolerance(Number.isFinite(n) ? n : 0);
+                                              }}
+                                              style={{
+                                                width: 90,
+                                                padding: "6px 8px",
+                                                borderRadius: 10,
+                                                border: `1px solid ${theme.border}`,
+                                                background: theme.panel2,
+                                                color: theme.text,
+                                                fontWeight: 950,
+                                                outline: "none",
+                                              userSelect: "auto",
+                                                textAlign: "right",
+                                              }}
+                                              inputMode="numeric"
+                                            />
+                                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                              <button
+                                                type="button"
+                                                onClick={() => setMeasureTolerance((v) => Math.max(0, Number(v || 0) + 1))}
+                                                style={{
+                                                  width: 28,
+                                                  height: 18,
+                                                  borderRadius: 8,
+                                                  border: `1px solid ${theme.border}`,
+                                                  background: theme.panel2,
+                                                  color: theme.text,
+                                                  fontWeight: 950,
+                                                  cursor: "pointer",
+                                                  lineHeight: "16px",
+                                                }}
+                                                title="Increase"
+                                              >
+                                                ▲
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => setMeasureTolerance((v) => Math.max(0, Number(v || 0) - 1))}
+                                                style={{
+                                                  width: 28,
+                                                  height: 18,
+                                                  borderRadius: 8,
+                                                  border: `1px solid ${theme.border}`,
+                                                  background: theme.panel2,
+                                                  color: theme.text,
+                                                  fontWeight: 950,
+                                                  cursor: "pointer",
+                                                  lineHeight: "16px",
+                                                }}
+                                                title="Decrease"
+                                              >
+                                                ▼
+                                              </button>
+                                            </div>
+
+                                            <span style={{ opacity: 0.8, fontWeight: 900 }}>mm</span>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setShowMeasureMode(false);
+                                            manualFocusCell(manualActiveRef.current.row, manualActiveRef.current.col);
+                                          }}
+                                          style={{
+                                            border: `1px solid ${theme.border}`,
+                                            background: "rgba(0,0,0,0.55)",
+                                            color: theme.text,
+                                            borderRadius: 999,
+                                            padding: "12px 16px",
+                                            fontWeight: 950,
+                                            cursor: "pointer",
+                                            fontSize: 21,
+                                          }}
+                                        >
+                                          Stop
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    <div style={{ display: "grid", gap: 10 }}>
+                                      <div style={{ border: `2px solid ${theme.border}`, borderRadius: 20, background: theme.panel2, padding: 16 }}>
+                                        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "nowrap" }}>
+                                          <div style={{ fontSize: 21, fontWeight: 950, opacity: 0.8, whiteSpace: "nowrap" }}>Previous</div>
+                                          <div style={{ fontSize: 49, fontWeight: 950, opacity: 0.95, whiteSpace: "nowrap" }}>{manualPosLabel(prev.row, prev.col)}</div>
+                                          <div style={{ fontSize: 51, fontWeight: 950, letterSpacing: -0.6, whiteSpace: "nowrap" }}>{prevValue || "—"}</div>
+                                        </div>
+                                      </div>
+
+                                      <div style={{ border: `3px solid ${theme.good}`, borderRadius: 22, background: theme.panel2, padding: 18 }}>
+                                        <div style={{ fontSize: 21, fontWeight: 950, opacity: 0.85 }}>Current</div>
+                                        <div style={{ marginTop: 6, fontSize: 33, fontWeight: 950 }}>{manualPosLabel(cur.row, cur.col)}</div>
+                                        <div style={{ marginTop: 10, fontSize: 81, fontWeight: 950, letterSpacing: -1.0, color: measureTextColor }}>{curValue || "—"}</div>
+
+                                        <input
+                                          ref={measureInputRef}
+                                          autoFocus
+                                          value={String(curValue)}
+                                          onChange={(e) => {
+                                            const v = e.target.value;
+                                            manualSetCell(cur.row, cur.col, v);
+                                          }}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              playBeep();
+                                              e.preventDefault();
+                                              const rawNow = (measureInputRef.current && measureInputRef.current.value) != null ? String(measureInputRef.current.value) : String(curValue ?? "");
+                                              manualSetCell(cur.row, cur.col, rawNow);
+                                              const next = manualMeasureNextPos(cur.row, cur.col);
+                                              manualFocusCell(next.row, next.col);
+                                              setTimeout(() => {
+                                                try {
+                                                  if (measureInputRef.current) measureInputRef.current.focus();
+                                                } catch (err) {}
+                                              }, 0);
+                                              return;
+                                            }
+
+                                            if (e.key === "Backspace" || e.key === "Delete") {
+                                              // Allow normal single-digit editing. If the cell is empty, move backward.
+                                              const curStr = String(curValue ?? "");
+                                              if (curStr) return;
+
+                                              e.preventDefault();
+                                              manualSetCell(cur.row, cur.col, "");
+                                              const prev = manualMeasurePrevPos(cur.row, cur.col);
+                                              manualFocusCell(prev.row, prev.col);
+                                              setTimeout(() => {
+                                                try {
+                                                  if (measureInputRef.current) measureInputRef.current.focus();
+                                                } catch (err) {}
+                                              }, 0);
+                                              return;
+                                            }
+}}
+                                          style={{
+                                            marginTop: 10,
+                                            width: "100%",
+                                            padding: "14px 16px",
+                                            fontSize: 33,
+                                            fontWeight: 950,
+                                            borderRadius: 16,
+                                            border: `2px solid ${theme.border}`,
+                                            background: "rgba(0,0,0,0.55)",
+                                            color: theme.text,
+                                            outline: "none",
+                                              userSelect: "auto",
+                                            textAlign: "center",
+                                          }}
+                                          placeholder="Type measurement here (laser/keyboard)…"
+                                        />
+
+                                        <div style={{ marginTop: 10, fontSize: 14, fontWeight: 900, opacity: 0.8 }}>
+                                          Tip: click the target cell in the grid, then type/measure. Press Enter to advance down the column. Press Esc to stop.
+                                        </div>
+                                      </div>
+
+                                      <div style={{ border: `2px solid ${theme.border}`, borderRadius: 20, background: theme.panel2, padding: 16 }}>
+                                        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "nowrap" }}>
+                                          <div style={{ fontSize: 21, fontWeight: 950, opacity: 0.8, whiteSpace: "nowrap" }}>Next</div>
+                                          <div style={{ fontSize: 49, fontWeight: 950, opacity: 0.95, whiteSpace: "nowrap" }}>{manualPosLabel(next.row, next.col)}</div>
+                                          <div style={{ fontSize: 51, fontWeight: 950, letterSpacing: -0.4, whiteSpace: "nowrap" }}>{nextValue || "—"}</div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </>
+                                
+</>
+);
+})()}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        <div
+                          style={{
+                            padding: 12,
+                            borderBottom: `1px solid ${theme.border}`,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 10,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 950, letterSpacing: -0.2, fontSize: 21 }}>Manual entry (wide grid)
+        
+</div>
+
+                            <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.55)" }}>
+                                <span style={{ fontWeight: 950 }}>Correction</span>
+                                <input
+                                  value={measureCorrection}
+                                  onChange={(e) => setMeasureCorrection(e.target.value)}
+                                  inputMode="numeric"
+                                  style={{
+                                    width: 90,
+                                    padding: "6px 10px",
+                                    borderRadius: 12,
+                                    border: `1px solid ${theme.border}`,
+                                    background: theme.panel2,
+                                    color: theme.text,
+                                    fontWeight: 950,
+                                    outline: "none",
+                                              userSelect: "auto",
+                                  }}
+                                />
+                                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMeasureCorrection((v) => Number(v || 0) + 1)}
+                                    style={{
+                                      width: 28,
+                                      height: 18,
+                                      borderRadius: 8,
+                                      border: `1px solid ${theme.border}`,
+                                      background: theme.panel2,
+                                      color: theme.text,
+                                      fontWeight: 950,
+                                      cursor: "pointer",
+                                      lineHeight: "16px",
+                                    }}
+                                    title="Increase"
+                                  >
+                                    ▲
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMeasureCorrection((v) => Number(v || 0) - 1)}
+                                    style={{
+                                      width: 28,
+                                      height: 18,
+                                      borderRadius: 8,
+                                      border: `1px solid ${theme.border}`,
+                                      background: theme.panel2,
+                                      color: theme.text,
+                                      fontWeight: 950,
+                                      cursor: "pointer",
+                                      lineHeight: "16px",
+                                    }}
+                                    title="Decrease"
+                                  >
+                                    ▼
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.55)" }}>
+                                <span style={{ fontWeight: 950 }}>Tolerance</span>
+                                <input
+                                  value={measureTolerance}
+                                  onChange={(e) => setMeasureTolerance(e.target.value)}
+                                  inputMode="numeric"
+                                  style={{
+                                    width: 90,
+                                    padding: "6px 10px",
+                                    borderRadius: 12,
+                                    border: `1px solid ${theme.border}`,
+                                    background: theme.panel2,
+                                    color: theme.text,
+                                    fontWeight: 950,
+                                    outline: "none",
+                                              userSelect: "auto",
+                                  }}
+                                />
+                                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMeasureTolerance((v) => Math.max(0, Number(v || 0) + 1))}
+                                    style={{
+                                      width: 28,
+                                      height: 18,
+                                      borderRadius: 8,
+                                      border: `1px solid ${theme.border}`,
+                                      background: theme.panel2,
+                                      color: theme.text,
+                                      fontWeight: 950,
+                                      cursor: "pointer",
+                                      lineHeight: "16px",
+                                    }}
+                                    title="Increase"
+                                  >
+                                    ▲
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMeasureTolerance((v) => Math.max(0, Number(v || 0) - 1))}
+                                    style={{
+                                      width: 28,
+                                      height: 18,
+                                      borderRadius: 8,
+                                      border: `1px solid ${theme.border}`,
+                                      background: theme.panel2,
+                                      color: theme.text,
+                                      fontWeight: 950,
+                                      cursor: "pointer",
+                                      lineHeight: "16px",
+                                    }}
+                                    title="Decrease"
+                                  >
+                                    ▼
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.85 }}>
+                                Cell colors compare (value + correction) vs Factory using ±4mm (green), up to tolerance (yellow), beyond tolerance (red).
+                              </div>
+                            </div>
+
+                            <div style={{ marginTop: 4, opacity: 0.82, fontSize: 12, fontWeight: 850 }}>
+                              Type directly into cells. Paste from Excel/Sheets (tab-separated) or CSV text. Enter moves down the column.
+                            </div>
+
+                            <div style={{ marginTop: 10 }}>
+  <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 10 }}>
+    <button
+      type="button"
+      onClick={() => setManualPasteOpen((v) => !v)}
+      style={{
+        borderRadius: 999,
+        border: `1px solid ${theme.border}`,
+        background: theme.bg2,
+        color: theme.text,
+        fontWeight: 900,
+        fontSize: 12,
+        padding: "6px 10px",
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {manualPasteOpen ? "Hide Paste Box" : "Show Past Box"}
+    </button>
+
+    <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.78 }}>
+      Paste CSV/Excel content here if pasting directly into cells collapses into one field. The grid will fill starting from the currently focused cell.
+    </div>
+  </div>
+
+  {manualPasteOpen ? (
+    <>
+      <textarea
+        onPaste={(e) => {
+          const cd = e.clipboardData;
+          const raw =
+            (cd && cd.getData("text/plain")) ||
+            (cd && cd.getData("text")) ||
+            (cd && cd.getData("Text")) ||
+            "";
+          // If we can't access clipboardData, let the browser paste normally.
+          if (!raw) return;
+          e.preventDefault();
+          const tNorm = String(raw).replace(/\r?\n/g, "\n");
+          manualPasteIntoGrid(manualActivePos.row, manualActivePos.col, tNorm);
+          setManualPasteBox("");
+        }}
+        value={manualPasteBox}
+        onChange={(e) => {
+          const v = e.target.value;
+          setManualPasteBox(v);
+          // Auto-apply when it looks like a paste (multi-cell content)
+          if (v && (v.includes("\n") || v.includes("\t") || v.includes(",") || v.includes(";"))) {
+            manualPasteIntoGrid(manualActivePos.row, manualActivePos.col, String(v).replace(/\r?\n/g, "\n"));
+            setManualPasteBox("");
+          }
+        }}
+        placeholder="Click a target cell in the grid, then paste here…"
+        style={{
+          marginTop: 8,
+          width: "100%",
+          minHeight: 76,
+          resize: "vertical",
+          padding: 10,
+          borderRadius: 12,
+          border: `1px solid ${theme.border}`,
+          background: "rgba(0,0,0,0.55)",
+          color: theme.text,
+          fontWeight: 850,
+          outline: "none",
+          userSelect: "auto",
+        }}
+      />
+    </>
+  ) : null}
+</div>
+                          </div>
+
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                            <button
+                              type="button"
+                              onClick={() => setManualGrid({})}
+                              style={{
+                                border: "1px solid rgba(234,179,8,0.95)",
+                                background: "rgba(161,98,7,0.95)",
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title="Clear manual grid values"
+                            >
+                              Clear
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setManualRowCount((n) => n + 1)}
+                              style={{
+                                border: `1px solid ${theme.border}`,
+                                background: "rgba(0,0,0,0.55)",
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title="Add a row"
+                            >
+                              + Row
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setManualRowCount((n) => Math.max(1, n - 1))}
+                              style={{
+                                border: `1px solid ${theme.border}`,
+                                background: "rgba(0,0,0,0.55)",
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title="Remove last row"
+                            >
+                              − Row
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setManualGroups((prev) => {
+                                  const last = prev[prev.length - 1] || "D";
+                                  const next = String.fromCharCode(last.charCodeAt(0) + 1);
+                                  return [...prev, next];
+                                })
+                              }
+                              style={{
+                                border: `1px solid ${theme.border}`,
+                                background: "rgba(0,0,0,0.55)",
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title="Add a column group"
+                            >
+                              + Col
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setManualGroups((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev))}
+                              style={{
+                                border: `1px solid ${theme.border}`,
+                                background: "rgba(0,0,0,0.55)",
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title="Remove last column group"
+                            >
+                              − Col
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const cur = manualActiveRef.current;
+                                const meta = manualColMeta(cur.col);
+                                const sIndexL = MANUAL_SUBCOLS.findIndex((s) => s.key === "l");
+                                const lCol = meta.groupIndex * MANUAL_SUBCOLS.length + (sIndexL >= 0 ? sIndexL : 0);
+                                setShowMeasureMode(true);
+                                const safeCol = meta.sub === "line" || meta.sub === "soll" ? lCol : cur.col;
+                                manualFocusCell(cur.row, safeCol);
+                              }}
+                              style={{
+                                border: `1px solid ${theme.border}`,
+                                background: "rgba(0,0,0,0.55)",
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title="Open large measurement view (for laser measure entry)"
+                            >
+                              Start measurement
+                            </button>
+                            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginLeft: 10, flexWrap: "wrap" }}>
+                              
+
+                              <button
+                                type="button"
+                                onClick={() => glmConnect("all")}
+                                disabled={glmBtState === "connecting" || glmBtState === "connected"}
+                                style={{
+                                  border: `1px solid ${theme.border}`,
+                                  background: "rgba(0,0,0,0.35)",
+                                  color: theme.text,
+                                  borderRadius: 999,
+                                  padding: "8px 10px",
+                                  fontWeight: 850,
+                                  cursor: glmBtState === "connecting" || glmBtState === "connected" ? "default" : "pointer",
+                                  opacity: glmBtState === "connecting" || glmBtState === "connected" ? 0.75 : 1,
+                                }}
+                                title="Fallback: show all Bluetooth devices in the picker."
+                              >
+                                Connect (all)
+                              </button>
+
+                              {glmBtState === "connected" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => glmDisconnect()}
+                                  style={{
+                                    border: "1px solid rgba(239,68,68,0.85)",
+                                    background: "rgba(239,68,68,0.15)",
+                                    color: theme.text,
+                                    borderRadius: 999,
+                                    padding: "8px 10px",
+                                    fontWeight: 850,
+                                    cursor: "pointer",
+                                  }}
+                                  title="Disconnect GLM50C"
+                                >
+                                  Disconnect
+                                </button>
+                              ) : null}
+
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontWeight: 850, opacity: 0.95 }}>
+                                <span
+                                  style={{
+                                    width: 10,
+                                    height: 10,
+                                    borderRadius: 99,
+                                    background:
+                                      glmBtState === "connected"
+                                        ? "rgba(34,197,94,0.95)"
+                                        : glmBtState === "connecting"
+                                        ? "rgba(234,179,8,0.95)"
+                                        : glmBtState === "error"
+                                        ? "rgba(239,68,68,0.95)"
+                                        : "rgba(148,163,184,0.8)",
+                                    boxShadow: "0 0 0 2px rgba(0,0,0,0.35)",
+                                  }}
+                                />
+                                <span>
+                                  {glmBtState === "connected"
+                                    ? `Connected${glmBtName ? `: ${glmBtName}` : ""}`
+                                    : glmBtState === "connecting"
+                                    ? "Connecting…"
+                                    : glmBtState === "error"
+                                    ? "Connect error (try again)"
+                                    : "Not connected"}
+                                </span>
+                              </span>
+
+                              <span style={{ marginLeft: 6, fontWeight: 850, opacity: 0.9 }}>
+                                {glmLastMm != null ? `Last: ${glmLastMm} mm` : `RX: ${glmRxCount}`}
+                              </span>
+
+                              <span style={{ marginLeft: 6, fontWeight: 750, opacity: 0.85 }}>
+                                {glmSubCount ? `Subs: ${glmSubCount}` : "Subs: 0"}
+                              </span>
+
+                              {glmLastRxHex ? (
+                                <span style={{ marginLeft: 6, fontWeight: 750, opacity: 0.85, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>
+                                  {glmLastRxHex}
+                                </span>
+                              ) : null}
+
+                              {glmBtInfo ? (
+                                <span style={{ marginLeft: 6, fontWeight: 750, opacity: 0.85 }}>
+                                  {glmBtInfo}
+                                </span>
+                              ) : null}
+                            </div>
+
+
+
+                            <button
+                              type="button"
+                              onClick={(e) => { e.preventDefault(); exportManualCSV(); }}
+                              style={{
+                                border: "1px solid rgba(147,197,253,0.95)",
+                                background: "rgba(37,99,235,0.95)",
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title="Export manual entry as wide CSV"
+                            >
+                              Export CSV
+                            </button>
+
+                            
+
+                            <button
+                              type="button"
+                              onClick={(e) => { e.preventDefault(); commitManualWideGridToStep2(); }}
+                              style={{
+                                border: "1px solid rgba(34,197,94,0.95)",
+                                background: "rgba(34,197,94,0.90)",
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title="Apply manual grid to the app and go to Step 2"
+                            >
+                              Go to Step 2
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={toggleBeepMuted}
+                              style={{
+                                border: `2px solid ${beepMuted ? "rgba(239,68,68,0.7)" : "rgba(255,255,255,0.25)"}`,
+                                background: beepMuted ? "rgba(239,68,68,0.18)" : "rgba(255,255,255,0.08)",
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title={beepMuted ? "Beep is muted — click to unmute" : "Mute beep"}
+                            >
+                              {beepMuted ? "🔇 Muted" : "🔔 Beep"}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => { setShowMeasureMode(false); setShowManualGrid(false); }}
+                              style={{
+                                border: "2px solid rgba(255,0,0,0.95)",
+                                background: "rgba(153,27,27,0.95)",
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title="Close"
+                            >
+                              Close
+                            </button>
+                          </div>
+                        </div>
+
+                        <div
+                          onPasteCapture={(e) => {
+                            const cd = e.clipboardData;
+                            const t =
+                              cd && cd.getData("text/plain") ||
+                              cd && cd.getData("text") ||
+                              cd && cd.getData("Text") ||
+                              "";
+                            const tNorm = `${t}`.replace(/\r\n?/g, "\n");
+                            if (!t) return;
+                            if (tNorm.includes("\n") || tNorm.includes("\t") || tNorm.includes(",") || tNorm.includes(";")) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              manualPasteIntoGrid(manualActiveRef.current.row, manualActiveRef.current.col, tNorm);
+                            }
+                          }}
+                          ref={manualScrollRef}
+                          style={{ padding: 12, overflow: "auto", userSelect: manualSelecting ? "none" : "auto" }}
+                        >
+                          <div style={{ border: `1px solid ${theme.border}`, borderRadius: 12, background: theme.panel2 }}>
+                            <table style={{ width: "max-content", borderCollapse: "separate", borderSpacing: 0, fontSize: 12 }}>
+                              <thead>
+                                <tr>
+                                  <th
+                                    style={{
+                                      position: "sticky",
+                                      left: 0,
+                                      zIndex: 3,
+                                      background: theme.panel2,
+                                      padding: "10px 10px",
+                                      textAlign: "left",
+                                      fontWeight: 950,
+                                      borderBottom: `1px solid ${theme.border}`,
+                                    }}
+                                  >
+                                    Line
+                                  </th>
+                                  {manualGroups.map((g) => (
+                                    <th
+                                      key={g}
+                                      colSpan={MANUAL_SUBCOLS.length}
+                                      style={{
+                                        padding: "10px 10px",
+                                        textAlign: "center",
+                                        fontWeight: 950,
+                                        borderBottom: `1px solid ${theme.border}`,
+                                        borderLeft: `1px solid ${theme.border}`,
+                                      }}
+                                    >
+                                      {g}
+                                    </th>
+                                  ))}
+                                </tr>
+                                <tr>
+                                  <th
+                                    style={{
+                                      position: "sticky",
+                                      left: 0,
+                                      zIndex: 3,
+                                      background: theme.panel2,
+                                      padding: "8px 10px",
+                                      textAlign: "left",
+                                      fontWeight: 900,
+                                      opacity: 0.9,
+                                      borderBottom: `1px solid ${theme.border}`,
+                                    }}
+                                  >
+                                    #
+                                  </th>
+                                  {manualGroups.flatMap((g) =>
+                                    MANUAL_SUBCOLS.map((s, i) => (
+                                      <th
+                                        key={`${g}_${s.key}`}
+                                        style={{
+                                          padding: "8px 10px",
+                                          textAlign: "center",
+                                          fontWeight: 900,
+                                          opacity: 0.9,
+                                          borderBottom: `1px solid ${theme.border}`,
+                                          borderLeft: i === 0 ? `1px solid ${theme.border}` : undefined,
+                                        }}
+                                      >
+                                        {s.labelA}
+                                      </th>
+                                    ))
+                                  )}
+                                </tr>
+                              </thead>
+
+                              <tbody>
+                                {Array.from({ length: manualRowCount }).map((_, r) => (
+                                  <tr key={r}>
+                                    <td
+                                      style={{
+                                        position: "sticky",
+                                        left: 0,
+                                        zIndex: 2,
+                                        background: theme.panel2,
+                                        padding: "8px 10px",
+                                        fontWeight: 950,
+                                        borderBottom: `1px solid ${theme.border}`,
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      {r + 1}
+                                    </td>
+
+                                    {Array.from({ length: manualColCount }).map((_, c) => {
+                                      const k = manualCellKey(r, c);
+                                      return (
+                                        <td
+                                          key={k}
+                                          style={{
+                                            padding: "6px 8px",
+                                            borderBottom: `1px solid ${theme.border}`,
+                                            borderLeft: c % MANUAL_SUBCOLS.length === 0 ? `1px solid ${theme.border}` : undefined,
+                                          }}
+                                        >
+                                          <input
+                                            id={`manualCell_${r}_${c}`}
+                                            value={manualGrid[k] ?? ""}
+                                            readOnly={showMeasureMode && ((MANUAL_SUBCOLS[c % MANUAL_SUBCOLS.length]?.key === "line") || (MANUAL_SUBCOLS[c % MANUAL_SUBCOLS.length]?.key === "soll"))}
+                                            onChange={(e) => manualSetCell(r, c, e.target.value)}
+                                            onFocus={() => {
+                                              manualActiveRef.current = { row: r, col: c };
+                                              setManualActivePos({ row: r, col: c });
+                                              manualClearSelection();
+                                            }}
+onPaste={(e) => {
+                                              const cd = e.clipboardData;
+                                              const t =
+                                                cd && cd.getData("text/plain") ||
+                                                cd && cd.getData("text") ||
+                                                cd && cd.getData("Text") ||
+                                                "";
+                                              const tNorm = `${t}`.replace(/\r\n?/g, "\n");
+                                              if (!t) return;
+                                              // Handle multi-cell blocks here; allow single-value paste to fall back normally.
+                                              if (tNorm.includes("\n") || tNorm.includes("\t") || tNorm.includes(",") || tNorm.includes(";")) {
+                                                e.preventDefault();
+                                                manualPasteIntoGrid(manualActiveRef.current.row, manualActiveRef.current.col, tNorm);
+                                              }
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Enter") playBeep();
+                                              if ((e.key === "Delete" || e.key === "Backspace") && manualSel && manualIsSelected(r, c)) {
+                                                e.preventDefault();
+                                                manualClearSelectedCells();
+                                                manualClearSelection();
+                                                return;
+                                              }
+
+                                              const subKey = MANUAL_SUBCOLS[c % MANUAL_SUBCOLS.length]?.key;
+
+                                              // Arrow key navigation
+                                              if (e.key === "ArrowUp") {
+                                                e.preventDefault();
+                                                manualFocusCell(Math.max(0, r - 1), c);
+                                                return;
+                                              }
+                                              if (e.key === "ArrowDown") {
+                                                e.preventDefault();
+                                                manualFocusCell(Math.min(manualRowCount - 1, r + 1), c);
+                                                return;
+                                              }
+                                              if (e.key === "ArrowLeft") {
+                                                e.preventDefault();
+                                                manualFocusCell(r, Math.max(0, c - 1));
+                                                return;
+                                              }
+                                              if (e.key === "ArrowRight") {
+                                                e.preventDefault();
+                                                manualFocusCell(r, Math.min(manualColCount - 1, c + 1));
+                                                return;
+                                              }
+
+                                              // Delete / Backspace (digit-by-digit; move backwards only when empty)
+                                              if (e.key === "Backspace" || e.key === "Delete") {
+                                                // In measurement mode, Line/Factory are frozen.
+                                                if (showMeasureMode && (subKey === "line" || subKey === "soll")) return;
+
+                                                const curVal = `${manualGrid[k] ?? ""}`;
+                                                const el = e.target;
+                                                const selStart = typeof el?.selectionStart === "number" ? el.selectionStart : curVal.length;
+                                                const selEnd = typeof el?.selectionEnd === "number" ? el.selectionEnd : selStart;
+
+                                                // If there is content, delete one character (or selection) inside the cell.
+                                                if (curVal.length > 0) {
+                                                  let next = curVal;
+                                                  let nextCursor = selStart;
+
+                                                  if (selEnd > selStart) {
+                                                    next = curVal.slice(0, selStart) + curVal.slice(selEnd);
+                                                    nextCursor = selStart;
+                                                  } else if (e.key === "Backspace") {
+                                                    if (selStart > 0) {
+                                                      next = curVal.slice(0, selStart - 1) + curVal.slice(selStart);
+                                                      nextCursor = selStart - 1;
+                                                    } else {
+                                                      next = curVal;
+                                                      nextCursor = 0;
+                                                    }
+                                                  } else {
+                                                    // Delete key
+                                                    if (selStart < curVal.length) {
+                                                      next = curVal.slice(0, selStart) + curVal.slice(selStart + 1);
+                                                      nextCursor = selStart;
+                                                    } else {
+                                                      next = curVal;
+                                                      nextCursor = curVal.length;
+                                                    }
+                                                  }
+
+                                                  if (next !== curVal) {
+                                                    e.preventDefault();
+                                                    manualSetCell(r, c, next);
+                                                    // restore caret position after controlled update
+                                                    setTimeout(() => {
+                                                      const el2 = manualGridRefs.current[k];
+                                                      if (el2 && typeof el2.setSelectionRange === "function") {
+                                                        try {
+                                                          el2.focus();
+                                                          el2.setSelectionRange(nextCursor, nextCursor);
+                                                        } catch (e) {}
+                                                      }
+                                                    }, 0);
+                                                    return;
+                                                  }
+                                                }
+
+                                                // If empty (or nothing to delete), move to previous cell.
+                                                e.preventDefault();
+                                                const prev = showMeasureMode ? manualMeasurePrevPos(r, c) : manualPrevPos(r, c);
+                                                manualFocusCell(prev.row, prev.col);
+                                                return;
+                                              }
+
+                                              // Enter advances
+                                              if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                if (showMeasureMode) {
+                                                  const next = manualMeasureNextPos(r, c);
+                                                  manualFocusCell(next.row, next.col);
+                                                } else {
+                                                  const nextRow = r + 1;
+                                                  if (nextRow < manualRowCount) {
+                                                    manualFocusCell(nextRow, c);
+                                                  } else {
+                                                    const nextCol = c + 1;
+                                                    if (nextCol < manualColCount) manualFocusCell(0, nextCol);
+                                                  }
+                                                }
+                                              }
+                                            }}
+                                            onPointerDown={(e) => {
+                                              e.preventDefault();
+                                              setManualSelecting(true);
+                                              setManualSel({ r0: r, c0: c, r1: r, c1: c });
+                                              try { e.currentTarget.focus(); } catch {}
+                                            }}
+                                            onPointerEnter={() => {
+                                              if (!manualSelecting) return;
+                                              setManualSel((prev) => (prev ? { ...prev, r1: r, c1: c } : { r0: r, c0: c, r1: r, c1: c }));
+                                            }}
+                                            ref={(el) => {
+                                              if (el) manualGridRefs.current[k] = el;
+                                            }}
+                                            inputMode="decimal"
+                                            style={{
+                                              width: 92,
+                                              background: manualIsSelected(r, c) ? "rgba(59,130,246,0.18)" : "rgba(0,0,0,0.55)",
+                                              padding: "8px 8px",
+                                              borderRadius: 10,
+                                              border: `1px solid ${theme.border}`,
+                                              color: (() => {
+                                                  const subKey = MANUAL_SUBCOLS[c % MANUAL_SUBCOLS.length]?.key;
+                                                  if (showMeasureMode && (subKey === "line" || subKey === "soll")) return "rgba(147,197,253,0.95)";
+                                                  if (subKey !== "l" && subKey !== "r") return theme.text;
+
+                                                  const meta = manualColMeta(c);
+                                                  const factoryKey = `${meta.groupLetter}${r + 1}_soll`;
+                                                  const factoryNum = Number(manualGrid[factoryKey]);
+                                                  const measNum = Number(manualGrid[k]);
+
+                                                  if (!Number.isFinite(factoryNum) || !Number.isFinite(measNum)) return theme.text;
+
+                                                  const corrNum = Number(measureCorrection);
+                                                  const tolNum = Number(measureTolerance);
+                                                  const delta = (measNum + (Number.isFinite(corrNum) ? corrNum : 0)) - factoryNum;
+                                                  const absDelta = Math.abs(delta);
+
+                                                  if (absDelta <= 4) return theme.good;
+                                                  if (Number.isFinite(tolNum) && tolNum > 0 && absDelta <= tolNum) return theme.warn;
+                                                  return theme.bad;
+                                                })(),
+                                              fontWeight: 900,
+                                              outline: "none",
+                                              userSelect: "auto",
+                                            }}
+                                            placeholder="mm"
+                                            title="Paste columns/blocks from Excel/Sheets. Press Enter to advance down the column."
+                                          />
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
+{loaded ? (
+                    <div style={{ marginLeft: "auto" }}>
+                      <button style={{ ...topBtn, background: "rgba(34,197,94,0.25)", border: "1px solid rgba(34,197,94,0.55)" }} onClick={() => setStep(2)}>
+                        Go to Step 2 →
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                  <button style={chooseBtn} onClick={loadAttachedTestData}>
+                    Load attached test data
+                  </button>
+                  <div style={{ opacity: 0.86, fontWeight: 900 }}>
+                    Uses embedded <b>Speedster3 ML.csv</b>.
+                  </div>
+                  {loaded ? (
+                    <div style={{ marginLeft: "auto" }}>
+                      <button style={{ ...topBtn, background: "rgba(34,197,94,0.25)", border: "1px solid rgba(34,197,94,0.55)" }} onClick={() => setStep(2)}>
+                        Go to Step 2 →
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+
+              
+
+              )}
+
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+                <div style={card}>
+                  <div style={cardLabel}>Make</div>
+                  <div style={{ marginTop: 8 }}>
+                    <input
+                      value={meta.make || ""}
+                      onChange={(e) => setMeta((m) => ({ ...m, make: e.target.value }))}
+                      placeholder="Manufacturer"
+                      style={{ width: "100%", padding: "6px 8px", fontSize: 12, boxSizing: "border-box", minWidth: 0, borderRadius: 10, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.16)",
+        boxShadow: "inset 0 0 0 2px rgba(250,204,21,0.65)", color: theme.text, fontWeight: 900 }}
+                    />
+                  </div>
+                </div>
+                <div style={card}>
+                  <div style={cardLabel}>Model</div>
+                  <div style={{ marginTop: 8 }}>
+                    <input
+                      value={meta.model || ""}
+                      onChange={(e) => setMeta((m) => ({ ...m, model: e.target.value }))}
+                      placeholder="Model"
+                      style={{ width: "100%", padding: "6px 8px", fontSize: 12, boxSizing: "border-box", minWidth: 0, borderRadius: 10, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.16)",
+        boxShadow: "inset 0 0 0 2px rgba(250,204,21,0.65)", color: theme.text, fontWeight: 900 }}
+                    />
+                  </div>
+                </div>
+
+                <div style={card}>
+                  <div style={cardLabel}>Size</div>
+                  <div style={{ marginTop: 8 }}>
+                    <input
+                      value={meta.size || ""}
+                      onChange={(e) => setMeta((m) => ({ ...m, size: e.target.value }))}
+                      placeholder="Size"
+                      style={{ width: "100%", padding: "6px 8px", fontSize: 12, boxSizing: "border-box", minWidth: 0, borderRadius: 10, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.16)",
+        boxShadow: "inset 0 0 0 2px rgba(250,204,21,0.65)", color: theme.text, fontWeight: 900 }}
+                    />
+                  </div>
+                </div>
+                <div style={card}>
+                  <div style={cardLabel}>Serial #</div>
+                  <div style={{ marginTop: 8 }}>
+                    <input
+                      value={meta.serial || ""}
+                      onChange={(e) => setMeta((m) => ({ ...m, serial: e.target.value }))}
+                      placeholder="Serial number"
+                      style={{ width: "100%", padding: "6px 8px", fontSize: 12, boxSizing: "border-box", minWidth: 0, borderRadius: 10, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.16)",
+        boxShadow: "inset 0 0 0 2px rgba(250,204,21,0.65)", color: theme.text, fontWeight: 900 }}
+                    />
+                  </div>
+                </div>
+                <div style={card}>
+                  <div style={cardLabel}>Checked by</div>
+                  <div style={{ marginTop: 8 }}>
+                    <input
+                      value={meta.checkedBy || ""}
+                      onChange={(e) => setMeta((m) => ({ ...m, checkedBy: e.target.value }))}
+                      placeholder="Name"
+                      style={{ width: "100%", padding: "6px 8px", fontSize: 12, boxSizing: "border-box", minWidth: 0, borderRadius: 10, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.16)",
+        boxShadow: "inset 0 0 0 2px rgba(250,204,21,0.65)", color: theme.text, fontWeight: 900 }}
+                    />
+                  </div>
+                </div>
+                <div style={card}>
+                  <div style={cardLabel}>Date</div>
+                  <div style={{ marginTop: 8 }}>
+                    <input
+                      value={meta.date || ""}
+                      onChange={(e) => setMeta((m) => ({ ...m, date: e.target.value }))}
+                      placeholder="YYYY-MM-DD"
+                      style={{ width: "100%", padding: "6px 8px", fontSize: 12, boxSizing: "border-box", minWidth: 0, borderRadius: 10, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.16)",
+        boxShadow: "inset 0 0 0 2px rgba(250,204,21,0.65)", color: theme.text, fontWeight: 900 }}
+                    />
+                  </div>
+                </div>
+                <div style={card}>
+                  <div style={cardLabel}>Tolerance (mm)</div>
+                  <div style={{ marginTop: 8 }}>
+                    <NumInput value={meta.tolerance} onChange={(v) => setMeta((m) => ({ ...m, tolerance: clamp(v, 0, 999) }))} width={110} />
+                  </div>
+                </div>
+                <div style={card}>
+                  <div style={cardLabel}>Correction</div>
+                  <div style={{ marginTop: 8 }}>
+                    <NumInput value={meta.correction} onChange={(v) => setMeta((m) => ({ ...m, correction: Number(v || 0) }))} width={110} />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, background: "rgba(0,0,0,0.22)" }}>
+                <div style={{ fontWeight: 950, marginBottom: 6 }}>Import file format (CSV / XLSX)</div>
+                <div style={{ opacity: 0.9, fontWeight: 850, lineHeight: 1.35 }}>
+                  <div style={{ marginBottom: 8 }}>
+                    The importer reads a <b>wide table</b>:
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
+                    <li>
+                      <b>Row 1</b>: metadata labels (e.g. Make, Model, Tolerance, Correction, Date, Checked by, Serial, Size)
+                    </li>
+                    <li>
+                      <b>Row 2</b>: metadata values (same columns as Row 1)
+                    </li>
+                    <li>
+                      <b>Row 3</b>: headers — four riser blocks labelled <b>A</b>, <b>B</b>, <b>C</b>, <b>D</b> (each block is 4 columns)
+                    </li>
+                    <li>
+                      <b>Rows 4+</b>: line rows — each block uses: <b>Line</b>, <b>Nominal</b>, <b>Measured L</b>, <b>Measured R</b> (mm)
+                    </li>
+                  </ul>
+                  <div style={{ marginTop: 10, opacity: 0.9 }}>
+                    Example header (Row 3): <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace" }}>A ···· B ···· C ···· D</span>
+                  </div>
+
+<div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
+  <span aria-hidden style={{ fontSize: 14 }}>📄</span>
+  <a
+    href={EXAMPLE_FILE_URL}
+    download="Example.file.csv"
+    title="Download a sample CSV file showing the expected column layout (rows A–D, L/R values)."
+    style={{
+      fontSize: 12,
+      fontWeight: 900,
+      color: theme.text,
+      opacity: 0.85,
+      textDecoration: "underline",
+      cursor: "pointer",
+    }}
+  >
+    Download example CSV file
+  </a>
+
+
+                
+              </div>
+              </div>
+
+            </div>
+            </div>
+          </Panel>
+        ) : null}
+
+        {/* Step 2 */}
+        {step === 2 ? (
+          <Panel
+            tint
+            title="Step 2 — Map lines to maillon groups (setup)"
+            right={
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <button style={topBtn} onClick={() => setStep(1)}>
+                  ← Back
+                </button>
+<button style={Object.assign({}, topBtn, { background: "rgba(34,197,94,0.18)" })} onClick={() => setStep(3)} disabled={!loaded}>
+                  Open diagram page →
+                </button>
+              </div>
+            }
+          >
+            {!loaded ? (
+              <WarningBanner title="No file loaded">Go back to Step 1 and import a file (or load test data) before using Step 2.</WarningBanner>
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+                    <div>
+                      <div style={{ fontWeight: 950 }}>Wing profile — Export / Import (JSON)</div>
+                      <div style={{ opacity: 0.76, fontSize: 12, marginTop: 4 }}>Export saves Step 2 mapping. Import applies it to the current file’s lines.</div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                      <input
+                        value={profileName}
+                        onChange={(e) => setProfileName(e.target.value)}
+                        placeholder="Profile file name…"
+                        style={{ width: 240, padding: "7px 10px", borderRadius: 12, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.68)", color: theme.text, outline: "none",
+                                              userSelect: "auto", fontWeight: 900, fontSize: 14 }}
+                      />
+                      <button style={Object.assign({}, topBtn, { background: "rgba(59,130,246,0.20)" })} onClick={exportWingProfileJSON}>
+                        Export JSON
+                      </button>
+
+                      <input ref={profileImportRef} type="file" accept=".json,application/json" style={{ display: "none" }} onChange={importWingProfileFromRef} />
+                      <button style={topBtn} onClick={clickProfileImportPicker}>
+                        Import JSON
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <TrimWorkflow />
+
+                <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
+                  <div style={{ fontWeight: 950 }}>Defaults</div>
+
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontWeight: 950, marginBottom: 8 }}>Prefixes</div>
+                    {/* Reduced bucket widths + moved left */}
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-start", alignItems: "flex-start" }}>
+                      <PrefixTile letter="A" />
+                      <PrefixTile letter="B" />
+                      <PrefixTile letter="C" />
+                      <PrefixTile letter="D" />
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 10, flexWrap: "wrap" }}>
+                      <div style={{ fontWeight: 950 }}>Ranges</div>
+                      <ColoredRangeTabs />
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <button style={Object.assign({}, topBtn, { background: "rgba(34,197,94,0.18)" })} onClick={() => rebuildMappingFromRanges(false)} disabled={!loaded}>
+                          Apply ranges
+                        </button>
+                        <button style={Object.assign({}, topBtn, { background: "rgba(239,68,68,0.12)" })} onClick={() => rebuildMappingFromRanges(true)} disabled={!loaded}>
+                          Reset ranges
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: 10 }}>
+                      <RangeEditor L={rangeTab} />
+                    </div>
+
+                    <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-start" }}>
+                      <button style={topBtn} onClick={() => setShowOverrides((v) => !v)}>
+                        {showOverrides ? "Hide line grouping overrides" : "Show line grouping overrides"}
+                      </button>
+                      <div style={{ opacity: 0.78, fontWeight: 900, fontSize: 12 }}>Overrides = per-line dropdown assignments.</div>
+                    </div>
+                  </div>
+                </div>
+
+                {showOverrides ? (
+                  <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
+                    <div style={{ fontWeight: 950 }}>Line grouping overrides</div>
+
+                    <div style={{ marginTop: 10, maxHeight: "60vh", overflow: "auto", width: "100%", maxWidth: "100%",
+          minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 14 }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr style={{ background: "rgba(255,255,255,0.05)" }}>
+                            <th style={th}>Cascade</th>
+                            <th style={th}>Line L</th>
+                            <th style={th}>Group L</th>
+                            <th style={th}>Line R</th>
+                            <th style={th}>Group R</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {letterIdxRows.map(({ letter, idx }) => {
+                            const lineL = `${letter}${idx}L`;
+                            const lineR = `${letter}${idx}R`;
+                            const col = chipColorFromLineId(lineL);
+
+                            return (
+                              <tr key={`${letter}-${idx}`} style={{ borderTop: `1px solid ${theme.border}` }}>
+                                <td style={Object.assign({}, td, { fontWeight: 950, color: col })}>
+                                  {letter}
+                                  {idx}
+                                </td>
+                                <td style={td}>{lineL}</td>
+                                <td style={td}>
+                                  <Select value={lineToGroup[lineL] || ""} onChange={(v) => setLineToGroup((p) => ({ ...(p || {}), [lineL]: v }))} options={groupOptionsForSelect} width={160} />
+                                </td>
+                                <td style={td}>{lineR}</td>
+                                <td style={td}>
+                                  <Select value={lineToGroup[lineR] || ""} onChange={(v) => setLineToGroup((p) => ({ ...(p || {}), [lineR]: v }))} options={groupOptionsForSelect} width={160} />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </Panel>
+        ) : null}
+
+        {/* Step 3 */}
+        {step === 3 ? (
+          <Panel
+            tint
+            title="Step 3 — Mapping + baseline loops"
+            right={
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }}>
+                <button style={topBtn} onClick={() => setStep(2)}>
+                  ← Back to Step 2
+                </button>
+                <button style={Object.assign({}, topBtn, { background: "rgba(34,197,94,0.18)" })} onClick={() => setStep3Step4WarnOpen(true)}>
+                  Go to Step 4 →
+                </button>
+              </div>
+            }
+          >
+            <div style={{ overflowX: "auto", overflowY: "hidden", WebkitOverflowScrolling: "touch", touchAction: "pan-x" }}>
+              <div style={{ minWidth: 0 }}>
+              {!loaded ? (
+              <WarningBanner title="No file loaded">Go back to Step 1 and import a file (or load test data).</WarningBanner>
+            ) : (
+              <div style={{ position: "relative", display: "grid", gap: 10 }}>
+                <>
+                  {/* Step 3 includes Apply/Reset buttons (same as Step 2) */}
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 8px", border: `1px solid ${theme.border}`, borderRadius: 14, background: "rgba(0,0,0,0.35)" }}>
+                      <button style={miniBtn} onClick={() => setDiagramZoom((z) => clamp(Number((z - 0.1).toFixed(2)), 0.4, 2.0))}>
+                        −
+                      </button>
+                      <input type="range" min={0.4} max={2.0} step={0.01} value={diagramZoom} onChange={(e) => setDiagramZoom(Number(e.target.value))} style={{ width: 160 }} />
+                      <button style={miniBtn} onClick={() => setDiagramZoom((z) => clamp(Number((z + 0.1).toFixed(2)), 0.4, 2.0))}>
+                        +
+                      </button>
+                      <span style={{ opacity: 0.82, fontWeight: 900, fontSize: 12, minWidth: 54, textAlign: "right" }}>{(diagramZoom * 100).toFixed(0)}%</span>
+                    </div>
+
+                    <button style={topBtn} onClick={fitDiagramToScreen}>
+                      Fit to screen
+                    </button>
+                    <Toggle value={diagramWingOutline} onChange={setDiagramWingOutline} label="Wing outline" />
+                    <Toggle value={diagramCompact} onChange={setDiagramCompact} label="Compact" />
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 950, marginBottom: 8 }}>Live grouping diagram (drag chips to move)</div>
+                    {/* Fixed size + scrollbars */}
+                    <DiagramScrollBox height={330} width={920} />
+                    <div style={{ marginTop: 8, opacity: 0.78, fontSize: 12 }}>
+                      Drag any line chip into another group bucket. Scrollbars are always visible (bottom + right).
+                    </div>
+                  </div>
+
+                  {/* Rigging diagram (PDF) */}
+                  <TrimWorkflow hint="Baseline / Installed loops" />
+
+                  <div id="baseline-loops-panel" style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                      <div>
+                        <div style={{ fontWeight: 950 }}>Installed loops per maillon group (baseline)</div>
+                        <div style={{ opacity: 0.78, fontSize: 12, marginTop: 4 }}>Set loop sizes (mm), then select what is currently installed on the wing. Step 4 will freeze this baseline.</div>
+                      </div>
+                    </div>
+                    <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+                      <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: theme.panel, padding: 8, minWidth: 0 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                          <div style={{ fontWeight: 900 }}>Baseline installed loop by group</div>
+                          <div style={{ opacity: 0.75, fontSize: 12 }}>Groups shown: <b>{groupsInUse.length}</b></div>
+                        </div>
+                        {groupsInUse.length === 0 ? (
+                          <div style={{ marginTop: 10, opacity: 0.75 }}>No groups detected yet. Complete Step 2 mapping first (Apply ranges or drag chips).</div>
+                        ) : (
+                          <>
+                            <div style={{ fontWeight: 900, marginTop: 10 }}>Baseline Maillon Loops</div>
+
+                            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 10 }}>
+                              <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 8px", border: `1px solid ${theme.border}`, borderRadius: 14, background: "rgba(0,0,0,0.35)" }}>
+                                <button style={miniBtn} onClick={() => setBaselineZoom((z) => clamp(Number((z - 0.1).toFixed(2)), 0.4, 2.0))}>
+                                  −
+                                </button>
+                                <input type="range" min={0.4} max={2.0} step={0.01} value={baselineZoom} onChange={(e) => setBaselineZoom(Number(e.target.value))} style={{ width: 160 }} />
+                                <button style={miniBtn} onClick={() => setBaselineZoom((z) => clamp(Number((z + 0.1).toFixed(2)), 0.4, 2.0))}>
+                                  +
+                                </button>
+                                <span style={{ opacity: 0.82, fontWeight: 900, fontSize: 12, minWidth: 54, textAlign: "right" }}>{(baselineZoom * 100).toFixed(0)}%</span>
+                              </div>
+
+                              <button style={topBtn} onClick={fitBaselineToScreen}>
+                                Fit to screen
+                              </button>
+                              <Toggle value={diagramWingOutline} onChange={setDiagramWingOutline} label="Wing outline" />
+                              <Toggle value={diagramCompact} onChange={setDiagramCompact} label="Compact" />
+                            </div>
+
+                          
+                          <div
+                            ref={baselineBoxRef}
+                            style={{
+                              marginTop: 10,
+                              height: 360,
+                              overflowX: "auto",
+                              overflowY: "scroll",
+                              scrollbarGutter: "stable both-edges",
+                              border: `2px solid rgba(255,255,255,0.18)`,
+                              borderRadius: 18,
+                              width: "100%",
+                              maxWidth: "100%",
+                              minWidth: 0,
+                              background: "rgba(0,0,0,0.34)",
+                              display: "flex",
+                              justifyContent: "flex-start",
+                              alignItems: "flex-start",
+                              paddingTop: 240,
+                              paddingBottom: 80,
+                              paddingLeft: 80,
+                              paddingRight: 80,
+                              boxSizing: "border-box",
+                            }}
+                          >
+                            <div
+                              ref={baselineInnerRef}
+                              style={{
+                                padding: 8,
+                                position: "relative",
+                                width: DIAGRAM_W + 1200,
+                                height: DIAGRAM_H,
+                                minWidth: DIAGRAM_W + 1200,
+                                transform: `scale(${baselineZoom})`,
+                                transformOrigin: "top left",
+                                display: "inline-block",
+                              }}
+                            >
+                              {diagramWingOutline ? (
+                                <svg
+                                  width={DIAGRAM_W}
+                                  height={DIAGRAM_H}
+                                  viewBox={`0 0 ${DIAGRAM_W} ${DIAGRAM_H}`}
+                                  style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%) scale(0.529)", transformOrigin: "center", pointerEvents: "none", opacity: 0.9 }}
+                                >
+                                  <path
+                                    d={`M ${DIAGRAM_W / 2} ${Math.round(62 * DIAGRAM_SCALE)} C ${DIAGRAM_W / 2 - Math.round(740 * DIAGRAM_SCALE)} ${Math.round(88 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 - Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(260 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 - Math.round(1460 * DIAGRAM_SCALE)} ${Math.round(470 * DIAGRAM_SCALE)} C ${DIAGRAM_W / 2 - Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(720 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 - Math.round(740 * DIAGRAM_SCALE)} ${Math.round(860 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2} ${Math.round(900 * DIAGRAM_SCALE)} C ${DIAGRAM_W / 2 + Math.round(740 * DIAGRAM_SCALE)} ${Math.round(860 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 + Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(720 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 + Math.round(1460 * DIAGRAM_SCALE)} ${Math.round(470 * DIAGRAM_SCALE)} C ${DIAGRAM_W / 2 + Math.round(1340 * DIAGRAM_SCALE)} ${Math.round(260 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2 + Math.round(740 * DIAGRAM_SCALE)} ${Math.round(88 * DIAGRAM_SCALE)}, ${DIAGRAM_W / 2} ${Math.round(62 * DIAGRAM_SCALE)}`}
+                                    fill="none"
+                                    stroke="rgba(255,255,255,0.18)"
+                                    strokeWidth={Math.max(2, Math.round(4 * DIAGRAM_SCALE))}
+                                  />
+                                  <line x1={DIAGRAM_W / 2} y1={20} x2={DIAGRAM_W / 2} y2={DIAGRAM_H - 20} stroke="rgba(255,255,255,0.14)" strokeWidth={2} />
+                                </svg>
+                              ) : null}
+
+                              {(() => {
+                                // Build row prefixes (AR, BR, CR, DR, ...) from groupsInUse
+                                const rowPrefixSet = {};
+                                let maxIdx = 0;
+                                for (let i = 0; i < groupsInUse.length; i++) {
+                                  const g = String(groupsInUse[i] || "");
+                                  const m = /^([A-Za-z]+)(\d+)([LR])$/.exec(g);
+                                  if (!m) continue;
+                                  const prefix = m[1].toUpperCase();
+                                  const n = Number(m[2] || 0);
+                                  rowPrefixSet[prefix] = true;
+                                  if (n > maxIdx) maxIdx = n;
+                                }
+
+                                const prefixes = ["AR","BR","CR","DR"].filter((p) => rowPrefixSet[p]);
+                                if (prefixes.length === 0) return null;
+
+                                const leftOrder = [];
+                                for (let n = maxIdx; n >= 1; n--) leftOrder.push(n);
+                                const rightOrder = [];
+                                for (let n = 1; n <= maxIdx; n++) rightOrder.push(n);
+
+                                const hasGroup = (gid) => {
+                                  // groupsInUse may include strings; keep exact match
+                                  for (let i = 0; i < groupsInUse.length; i++) if (String(groupsInUse[i]) === gid) return true;
+                                  return false;
+                                };
+
+                                const rowLabelPill = {
+                                  minWidth: 52,
+                                  height: 32,
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  borderRadius: 999,
+                                  border: `1px solid ${theme.border}`,
+                                  background: "rgba(0,0,0,0.35)",
+                                  fontWeight: 950,
+                                  opacity: 0.9,
+                                  padding: "0 12px",
+                                };
+
+                                const bucketBase = {
+                                  minWidth: 190,
+                                  borderRadius: 16,
+                                  padding: 8,
+                                  background: "rgba(0,0,0,0.35)",
+                                  boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)",
+                                };
+
+                                const titlePillBase = {
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  borderRadius: 999,
+                                  padding: "4px 10px",
+                                  fontWeight: 950,
+                                  fontSize: 12,
+                                  letterSpacing: 0.2,
+                                };
+
+                                const mmStyle = { fontSize: 12, fontWeight: 950, opacity: 0.85 };
+
+                                return (
+                                  <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)", display: "grid", gap: diagramCompact ? 8 : 12, justifyItems: "center" }}>
+                                    {prefixes.map((prefix) => {
+                                      const letter = String(prefix || "").charAt(0).toUpperCase() || "A";
+                                      return (
+                                        <div key={prefix} style={{ display: "flex", gap: diagramCompact ? 8 : 12, alignItems: "flex-start", flexWrap: "nowrap", justifyContent: "center" }}>
+                                          <div style={{ display: "flex", gap: diagramCompact ? 8 : 12, alignItems: "flex-start", flexWrap: "nowrap" }}>
+                                            {leftOrder.map((n) => {
+                                              const gid = `${prefix}${n}L`;
+                                              const exists = hasGroup(gid);
+                                              const lt = exists ? (groupLoopSetup[gid] || "SL") : "";
+                                              const mm = exists ? Number(loopSizes[lt] || 0) : null;
+                                              const stroke = groupColor(letter, n);
+                                              return (
+                                                <div
+                                                  key={gid}
+                                                  style={Object.assign({}, bucketBase, {
+                                                    border: `1px solid ${stroke}`,
+                                                    background:
+                                                      stroke && String(stroke).startsWith("#")
+                                                        ? `${stroke}17`
+                                                        : bucketBase.background,
+                                                    boxShadow:
+                                                      stroke && String(stroke).startsWith("#")
+                                                        ? `inset 0 0 0 1px ${stroke}22`
+                                                        : bucketBase.boxShadow,
+                                                    opacity: exists ? 1 : 0.45,
+                                                  })}
+                                                >
+                                                  <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
+                                                    <div
+                                                      style={Object.assign({}, titlePillBase, {
+                                                        border: `1px solid ${stroke}`,
+                                                        background: `${stroke}22`,
+                                                        color: theme.text,
+                                                      })}
+                                                    >
+                                                      {gid}
+                                                    </div>
+                                                  </div>
+
+                                                  {exists ? (
+                                                    <div style={{ display: "flex", justifyContent: "center", gap: 10, alignItems: "center" }}>
+                                                      <Select
+                                                        value={lt}
+                                                        onChange={(v) => setGroupLoopSetup((prev) => ({ ...(prev || {}), [gid]: v || "SL" }))}
+                                                        options={loopTypeOptions}
+                                                        width={110}
+                                                      />
+                                                      <div style={mmStyle}>{mm}</div>
+                                                    </div>
+                                                  ) : (
+                                                    <div style={{ display: "flex", justifyContent: "center", opacity: 0.75 }}>—</div>
+                                                  )}
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                            {rightOrder.map((n) => {
+                                              const gid = `${prefix}${n}R`;
+                                              const exists = hasGroup(gid);
+                                              const lt = exists ? (groupLoopSetup[gid] || "SL") : "";
+                                              const mm = exists ? Number(loopSizes[lt] || 0) : null;
+                                              const stroke = groupColor(letter, n);
+                                              return (
+                                                <div
+                                                  key={gid}
+                                                  style={Object.assign({}, bucketBase, {
+                                                    border: `1px solid ${stroke}`,
+                                                    background:
+                                                      stroke && String(stroke).startsWith("#")
+                                                        ? `${stroke}17`
+                                                        : bucketBase.background,
+                                                    boxShadow:
+                                                      stroke && String(stroke).startsWith("#")
+                                                        ? `inset 0 0 0 1px ${stroke}22`
+                                                        : bucketBase.boxShadow,
+                                                    opacity: exists ? 1 : 0.45,
+                                                  })}
+                                                >
+                                                  <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
+                                                    <div
+                                                      style={Object.assign({}, titlePillBase, {
+                                                        border: `1px solid ${stroke}`,
+                                                        background: `${stroke}22`,
+                                                        color: theme.text,
+                                                      })}
+                                                    >
+                                                      {gid}
+                                                    </div>
+                                                  </div>
+
+                                                  {exists ? (
+                                                    <div style={{ display: "flex", justifyContent: "center", gap: 10, alignItems: "center" }}>
+                                                      <Select
+                                                        value={lt}
+                                                        onChange={(v) => setGroupLoopSetup((prev) => ({ ...(prev || {}), [gid]: v || "SL" }))}
+                                                        options={loopTypeOptions}
+                                                        width={110}
+                                                      />
+                                                      <div style={mmStyle}>{mm}</div>
+                                                    </div>
+                                                  ) : (
+                                                    <div style={{ display: "flex", justifyContent: "center", opacity: 0.75 }}>—</div>
+                                                  )}
+                                                </div>
+                                              );
+                                            })}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          </div>
+
+                          </>
+                        )}
+                        <div style={{ marginTop: 10, opacity: 0.75, fontSize: 12 }}>Tip: Use <b>CUSTOM</b> for wings with non-standard loop lengths.</div>
+                      </div>
+                      <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: theme.panel, padding: 8 }}>
+                        <div style={{ fontWeight: 900, marginBottom: 8 }}>Loop sizes (mm)</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                          {LOOP_TYPES.map((lt) => (
+                            <div key={lt} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <div style={{ fontWeight: 900, minWidth: 42 }}>{lt}</div>
+                              <input
+                                type="number"
+                                min={-99}
+                                max={99}
+                                value={Number(loopSizes[lt] || 0)}
+                                onChange={(e) => setLoopSizes((prev) => ({ ...(prev || {}), [lt]: Number(e.target.value || 0) }))}
+                                style={{ width: 46, padding: "6px 6px", borderRadius: 8, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.45)", color: theme.text, fontWeight: 900, textAlign: "center" }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
+                    <div style={{ fontWeight: 950 }}>Changes summary</div>
+                    <div style={{ opacity: 0.78, fontSize: 12, marginTop: 4 }}>
+                      Shows lines moved compared to the <b>default mapping</b> created when you imported the file (or clicked “Reset to ranges”).
+                    </div>
+
+                    <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                      <div style={{ opacity: 0.86, fontWeight: 900 }}>
+                        Changed lines: <b>{changes.length}</b>
+                      </div>
+                      <button
+                        style={Object.assign({}, topBtn, { background: "rgba(59,130,246,0.20)" })}
+                        onClick={() => {
+                          const payload = { schema: "trim-tuning-step2-changes-v1", exportedAt: new Date().toISOString(), wing: { make: meta.make || "", model: meta.model || "" }, changes };
+                          const name = `${meta.make || "Wing"}-${meta.model || "Changes"}`.replace(/\s+/g, "-");
+                          downloadJSON(payload, `${name}-mapping-changes.json`);
+                        }}
+                        disabled={changes.length === 0}
+                      >
+                        Export changes JSON
+                      </button>
+                    </div>
+
+                    <div style={{ marginTop: 10, maxHeight: 320, overflow: "auto", width: "100%", maxWidth: "100%",
+          minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 14 }}>
+                      {changes.length === 0 ? (
+                        <div style={{ padding: 8, opacity: 0.78, fontWeight: 900 }}>No overrides yet. Drag a line into a new bucket or use dropdowns in Step 2.</div>
+                      ) : (
+                        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                          <thead>
+                            <tr style={{ background: "rgba(255,255,255,0.05)" }}>
+                              <th style={th}>Line</th>
+                              <th style={th}>From</th>
+                              <th style={th}>To</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {changes.map((c) => (
+                              <tr key={c.lineId} style={{ borderTop: `1px solid ${theme.border}` }}>
+                                <td style={Object.assign({}, td, { color: chipColorFromLineId(c.lineId), fontWeight: 950 })}>{c.lineId}</td>
+                                <td style={td}>{c.from}</td>
+                                <td style={td}>{c.to}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+
+                    <div style={{ marginTop: 10 }}>
+                      <WarningBanner title="Workflow tip">Once this diagram looks correct, we’ll plug mapping into loops + trimming next.</WarningBanner>
+                    </div>
+                  </div>
+				</div>
+				</>
+              </div>
+            )}
+              </div>
+            </div>
+          </Panel>
+        ) : null}
+          </div>
+        ) : null}
+
+        {/* Step 4 */}
+        {step === 4 ? (
+          <div style={{ display: "flex", justifyContent: "center", width: "100%" }}>
+            <div style={{ width: "100%", maxWidth: 1600 }}>
+              <Panel
+            tint
+            title="Step 4 — Trim (frozen baseline)"
+            right={
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <button
+                  style={Object.assign({}, topBtn, { background: "rgba(239,68,68,0.12)" })}
+                  onClick={() => {
+                    setGroupLoopChange({});
+                    setGroupAdjustments({});
+    setStep4LineCorr({});
+                    setAutoLoopStatus(null);
+                    setAutoDecision(null);
+                  }}
+                >
+                  Reset Step 4 adjustments
+                </button>
+                <button type="button" style={topBtn} onClick={() => setShowReport(true)} title="A4 report">
+                  Go to report →
+                </button>
+              </div>
+            }
+          >
+            <div style={{ overflowX: "auto", overflowY: "hidden", WebkitOverflowScrolling: "touch", touchAction: "pan-x" }}>
+              <div style={{ minWidth: 0 }}>
+              {!loaded ? (
+              <WarningBanner title="No file loaded">Go back to Step 1 and import a file (or load test data).</WarningBanner>
+            ) : groupLoopBaseline === null ? (
+              <WarningBanner title="Baseline not frozen yet">
+                Step 4 must freeze a snapshot of Step 3 <b>exactly once</b>. Click “Freeze baseline now” to continue.
+                <div style={{ marginTop: 10 }}>
+                  <button
+                    style={Object.assign({}, topBtn, { background: "rgba(34,197,94,0.18)" })}
+                    onClick={() => setGroupLoopBaseline(deepClone(groupLoopSetup || {}))}
+                  >
+                    Freeze baseline now
+                  </button>
+                </div>
+              </WarningBanner>
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+
+                {/* ── Summary banner ── */}
+                {step4Summary.measured > 0 && (
+                  <div style={{
+                    display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center",
+                    padding: "10px 14px", borderRadius: 14,
+                    border: `1px solid ${step4Summary.red > 0 ? "rgba(239,68,68,0.5)" : step4Summary.yellow > 0 ? "rgba(234,179,8,0.5)" : "rgba(34,197,94,0.5)"}`,
+                    background: step4Summary.red > 0 ? "rgba(239,68,68,0.08)" : step4Summary.yellow > 0 ? "rgba(234,179,8,0.07)" : "rgba(34,197,94,0.08)",
+                  }}>
+                    <div style={{ fontWeight: 950, fontSize: 14, marginRight: 4 }}>
+                      {step4Summary.red > 0
+                        ? `⚠ ${step4Summary.red} line${step4Summary.red > 1 ? "s" : ""} out of tolerance`
+                        : step4Summary.yellow > 0
+                        ? `△ ${step4Summary.yellow} line${step4Summary.yellow > 1 ? "s" : ""} within tolerance warning`
+                        : "✓ All lines within tolerance"}
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {step4Summary.red > 0 && (
+                        <span style={{ padding: "3px 10px", borderRadius: 999, background: "rgba(239,68,68,0.18)", border: "1px solid rgba(239,68,68,0.45)", color: "rgba(239,68,68,0.95)", fontWeight: 950, fontSize: 12 }}>
+                          🔴 {step4Summary.red} red
+                        </span>
+                      )}
+                      {step4Summary.yellow > 0 && (
+                        <span style={{ padding: "3px 10px", borderRadius: 999, background: "rgba(234,179,8,0.18)", border: "1px solid rgba(234,179,8,0.45)", color: "rgba(234,179,8,0.95)", fontWeight: 950, fontSize: 12 }}>
+                          🟡 {step4Summary.yellow} yellow
+                        </span>
+                      )}
+                      {step4Summary.green > 0 && (
+                        <span style={{ padding: "3px 10px", borderRadius: 999, background: "rgba(34,197,94,0.18)", border: "1px solid rgba(34,197,94,0.45)", color: "rgba(34,197,94,0.95)", fontWeight: 950, fontSize: 12 }}>
+                          🟢 {step4Summary.green} green
+                        </span>
+                      )}
+                      <span style={{ opacity: 0.6, fontSize: 12, fontWeight: 900, alignSelf: "center" }}>
+                        {step4Summary.measured} of {step4Summary.total} lines measured
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+                    <div>
+                      <div style={{ fontWeight: 950 }}>Meta controls</div>
+                      <div style={{ opacity: 0.78, fontSize: 12, marginTop: 4 }}>
+                        Adjust tolerance and correction used for all Step 4 tables. (Does not change Step 3 baseline.)
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-start" }}>
+                      <ControlPill
+                        label="Tolerance"
+                        value={meta.tolerance || 6}
+                        onChange={(v) => setMeta((p) => ({ ...p, tolerance: v }))}
+                        suffix="mm"
+                        width={90}
+                        min={0}
+                      />
+                      <ControlPill
+                        label="Correction"
+                        value={meta.correction || 0}
+                        onChange={(v) => setMeta((p) => ({ ...p, correction: v }))}
+                        suffix="mm"
+                        width={110}
+                      />
+
+                      <ControlPill label="Manual pitch tol" value={groupPitchTol} onChange={setGroupPitchTol} suffix="mm" width={110} step={1} min={0} max={20} />
+                      <TogglePill label="Show corrected" checked={!!showCorrected} onChange={setShowCorrected} />
+                      <TogglePill label="Brake" checked={!!includeBrakeBlock} onChange={setIncludeBrakeBlock} />
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${theme.border}` }}>
+                    <div style={{ fontWeight: 850, marginBottom: 6 }}>Zeroing wizard (auto-suggest correction)</div>
+                    <div style={{ fontSize: 12, opacity: 0.82 }}>
+                      Suggested correction uses the <b>median</b> of <b>(Soll − Ist)</b> across all valid measurements.
+                    </div>
+
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
+                      <StatPill label="Whole wing median" value={zeroingStats.wholeMedian} n={zeroingStats.nAll} />
+                      <StatPill label="Left median" value={zeroingStats.leftMedian} n={zeroingStats.nLeft} />
+                      <StatPill label="Right median" value={zeroingStats.rightMedian} n={zeroingStats.nRight} />
+
+                      <button
+                        style={Object.assign({}, topBtn, { background: "rgba(34,197,94,0.20)" })}
+                        disabled={!Number.isFinite(zeroingStats.wholeMedian)}
+                        onClick={() => {
+                          const v = zeroingStats.wholeMedian;
+                          if (!Number.isFinite(v)) return;
+                          setMeta((p) => ({ ...p, correction: Math.round(v) }));
+                        }}
+                        title="Apply whole wing median as correction"
+                      >
+                        Apply suggested correction
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ marginTop: 10, display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+                  <div style={{ flex: "1 1 720px", minWidth: 0 }}>
+                    <RearViewChart
+                      rows={step4LineRows}
+                      tolerance={Number(meta && meta.tolerance != null ? meta.tolerance : 0)}
+                      height={520}
+                      loopTypes={LOOP_TYPES}
+                      groupLoopChange={groupLoopChange}
+                      setGroupLoopChange={setGroupLoopChange}
+                    />
+                  </div>
+
+                  <div style={{ flex: "0 0 auto" }}>
+                    <div
+                      style={{
+                        border: `1px solid ${theme.border}`,
+                        background: "rgba(0,0,0,0.55)",
+                        borderRadius: 999,
+                        padding: "8px 10px",
+                        display: "flex",
+                        gap: 8,
+                        alignItems: "center",
+                      }}
+                      title="Correction (mm)"
+                    >
+                      <span style={{ fontSize: 12, opacity: 0.8 }}>Correction</span>
+
+                      <div style={{ display: "grid", gridTemplateRows: "1fr 1fr", gap: 4 }}>
+                        <button
+                          type="button"
+                          style={{ width: 28, height: 18, borderRadius: 8, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.08)", color: theme.text, cursor: "pointer", fontWeight: 950, lineHeight: 1 }}
+                          onClick={() => {
+                            setMeta((p) => {
+                              var vRaw = (p && p.correction != null) ? p.correction : 0;
+                              var v = Number(vRaw);
+                              if (!isFinite(v)) v = 0;
+
+                              // Nudge by exactly +1mm from the current displayed value.
+                              // Do NOT clamp here; users may temporarily be far outside tolerance.
+                              var next = v + 1;
+                              next = Math.round(next);
+                              return Object.assign({}, p, { correction: next });
+                            });
+                          }}
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          style={{ width: 28, height: 18, borderRadius: 8, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.08)", color: theme.text, cursor: "pointer", fontWeight: 950, lineHeight: 1 }}
+                          onClick={() => {
+                            setMeta((p) => {
+                              var vRaw = (p && p.correction != null) ? p.correction : 0;
+                              var v = Number(vRaw);
+                              if (!isFinite(v)) v = 0;
+
+                              // Nudge by exactly -1mm from the current displayed value.
+                              // Do NOT clamp here; users may temporarily be far outside tolerance.
+                              var next = v - 1;
+                              next = Math.round(next);
+                              return Object.assign({}, p, { correction: next });
+                            });
+                          }}
+                        >
+                          ▼
+                        </button>
+                      </div>
+
+                      <input
+                        type="number"
+                        value={Number(meta && meta.correction != null ? meta.correction : 0)}
+                        onChange={(e) => {
+                          var v = Number(e.target.value || 0);
+                          if (!isFinite(v)) v = 0;
+                          // Do NOT clamp here; allow any value and let other parts clamp if needed.
+                          setMeta((p) => ({ ...p, correction: v }));
+                        }}
+                        style={{
+                          width: 90,
+                          background: "transparent",
+                          color: theme.text,
+                          border: `1px solid ${theme.border}`,
+                          borderRadius: 12,
+                          padding: "6px 8px",
+                          fontWeight: 900,
+                          outline: "none",
+                                              userSelect: "auto",
+                        }}
+                      />
+                      <span style={{ fontSize: 12, opacity: 0.75 }}>mm</span>
+                    </div>
+                  
+	                    <button
+	                      type="button"
+	                      title="Reset all loop overrides"
+	                      onClick={() => {
+	                        // Reset BOTH loop overrides and fine adjustments so the wing returns
+	                        // to the baseline loop set recorded in Step 3.
+	                        setGroupLoopChange({});
+	                        setGroupAdjustments({});
+			                        setAutoLoopStatus(null);
+                    setAutoDecision(null);
+	                      }}
+                      style={{
+                        marginTop: 10,
+                        width: "100%",
+                        border: "1px solid rgba(255,220,80,0.55)",
+                        background: "rgba(0,0,0,0.45)",
+                        color: "rgba(255,220,80,0.95)",
+                        borderRadius: 999,
+                        padding: "8px 10px",
+                        fontWeight: 950,
+                        fontSize: 12,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Reset all loops
+                    </button>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8, width: 320, maxWidth: "100%" }}>
+                      
+                      <button
+                        type="button"
+                        onClick={() => applyAutoLoopPlan("factory")}
+                        title="Choose the closest achievable loop configuration using discrete loops (no fine-adjust)."
+                        style={{
+                          marginTop: 0,
+                          width: "100%",
+                          border: "1px solid rgba(96,165,250,0.65)",
+                          background: "rgba(0,0,0,0.45)",
+                          color: "rgba(147,197,253,0.95)",
+                          borderRadius: 999,
+                          padding: "8px 10px",
+                          fontWeight: 950,
+                          fontSize: 12,
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Closest factory loops
+                      </button>
+                      
+                      <button
+                        type="button"
+                        onClick={() => applyAutoLoopPlan("minimal")}
+                        title="Choose the smallest set of loop changes using fine-adjust where needed."
+                        style={{
+                          marginTop: 0,
+                          width: "100%",
+                          border: "1px solid rgba(96,165,250,0.65)",
+                          background: "rgba(0,0,0,0.45)",
+                          color: "rgba(147,197,253,0.95)",
+                          borderRadius: 999,
+                          padding: "8px 10px",
+                          fontWeight: 950,
+                          fontSize: 12,
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Minimal loop changes
+                      </button>
+
+                    </div>
+
+
+                    <div style={{ marginTop: 10, border: `1px solid ${theme.border}`, borderRadius: 12, background: "rgba(0,0,0,0.22)", padding: 8, width: 320, maxWidth: "100%" }}>
+                      <div style={{ fontWeight: 950, fontSize: 13, marginBottom: 8 }}>Pitch OK (factory)</div>
+                      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 0, tableLayout: "fixed" }}>
+                        <thead>
+                          <tr style={{ background: "rgba(255,255,255,0.05)" }}>
+                            <th style={Object.assign({}, th, { fontSize: 12, padding: "6px 8px" })}>Metric</th>
+                            <th style={Object.assign({}, th, { fontSize: 12, padding: "6px 8px" })}>Left</th>
+                            <th style={Object.assign({}, th, { fontSize: 12, padding: "6px 8px" })}>Right</th>
+                            <th style={Object.assign({}, th, { fontSize: 12, padding: "6px 8px" })}>Whole wing</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(pitchStats && pitchStats.comparisonsList ? pitchStats.comparisonsList : [
+                            { key: "avb", label: "A − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.AvB : null },
+                            { key: "cvb", label: "C − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.CvB : null },
+                            { key: "dvb", label: "D − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.DvB : null },
+                          ]).map((row) => {
+                            const f1 = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Number(n).toFixed(1));
+                            const vL = row.v ? row.v.L : null;
+                            const vR = row.v ? row.v.R : null;
+                            const vB = row.v ? row.v.both : null;
+
+                            const sevL = severity(vL, groupPitchTol);
+                            const sevR = severity(vR, groupPitchTol);
+                            const sevB = severity(vB, groupPitchTol);
+
+                            const colFor = (sev) => {
+                              if (sev === "red") return "rgba(255,90,90,1)";
+                              if (sev === "yellow") return "rgba(255,215,90,1)";
+                              return "rgba(140,255,190,1)";
+                            };
+
+                            return (
+                              <tr key={row.key} style={{ borderTop: `1px solid ${theme.border}` }}>
+                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 11, padding: "7px 8px" })}>{row.label}</td>
+                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 11, padding: "7px 8px", color: colFor(sevL) })}>{f1(vL)}</td>
+                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 11, padding: "7px 8px", color: colFor(sevR) })}>{f1(vR)}</td>
+                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 11, padding: "7px 8px", color: colFor(sevB) })}>{f1(vB)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+</div>
+                </div>
+
+                <div
+                  style={{
+                    border: `1px solid ${theme.border}`,
+                    borderRadius: 16,
+                    background: theme.panel2,
+                    padding: 8,
+                    minWidth: 0,
+                    overflow: "auto",
+                  }}
+                >
+                  <div style={{ fontWeight: 950 }}>A/B/C/D — Factory vs Left/Right (Step 4 data)</div>
+                  <div style={{ opacity: 0.78, fontSize: 12, marginTop: 4 }}>
+                    Mirrors the spreadsheet layout: <b>Factory</b>, <b>Left</b>, <b>Right</b>, <b>Δ Left</b>, <b>Δ Right</b>, <b>Sym</b>. Values come from Step 4 “after” and “delta”.
+                  </div>
+
+                  {(function () {
+                    const letters = includeBrakeBlock ? ["A", "B", "C", "D", "BR"] : ["A", "B", "C", "D"];
+                    const byLetter = step4SheetByLetter.byLetter || {};
+                    const maxDiff = step4SheetByLetter.maxDiff || {};
+                    const letterMaps = {};
+                    let maxIdx = 0;
+
+                    for (const L of letters) {
+                      const rows = Array.isArray(byLetter[L]) ? byLetter[L] : [];
+                      const m = new Map();
+                      for (const r of rows) {
+                        m.set(r.idx, r);
+                        if (Number.isFinite(r.idx)) maxIdx = Math.max(maxIdx, r.idx);
+                      }
+                      letterMaps[L] = m;
+                    }
+
+                    const headerCell = { padding: "6px 8px", borderBottom: `1px solid ${theme.border}`, whiteSpace: "nowrap" };
+                    const cell = { padding: "6px 8px", borderBottom: `1px solid ${theme.border}`, textAlign: "center", whiteSpace: "nowrap" };
+
+                    // Step 4: treat missing as null (NOT 0). Display missing as em dash.
+                    const toNumOrNull = (v) => {
+                      if (v === null || v === undefined) return null;
+                      const s = String(v).trim();
+                      if (s === "") return null; // critical: blank stays missing (JS Number("") === 0)
+                      const n = Number(s);
+                      return Number.isFinite(n) ? n : null;
+                    };
+
+                    // Measured L/R should never be 0mm; if 0 appears it's almost certainly from earlier blank->0 coercion.
+                    const toMeasuredNumOrNull = (v) => {
+                      const n = toNumOrNull(v);
+                      return n === 0 ? null : n;
+                    };
+
+                    const fmtNum = (v, digits = 0) => {
+                      const n = toNumOrNull(v);
+                      return n === null ? "—" : n.toFixed(digits);
+                    };
+
+                    const fmtMeasured = (v, digits = 0) => {
+                      const n = toMeasuredNumOrNull(v);
+                      return n === null ? "—" : n.toFixed(digits);
+                    };
+
+                    const avgOf = (arr) => {
+                      const xs = (arr || []).map(toNumOrNull).filter((n) => n !== null);
+                      if (xs.length === 0) return null;
+                      const sum = xs.reduce((a, b) => a + b, 0);
+                      return sum / xs.length;
+                    };
+
+                    var bandFromDelta = (delta) => {
+                      const d = toNumOrNull(delta);
+                      if (d === null) return "";
+                      const a = Math.abs(d);
+                      const tol = toNumOrNull(meta.tolerance) ?? 10;
+                      if (a <= 4) return "good";
+                      if (a < tol) return "warn";
+                      return "bad";
+                    };
+                    const bgForBand = (band) => {
+                      if (band === "good") return "rgba(34,197,94,0.14)";
+                      if (band === "warn") return "rgba(234,179,8,0.14)";
+                      if (band === "bad") return "rgba(239,68,68,0.14)";
+                      return "transparent";
+                    };
+                    const colorForBand = (band) => {
+                      if (band === "good") return "rgba(34,197,94,0.95)";
+                      if (band === "warn") return "rgba(234,179,8,0.95)";
+                      if (band === "bad") return "rgba(239,68,68,0.95)";
+                      return theme.text;
+                    };
+
+                    return (
+                      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 10, fontSize: 12 }}>
+                        <thead>
+                          <tr>
+                            <th style={Object.assign({}, headerCell, { textAlign: "left", position: "sticky", left: 0, background: theme.panel2, zIndex: 2 })}>#</th>
+                            {letters.map((L) => (
+                              <th key={L} colSpan={6} style={Object.assign({}, headerCell, { textAlign: "center", background: "rgba(255,255,255,0.03)" })}>
+                                {L}
+                              </th>
+                            ))}
+                          </tr>
+                          <tr>
+                            <th style={Object.assign({}, headerCell, { textAlign: "left", position: "sticky", left: 0, background: theme.panel2, zIndex: 2 })} />
+                            {letters.map((L) => (
+                              <React.Fragment key={`${L}-sub`}>
+                                <th style={headerCell}>Factory</th>
+                                <th style={headerCell}>Left</th>
+                                <th style={headerCell}>Right</th>
+                                <th style={headerCell}>Δ Left</th>
+                                <th style={headerCell}>Δ Right</th>
+                                <th style={headerCell}>Sym</th>
+                              </React.Fragment>
+                            ))}
+                          </tr>
+                        </thead>
+
+                        <tbody>
+                          {Array.from({ length: Math.max(0, maxIdx) }, (_, i) => i + 1).map((idx) => (
+                            <tr key={`row-${idx}`}>
+                              <td style={Object.assign({}, cell, { textAlign: "left", position: "sticky", left: 0, background: theme.panel2, zIndex: 1, fontWeight: 700 })}>{idx}</td>
+                              {letters.map((L) => {
+                                const r = letterMaps[L] && letterMaps[L].get ? letterMaps[L].get(idx) : null;
+                                return (
+                                  <React.Fragment key={`${L}-${idx}`}>
+                                    <td style={cell}>{fmtNum(r ? r.factory : null, 0)}</td>
+                                    <td style={cell}>{fmtMeasured(r ? r.L : null, 0)}</td>
+                                    <td style={cell}>{fmtMeasured(r ? r.R : null, 0)}</td>
+                                    <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(r ? r.dL : null)), color: colorForBand(bandFromDelta(r ? r.dL : null)), fontWeight: 950 })}>{fmtNum(r ? r.dL : null, 0)}</td>
+                                    <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(r ? r.dR : null)), color: colorForBand(bandFromDelta(r ? r.dR : null)), fontWeight: 950 })}>{fmtNum(r ? r.dR : null, 0)}</td>
+                                    <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(r ? r.sym : null)), color: colorForBand(bandFromDelta(r ? r.sym : null)), fontWeight: 950 })}>{fmtNum(r ? r.sym : null, 0)}</td>
+                                  </React.Fragment>
+                                );
+                              })}
+                            </tr>
+                          ))}
+
+                          <tr>
+                            <td style={Object.assign({}, cell, { textAlign: "left", position: "sticky", left: 0, background: theme.panel2, zIndex: 1, fontWeight: 900 })}>
+                              Averages
+                            </td>
+                            {letters.map((L) => {
+                              const rows = Array.isArray(byLetter[L]) ? byLetter[L] : [];
+                              const aDL = avgOf(rows.map((r) => r.dL));
+                              const aDR = avgOf(rows.map((r) => r.dR));
+                              const aSY = avgOf(rows.map((r) => r.sym));
+                              return (
+                                <React.Fragment key={`avg-${L}`}>
+                                  <td style={cell} />
+                                  <td style={cell} />
+                                  <td style={cell} />
+                                  <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(aDL)), color: colorForBand(bandFromDelta(aDL)), fontWeight: 950 })}>{fmtNum(aDL, 1)}</td>
+                                  <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(aDR)), color: colorForBand(bandFromDelta(aDR)), fontWeight: 950 })}>{fmtNum(aDR, 1)}</td>
+                                  <td style={Object.assign({}, cell, { background: bgForBand(bandFromDelta(aSY)), color: colorForBand(bandFromDelta(aSY)), fontWeight: 950 })}>{fmtNum(aSY, 1)}</td>
+                                </React.Fragment>
+                              );
+                            })}
+                          </tr>
+
+                          <tr>
+                            <td style={Object.assign({}, cell, { textAlign: "left", position: "sticky", left: 0, background: theme.panel2, zIndex: 1, fontWeight: 900 })}>
+                              <span title="Maximum Difference (peak-to-peak) for Δ Left, Δ Right, and Sym">Diffs</span>
+                            </td>
+                            {letters.map((L) => (
+                              <React.Fragment key={`max-${L}`}>
+                                <td style={cell} />
+                                <td style={cell} />
+                                <td style={cell} />
+                                <td style={cell}>{fmtNum(maxDiff[L].dL, 0)}</td>
+                                <td style={cell}>{fmtNum(maxDiff[L].dR, 0)}</td>
+                                <td style={cell}>{fmtNum(maxDiff[L].sym, 0)}</td>
+                              </React.Fragment>
+                            ))}
+                          </tr>
+                        </tbody>
+                      </table>
+                    );
+                  })()}
+                </div>
+
+
+
+
+                <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
+                  <div style={{ fontWeight: 950 }}>Trim adjustments per maillon group (mm)</div>
+                  <div style={{ opacity: 0.78, fontSize: 12, marginTop: 4 }}>
+                    Uses <b>frozen baseline</b> from Step 3. Step 3 edits will not affect this page until you Reset all.
+                  </div>
+
+                  <TrimWorkflow hint="Trim adjustments" />
+
+                  {groupsInUse.length === 0 ? (
+                    <div style={{ marginTop: 10, opacity: 0.75 }}>No groups detected. Complete Step 2 mapping first.</div>
+                  ) : (() => { try { return (
+                    <div style={{ marginTop: 10, overflow: "auto", width: "100%", maxWidth: "100%",
+          minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 12 }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 0 }}>
+                        <thead>
+                          <tr>
+                            <th rowSpan={2} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2 })}>Group</th>
+                            <th colSpan={5} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2, textAlign: "center" })}>Left</th>
+                            <th colSpan={5} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2, textAlign: "center" })}>Right</th>
+                          </tr>
+                          <tr>
+                            {["Baseline loop", "Override loop", "Loop Δ (mm)", "Adjust (mm)", "Total Δ (mm)"].map((h) => (
+                              <th key={"L-"+h} style={Object.assign({}, th, { position: "sticky", top: 34, background: theme.panel2, zIndex: 2 })}>{h}</th>
+                            ))}
+                            {["Baseline loop", "Override loop", "Loop Δ (mm)", "Adjust (mm)", "Total Δ (mm)"].map((h) => (
+                              <th key={"R-"+h} style={Object.assign({}, th, { position: "sticky", top: 34, background: theme.panel2, zIndex: 2 })}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(function () {
+                            const parse = (s) => {
+                              const m = String(s || "").match(/^([A-Z]+)(\d+)([LR])$/i);
+                              if (!m) return null;
+                              return { p: m[1].toUpperCase(), n: Number(m[2] || 0), side: m[3].toUpperCase() };
+                            };
+
+                            const byKey = new Map();
+                            (groupsInUse || []).forEach((g) => {
+                              const p = parse(g);
+                              if (!p) {
+                                byKey.set(g, { key: g, L: null, R: null, single: g, labelL: g, labelR: "" });
+                                return;
+                              }
+                              const key = `${p.p}${p.n}`;
+                              const cur = byKey.get(key) || { key, L: null, R: null, single: null, labelL: `${key}L`, labelR: `${key}R` };
+                              if (p.side === "L") cur.L = g;
+                              if (p.side === "R") cur.R = g;
+                              byKey.set(key, cur);
+                            });
+
+                            const keys = Array.from(byKey.values());
+                            keys.sort((a, b) => {
+                              const ap = parse(a.labelL) || { p: a.key, n: 0, side: "" };
+                              const bp = parse(b.labelL) || { p: b.key, n: 0, side: "" };
+                              if (ap.p !== bp.p) return ap.p.localeCompare(bp.p);
+                              if (ap.n !== bp.n) return ap.n - bp.n;
+                              return 0;
+                            });
+
+                            const cellFor = (gid) => {
+                              if (!gid) {
+                                return {
+                                  baseLoop: "",
+                                  override: "",
+                                  loopDelta: "",
+                                  adj: "",
+                                  total: "",
+                                  totalColor: "transparent",
+                                };
+                              }
+                              const baseLoop = groupLoopBaseline[gid] || "SL";
+                              const override = groupLoopChange[gid] || "";
+                              const afterLoop = override || baseLoop;
+
+                              const baseMm = Number(loopSizes[baseLoop] || 0);
+                              const afterMm = Number(loopSizes[afterLoop] || 0);
+                              const loopDelta = afterMm - baseMm;
+
+                              const adj = Number(groupAdjustments[gid] || 0);
+                              const total = loopDelta + adj;
+
+                              const tol = Number((meta && meta.tolerance != null) ? meta.tolerance : 0);
+                              const totalColor =
+                                Math.abs(total) >= tol ? theme.bad : Math.abs(total) >= Math.max(0, tol - 3) ? theme.warn : theme.good;
+
+                              return { baseLoop, override, loopDelta, adj, total, totalColor };
+                            };
+
+                            return keys.map((row) => {
+                              const L = cellFor(row.L);
+                              const R = cellFor(row.R);
+
+                              return (
+                                <tr key={row.key} style={{ borderTop: `1px solid ${theme.border}` }}>
+                                  <td style={Object.assign({}, td, { whiteSpace: "nowrap" })}>
+                                    <div style={{ fontWeight: 900 }}>{row.L || row.single || row.labelL}</div>
+                                    {row.R ? <div style={{ opacity: 0.85, marginTop: 2 }}>{row.R}</div> : null}
+                                  </td>
+
+                                  {/* Left */}
+                                  <td style={td}>{L.baseLoop}</td>
+                                  <td style={td}>
+                                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                      <select
+                                        style={Object.assign({}, miniInput, { width: 86, padding: "4px 8px", background: theme.panel2, color: theme.text })}
+                                        disabled={!row.L}
+                                        value={(row.L && groupLoopChange && groupLoopChange[row.L]) ? groupLoopChange[row.L] : ""}
+                                        onChange={(e) => {
+                                          if (!row.L) return;
+                                          const v = e.target.value;
+                                          if (!v) {
+                                            setGroupLoopChange((p) => {
+                                              const n = { ...(p || {}) };
+                                              delete n[row.L];
+                                              return n;
+                                            });
+                                          } else {
+                                            setGroupLoopChange((p) => ({ ...(p || {}), [row.L]: v }));
+                                          }
+                                        }}
+                                      >
+                                        <option value="" style={{ background: theme.panel2, color: theme.text }}>(baseline)</option>
+                                        {LOOP_TYPES.map((lt) => (
+                                          <option key={`L-opt-${lt}`} value={lt} style={{ background: theme.panel2, color: theme.text }}>{lt}</option>
+                                        ))}
+                                      </select>
+                                      <button
+                                        key={"L-"+row.key+"-reset"}
+                                        title="Reset to baseline"
+                                        style={{
+                                          padding: "4px 8px",
+                                          borderRadius: 999,
+                                          border: `1px solid ${theme.border}`,
+                                          background: "rgba(0,0,0,0.18)",
+                                          color: theme.text,
+                                          fontWeight: 900,
+                                          cursor: row.L ? "pointer" : "not-allowed",
+                                          opacity: row.L ? 0.9 : 0.5,
+                                        }}
+                                        disabled={!row.L}
+                                        onClick={() => {
+                                          if (!row.L) return;
+                                          setGroupLoopChange((p) => {
+                                            const n = { ...(p || {}) };
+                                            delete n[row.L];
+                                            return n;
+                                          });
+                                        }}
+                                      >
+                                        ↺
+                                      </button>
+                                    </div>
+                                  </td>
+                                  <td style={td}>{Number.isFinite(L.loopDelta) ? Math.round(L.loopDelta) : ""}</td>
+                                  <td style={td}>
+                                    <input
+                                      style={miniInput}
+                                      value={Number.isFinite(L.adj) ? String(L.adj) : ""}
+                                      onChange={(e) => {
+                                        const v = Number(e.target.value);
+                                        if (!row.L) return;
+                                        setGroupAdjustments((p) => ({ ...p, [row.L]: Number.isFinite(v) ? v : 0 }));
+                                      }}
+                                    />
+                                  </td>
+                                  <td style={Object.assign({}, td, { textAlign: "center" })}><div style={{ display: "inline-block", minWidth: 46, padding: "4px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: L.totalColor, fontWeight: 950, lineHeight: 1 }}>{Number.isFinite(L.total) ? Math.round(L.total) : ""}</div></td>
+
+                                  {/* Right */}
+                                  <td style={td}>{R.baseLoop}</td>
+                                  <td style={td}>
+                                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                      <select
+                                        style={Object.assign({}, miniInput, { width: 86, padding: "4px 8px", background: theme.panel2, color: theme.text })}
+                                        disabled={!row.R}
+                                        value={(row.R && groupLoopChange && groupLoopChange[row.R]) ? groupLoopChange[row.R] : ""}
+                                        onChange={(e) => {
+                                          if (!row.R) return;
+                                          const v = e.target.value;
+                                          if (!v) {
+                                            setGroupLoopChange((p) => {
+                                              const n = { ...(p || {}) };
+                                              delete n[row.R];
+                                              return n;
+                                            });
+                                          } else {
+                                            setGroupLoopChange((p) => ({ ...(p || {}), [row.R]: v }));
+                                          }
+                                        }}
+                                      >
+                                        <option value="" style={{ background: theme.panel2, color: theme.text }}>(baseline)</option>
+                                        {LOOP_TYPES.map((lt) => (
+                                          <option key={`R-opt-${lt}`} value={lt} style={{ background: theme.panel2, color: theme.text }}>{lt}</option>
+                                        ))}
+                                      </select>
+                                      <button
+                                        key={"R-"+row.key+"-reset"}
+                                        title="Reset to baseline"
+                                        style={{
+                                          padding: "4px 8px",
+                                          borderRadius: 999,
+                                          border: `1px solid ${theme.border}`,
+                                          background: "rgba(0,0,0,0.18)",
+                                          color: theme.text,
+                                          fontWeight: 900,
+                                          cursor: row.R ? "pointer" : "not-allowed",
+                                          opacity: row.R ? 0.9 : 0.5,
+                                        }}
+                                        disabled={!row.R}
+                                        onClick={() => {
+                                          if (!row.R) return;
+                                          setGroupLoopChange((p) => {
+                                            const n = { ...(p || {}) };
+                                            delete n[row.R];
+                                            return n;
+                                          });
+                                        }}
+                                      >
+                                        ↺
+                                      </button>
+                                    </div>
+                                  </td>
+                                  <td style={td}>{Number.isFinite(R.loopDelta) ? Math.round(R.loopDelta) : ""}</td>
+                                  <td style={td}>
+                                    <input
+                                      style={miniInput}
+                                      value={Number.isFinite(R.adj) ? String(R.adj) : ""}
+                                      onChange={(e) => {
+                                        const v = Number(e.target.value);
+                                        if (!row.R) return;
+                                        setGroupAdjustments((p) => ({ ...p, [row.R]: Number.isFinite(v) ? v : 0 }));
+                                      }}
+                                    />
+                                  </td>
+                                  <td style={Object.assign({}, td, { textAlign: "center" })}><div style={{ display: "inline-block", minWidth: 46, padding: "4px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: R.totalColor, fontWeight: 950, lineHeight: 1 }}>{Number.isFinite(R.total) ? Math.round(R.total) : ""}</div></td>
+                                </tr>
+                              );
+                            });
+                          })()}
+                        </tbody>
+                      </table>
+                    </div>); } catch (e) { return (
+                    <div style={{ marginTop: 10, color: theme.bad, fontWeight: 900 }}>
+                      Group table render error: {String((e && e.message) ? e.message : e)}
+                    </div>
+                  ); } })()}
+                </div>
+
+
+
+
+{/* Group averages / maillon loop advisory (A/B/C/D) */}
+<div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
+  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+    <div>
+      <div style={{ fontWeight: 950 }}>Group averages + loop suggestions (A/B/C/D)</div>
+      <div style={{ opacity: 0.78, fontSize: 12, marginTop: 4 }}>
+        Uses Step 4 <b>After</b> deltas (Δ vs nominal). Suggestions are advisory only — they won’t change any group settings automatically.
+      </div>
+    </div>
+
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      <button
+        style={Object.assign({}, topBtn, { background: "rgba(0,0,0,0.35)" })}
+        onClick={async () => {
+          try {
+            const payload = { schema: "abc-loop-suggestions-v1", exportedAt: new Date().toISOString(), wing: { make: meta.make || "", model: meta.model || "" }, suggestions: abcSuggestions, averages: abcAverages };
+            await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+            alert("Copied suggestions JSON to clipboard.");
+          } catch (e) {
+            alert("Clipboard copy failed (browser permission).");
+          }
+        }}
+      >
+        Copy suggestions
+      </button>
+<button
+        style={Object.assign({}, topBtn, { background: showLoopModeCounts ? "rgba(99,102,241,0.25)" : "rgba(255,255,255,0.06)" })}
+        onClick={() => setShowLoopModeCounts((v) => !v)}
+      >
+        {showLoopModeCounts ? "Hide loop counts" : "Show loop counts"}
+      </button>
+    </div>
+  </div>
+
+  
+  <div style={{ marginTop: 10 }}>
+    <div
+      style={{
+        border: `1px solid ${theme.border}`,
+        borderRadius: 16,
+        background: theme.panel2,
+        padding: 10,
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => setPitchAdvOpen((v) => !v)}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          border: "none",
+          background: "transparent",
+          color: theme.text,
+          cursor: "pointer",
+          padding: 0,
+        }}
+      >
+        <div>
+          <div style={{ fontWeight: 950 }}>Advanced</div>
+          <div style={{ opacity: 0.78, fontSize: 12, marginTop: 4 }}>Pitch configuration (rows, groups, and lines)</div>
+        </div>
+        <div style={{ opacity: 0.85, fontWeight: 950 }}>{pitchAdvOpen ? "▾" : "▸"}</div>
+      </button>
+
+      {pitchAdvOpen ? (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${theme.border}` }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <div style={{ fontWeight: 950, fontSize: 13, opacity: 0.9 }}>Reference row</div>
+              <select
+                value={pitchRefRow}
+                onChange={(e) => setPitchRefRow(e.target.value)}
+                style={{
+                  borderRadius: 12,
+                  border: `1px solid ${theme.border}`,
+                  background: "rgba(0,0,0,0.35)",
+                  color: theme.text,
+                  padding: "8px 10px",
+                  outline: "none",
+                                              userSelect: "auto",
+                  fontWeight: 950,
+                }}
+              >
+                {["A", "B", "C", "D"].map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button
+                type="button"
+                onClick={() => setPitchAdvEnabled((v) => !v)}
+                style={{
+                  borderRadius: 999,
+                  border: pitchAdvEnabled
+                    ? "1px solid rgba(34,197,94,0.9)"   // bright green when enabled
+                    : "1px solid rgba(250,204,21,0.9)", // yellow when disabled
+                  background: pitchAdvEnabled
+                    ? "rgba(34,197,94,0.22)"
+                    : "rgba(0,0,0,0.35)",
+                  color: theme.text,
+                  padding: "7px 10px",
+                  fontWeight: 950,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                  fontSize: 12,
+                }}
+                title="When disabled, the app uses the standard pitch calculation (factory defaults)."
+              >
+                {pitchAdvEnabled ? "Enabled" : "Disabled"}
+              </button>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              {["A", "B", "C", "D"].map((r) => {
+                const disabled = r === pitchRefRow;
+                const checked = !!pitchCompare[r];
+                return (
+                  <button
+                    key={r}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => !disabled && setPitchCompare((p) => ({ ...p, [r]: !p[r] }))}
+                    style={{
+                      borderRadius: 999,
+                      border: `1px solid ${theme.border}`,
+                      background: disabled ? "rgba(255,255,255,0.04)" : checked ? "rgba(59,130,246,0.22)" : "rgba(0,0,0,0.35)",
+                      color: disabled ? "rgba(170,177,195,0.45)" : theme.text,
+                      padding: "7px 10px",
+                      fontWeight: 950,
+                      cursor: disabled ? "not-allowed" : "pointer",
+                      whiteSpace: "nowrap",
+                      fontSize: 12,
+                    }}
+                    title={disabled ? "Reference row cannot be compared to itself" : "Toggle comparison"}
+                  >
+                    {r} − {pitchRefRow}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.78 }}>
+            Select which groups and individual lines are included in each row aggregation. Exclusions override group inclusion.
+            <span style={{ marginLeft: 8, opacity: 0.9 }}>Enable to apply these selections.</span>
+          <datalist id="pitchAllLines">
+            {(() => {
+              const out = [];
+              for (const r of wideRows || []) {
+                const letter = String(r.letter || "").toUpperCase();
+                const idx = r.idx == null ? null : Number(r.idx);
+                if (!letter || !Number.isFinite(idx)) continue;
+                const base = `${letter}${idx}`;
+                out.push(`${base}L`);
+                out.push(`${base}R`);
+              }
+              const seen = new Set();
+              const uniq = [];
+              for (const x of out) if (!seen.has(x)) { seen.add(x); uniq.push(x); }
+              uniq.sort((a, b) => a.localeCompare(b));
+              return uniq.map((id) => <option key={id} value={id} />);
+            })()}
+          </datalist>
+
+          </div>
+
+          {/* Step 0: Graphical Advanced Pitch Config (preview only — no logic yet) */}
+          {/* Step 0.5: Graphical Advanced Pitch Config — static preview layout (no logic yet) */}
+          <div
+            style={{
+              marginTop: 12,
+              border: `1px dashed ${theme.border}`,
+              borderRadius: 16,
+              padding: 12,
+              background: "rgba(0,0,0,0.14)",
+            }}
+          >
+            <div style={{ fontWeight: 950, display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <div>Graphical Advanced Pitch Config</div>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>Preview</div>
+            </div>
+
+            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8, fontWeight: 850, lineHeight: 1.35 }}>
+              Static layout preview only (no selection yet). Target layout: L on the left, R on the right, with bucket headers (A1, A2, …) and stabilo chips (A3L/A3R, A4L/A4R).
+            </div>
+
+            <div
+              style={{
+                marginTop: 12,
+                border: `1px solid ${theme.border}`,
+                borderRadius: 14,
+                padding: 10,
+                background: "rgba(255,255,255,0.03)",
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              {/* wing outline (simple preview) */}
+              <svg
+                viewBox="0 0 1200 520"
+                preserveAspectRatio="xMidYMid meet"
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.22, pointerEvents: "none" }}
+              >
+                <path d="M70,360 C260,190 430,145 600,145 C770,145 940,190 1130,360" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="2" />
+                <path d="M120,370 C300,265 455,230 600,230 C745,230 900,265 1080,370" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="2" />
+                <line x1="600" y1="120" x2="600" y2="450" stroke="rgba(255,255,255,0.30)" strokeWidth="2" />
+              </svg>
+
+              {/* Layout preview: same overall structure as Live grouping diagram (L on left, R on right, 4 row bands) */}
+              <div style={{ position: "relative", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0, alignItems: "stretch" }}>
+                <div style={{ borderRight: `2px solid ${theme.border}`, paddingRight: 10, marginRight: 10 }}>
+                  
+
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {[
+                      { row: "A", tint: "rgba(59,130,246,0.12)" },
+                      { row: "B", tint: "rgba(167,139,250,0.12)" },
+                      { row: "C", tint: "rgba(245,158,11,0.10)" },
+                      { row: "D", tint: "rgba(234,179,8,0.10)" },
+                    ].map(({ row, tint }) => (
+                      <div key={`pitchPrevL_band_${row}`} style={{ borderRadius: 14, padding: 10, background: tint, border: `1px solid ${theme.border}` }}>
+                        <div style={{ display: "flex", gap: 4, flexWrap: "nowrap", alignItems: "flex-start", justifyContent: "flex-end" }}>
+                          {["3", "2", "1"].map((n, i, arr) => (
+                            <div key={`pitchPrevL_${row}_${n}`} style={{
+                                  width: "fit-content", minWidth: 110, maxWidth: 240,
+                                  borderRadius: 12,
+                                  padding: 7,
+                                  background: ((pitchRowCfg[row]?.groups || []).includes(`${row}R${n}L`) ? "rgba(59,130,246,0.14)" : "rgba(0,0,0,0.18)"),
+                                  border: `1px solid ${theme.border}`,
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  justifyContent: "flex-start",
+                                  gap: 5,
+                                  flex: "0 0 auto"
+                                }}>
+                              <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+                                <button type="button"
+                                    onClick={() => {
+                                      const gid = `${row}R${n}L`;
+                                      setPitchRowCfg((p) => {
+                                        const cur = p[row] || { groups: [], include: [], exclude: [] };
+                                        const has = (cur.groups || []).includes(gid);
+                                        const nextGroups = has ? (cur.groups || []).filter((x) => x !== gid) : [...(cur.groups || []), gid];
+                                        return { ...p, [row]: { ...cur, groups: nextGroups } };
+                                      });
+                                    }}
+                                    style={{ padding: "4px 10px", borderRadius: 999, background: ((pitchRowCfg[row]?.groups || []).includes(`${row}R${n}L`) ? "rgba(0,0,0,0.72)" : "rgba(0,0,0,0.58)"), border: `1px solid ${groupColor(row, Number(n))}`, color: groupColor(row, Number(n)), fontWeight: 950, fontSize: 11, cursor: "pointer" }}>
+                                    {`${row}R${n}L`}
+                                  </button>
+                              </div>
+                              <div style={{ display: "flex", flexWrap: "nowrap", gap: 3, justifyContent: "center", maxWidth: "100%", overflowX: "hidden", overflowY: "hidden", alignSelf: "stretch" }}>
+                                {(() => {
+                                  const gid = `${row}R${n}L`;
+                                  const ents = Object.entries(lineToGroup || {});
+                                  const out = [];
+                                  const seen = new Set();
+                                  for (const [k, v] of ents) {
+                                    if (v === gid && !seen.has(k)) {
+                                      seen.add(k);
+                                      out.push(k);
+                                    }
+                                  }
+                                  out.sort((a, b) => String(b).localeCompare(String(a), undefined, { numeric: true }));
+                                  return out.map((ln) => (
+                                    <button type="button" key={`${gid}_${ln}`}
+                                      onClick={() => {
+                                        const cur = pitchRowCfg[row] || { groups: [], include: [], exclude: [] };
+                                        const groupOn = (cur.groups || []).includes(gid);
+                                        if (groupOn) return;
+                                        setPitchRowCfg((p) => {
+                                          const cur2 = p[row] || { groups: [], include: [], exclude: [] };
+                                          const has = (cur2.include || []).includes(ln);
+                                          const nextInc = has ? (cur2.include || []).filter((x) => x !== ln) : [...(cur2.include || []), ln];
+                                          return { ...p, [row]: { ...cur2, include: nextInc } };
+                                        });
+                                      }}
+                                      style={{ padding: "1px 4px", borderRadius: 999, border: `1px solid ${chipColorFromLineId(ln)}`, background: ((pitchRowCfg[row]?.include || []).includes(ln) ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.10)"), color: ((pitchRowCfg[row]?.include || []).includes(ln) ? "rgba(30,64,175,0.95)" : "rgba(255,255,255,0.93)"), fontWeight: 650, fontSize: 8, whiteSpace: "nowrap", cursor: (((pitchRowCfg[row]?.groups || []).includes(gid)) ? "not-allowed" : "pointer"), opacity: (((pitchRowCfg[row]?.groups || []).includes(gid)) ? 0.45 : 1) }}>
+                                      {ln}
+                                    </button>
+                                  ));
+                                })()}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                </div>
+
+                <div style={{ paddingLeft: 10 }}>
+                  
+
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {[
+                      { row: "A", tint: "rgba(59,130,246,0.12)" },
+                      { row: "B", tint: "rgba(167,139,250,0.12)" },
+                      { row: "C", tint: "rgba(245,158,11,0.10)" },
+                      { row: "D", tint: "rgba(234,179,8,0.10)" },
+                    ].map(({ row, tint }) => (
+                      <div key={`pitchPrevR_band_${row}`} style={{ borderRadius: 14, padding: 10, background: tint, border: `1px solid ${theme.border}` }}>
+                        <div style={{ display: "flex", gap: 4, flexWrap: "nowrap", alignItems: "flex-start" }}>
+                          {["1", "2", "3"].map((n, i, arr) => (
+                            <div key={`pitchPrevR_${row}_${n}`} style={{
+                                  width: "fit-content", minWidth: 110, maxWidth: 240,
+                                  borderRadius: 12,
+                                  padding: 7,
+                                  background: ((pitchRowCfg[row]?.groups || []).includes(`${row}R${n}R`) ? "rgba(59,130,246,0.14)" : "rgba(0,0,0,0.18)"),
+                                  border: `1px solid ${theme.border}`,
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  justifyContent: "flex-start",
+                                  gap: 5,
+                                  flex: "0 0 auto"
+                                }}>
+                              <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+                                <button type="button"
+                                    onClick={() => {
+                                      const gid = `${row}R${n}R`;
+                                      setPitchRowCfg((p) => {
+                                        const cur = p[row] || { groups: [], include: [], exclude: [] };
+                                        const has = (cur.groups || []).includes(gid);
+                                        const nextGroups = has ? (cur.groups || []).filter((x) => x !== gid) : [...(cur.groups || []), gid];
+                                        return { ...p, [row]: { ...cur, groups: nextGroups } };
+                                      });
+                                    }}
+                                    style={{ padding: "4px 10px", borderRadius: 999, background: ((pitchRowCfg[row]?.groups || []).includes(`${row}R${n}R`) ? "rgba(0,0,0,0.72)" : "rgba(0,0,0,0.58)"), border: `1px solid ${groupColor(row, Number(n))}`, color: groupColor(row, Number(n)), fontWeight: 950, fontSize: 11, cursor: "pointer" }}>
+                                    {`${row}R${n}R`}
+                                  </button>
+                              </div>
+                              <div style={{ display: "flex", flexWrap: "nowrap", gap: 3, justifyContent: "center", maxWidth: "100%", overflowX: "hidden", overflowY: "hidden", alignSelf: "stretch" }}>
+                                {(() => {
+                                  const gid = `${row}R${n}R`;
+                                  const ents = Object.entries(lineToGroup || {});
+                                  const out = [];
+                                  const seen = new Set();
+                                  for (const [k, v] of ents) {
+                                    if (v === gid && !seen.has(k)) {
+                                      seen.add(k);
+                                      out.push(k);
+                                    }
+                                  }
+                                  out.sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+                                  return out.map((ln) => (
+                                    <button type="button" key={`${gid}_${ln}`}
+                                      onClick={() => {
+                                        const cur = pitchRowCfg[row] || { groups: [], include: [], exclude: [] };
+                                        const groupOn = (cur.groups || []).includes(gid);
+                                        if (groupOn) return;
+                                        setPitchRowCfg((p) => {
+                                          const cur2 = p[row] || { groups: [], include: [], exclude: [] };
+                                          const has = (cur2.include || []).includes(ln);
+                                          const nextInc = has ? (cur2.include || []).filter((x) => x !== ln) : [...(cur2.include || []), ln];
+                                          return { ...p, [row]: { ...cur2, include: nextInc } };
+                                        });
+                                      }}
+                                      style={{ padding: "1px 4px", borderRadius: 999, border: `1px solid ${chipColorFromLineId(ln)}`, background: ((pitchRowCfg[row]?.include || []).includes(ln) ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.10)"), color: ((pitchRowCfg[row]?.include || []).includes(ln) ? "rgba(30,64,175,0.95)" : "rgba(255,255,255,0.93)"), fontWeight: 650, fontSize: 8, whiteSpace: "nowrap", cursor: (((pitchRowCfg[row]?.groups || []).includes(gid)) ? "not-allowed" : "pointer"), opacity: (((pitchRowCfg[row]?.groups || []).includes(gid)) ? 0.45 : 1) }}>
+                                      {ln}
+                                    </button>
+                                  ));
+                                })()}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+            {["A", "B", "C", "D"].map((row) => {
+              const cfg = pitchRowCfg[row] || { groups: [], include: [], exclude: [] };
+              return (
+                <div key={row} style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: "rgba(0,0,0,0.22)", padding: 10 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div style={{ fontWeight: 950 }}>Row {row}</div>
+                    <div style={{ fontSize: 12, opacity: 0.78 }}>
+                      Groups: {cfg.groups.length} • Included lines: {cfg.include.length} • Excluded: {cfg.exclude.length}
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+                    <div>
+                      <div style={{ fontWeight: 900, fontSize: 12, opacity: 0.9, marginBottom: 6 }}>Included groups</div>
+                      <div style={{ fontSize: 12, opacity: 0.72, marginBottom: 8 }}>Suggested (from current mapping)</div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                        {(() => {
+                          const prefix = String(prefixByLetter[row] || "");
+                          const vals = Object.values(lineToGroup || {}).filter((v) => v && String(v).slice(0, prefix.length) === prefix);
+                          const seen = new Set();
+                          const uniq = [];
+                          for (const v of vals) { const s = String(v); if (!seen.has(s)) { seen.add(s); uniq.push(s); } }
+                          uniq.sort();
+                          return uniq.slice(0, 12).map((g) => (
+                            <button
+                              key={g}
+                              type="button"
+                              onClick={() => setPitchRowCfg((p) => ({ ...p, [row]: { ...cfg, groups: cfg.groups.includes(g) ? cfg.groups : [...cfg.groups, g] } }))}
+                              style={{
+                                borderRadius: 999,
+                                border: `1px solid ${theme.border}`,
+                                background: "rgba(0,0,0,0.35)",
+                                color: theme.text,
+                                padding: "6px 10px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                                fontSize: 12,
+                              }}
+                              title="Add suggested group"
+                            >
+                              {g}
+                            </button>
+                          ));
+                        })()}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                        <input
+                          value={cfg._groupDraft || ""}
+                          onChange={(e) =>
+                            setPitchRowCfg((p) => ({
+                              ...p,
+                              [row]: { ...cfg, _groupDraft: e.target.value },
+                            }))
+                          }
+                          placeholder="Add group…"
+                          list={`pitchGroups_${row}`}
+                          style={{
+                            borderRadius: 12,
+                            border: `1px solid ${theme.border}`,
+                            background: "rgba(0,0,0,0.35)",
+                            color: theme.text,
+                            padding: "8px 10px",
+                            outline: "none",
+                                              userSelect: "auto",
+                            fontWeight: 900,
+                            fontSize: 12,
+                            width: 220,
+                            maxWidth: "100%",
+                          }}
+                        />
+                        <datalist id={`pitchGroups_${row}`}>
+                          {(() => {
+                            const prefix = String(prefixByLetter[row] || "");
+                            const count = Number(groupCountByLetter[row] || 0);
+                            const out = [];
+                            for (const side of ["L", "R"]) {
+                              for (let b = 1; b <= count; b++) out.push(`${prefix}${b}${side}`);
+                            }
+                            return out.sort().map((g) => <option key={g} value={g} />);
+                          })()}
+                        </datalist>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const v = String(cfg._groupDraft || "").trim();
+                            if (!v) return;
+                            setPitchRowCfg((p) => ({
+                              ...p,
+                              [row]: { ...cfg, groups: cfg.groups.includes(v) ? cfg.groups : [...cfg.groups, v], _groupDraft: "" },
+                            }));
+                          }}
+                          style={{
+                            borderRadius: 999,
+                            border: `1px solid ${theme.border}`,
+                            background: "rgba(0,0,0,0.35)",
+                            color: theme.text,
+                            padding: "8px 10px",
+                            fontWeight: 950,
+                            cursor: "pointer",
+                            fontSize: 12,
+                          }}
+                        >
+                          Add group
+                        </button>
+
+                        {cfg.groups.map((g) => (
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={() => setPitchRowCfg((p) => ({ ...p, [row]: { ...cfg, groups: cfg.groups.filter((x) => x !== g) } }))}
+                            style={{
+                              borderRadius: 999,
+                              border: `1px solid ${theme.border}`,
+                              background: "rgba(59,130,246,0.14)",
+                              color: theme.text,
+                              padding: "6px 10px",
+                              fontWeight: 950,
+                              cursor: "pointer",
+                              fontSize: 12,
+                            }}
+                            title="Remove group"
+                          >
+                            {g} ×
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontWeight: 900, fontSize: 12, opacity: 0.9, marginBottom: 6 }}>Include individual lines</div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                        <input
+                          value={cfg._lineDraft || ""}
+                          onChange={(e) =>
+                            setPitchRowCfg((p) => ({
+                              ...p,
+                              [row]: { ...cfg, _lineDraft: e.target.value },
+                            }))
+                          }
+                          placeholder="Add line…"
+                          list="pitchAllLines"
+                          style={{
+                            borderRadius: 12,
+                            border: `1px solid ${theme.border}`,
+                            background: "rgba(0,0,0,0.35)",
+                            color: theme.text,
+                            padding: "8px 10px",
+                            outline: "none",
+                                              userSelect: "auto",
+                            fontWeight: 900,
+                            fontSize: 12,
+                            width: 220,
+                            maxWidth: "100%",
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const v = String(cfg._lineDraft || "").trim();
+                            if (!v) return;
+                            setPitchRowCfg((p) => ({
+                              ...p,
+                              [row]: { ...cfg, include: cfg.include.includes(v) ? cfg.include : [...cfg.include, v], _lineDraft: "" },
+                            }));
+                          }}
+                          style={{
+                            borderRadius: 999,
+                            border: `1px solid ${theme.border}`,
+                            background: "rgba(0,0,0,0.35)",
+                            color: theme.text,
+                            padding: "8px 10px",
+                            fontWeight: 950,
+                            cursor: "pointer",
+                            fontSize: 12,
+                          }}
+                        >
+                          Add line
+                        </button>
+
+                        {cfg.include.map((id) => (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => setPitchRowCfg((p) => ({ ...p, [row]: { ...cfg, include: cfg.include.filter((x) => x !== id) } }))}
+                            style={{
+                              borderRadius: 999,
+                              border: `1px solid ${theme.border}`,
+                              background: "rgba(34,197,94,0.14)",
+                              color: theme.text,
+                              padding: "6px 10px",
+                              fontWeight: 950,
+                              cursor: "pointer",
+                              fontSize: 12,
+                            }}
+                            title="Remove included line"
+                          >
+                            {id} ×
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontWeight: 900, fontSize: 12, opacity: 0.9, marginBottom: 6 }}>Exclude lines (override)</div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                        <input
+                          value={cfg._exDraft || ""}
+                          onChange={(e) =>
+                            setPitchRowCfg((p) => ({
+                              ...p,
+                              [row]: { ...cfg, _exDraft: e.target.value },
+                            }))
+                          }
+                          placeholder="Exclude line…"
+                          list="pitchAllLines"
+                          style={{
+                            borderRadius: 12,
+                            border: `1px solid ${theme.border}`,
+                            background: "rgba(0,0,0,0.35)",
+                            color: theme.text,
+                            padding: "8px 10px",
+                            outline: "none",
+                                              userSelect: "auto",
+                            fontWeight: 900,
+                            fontSize: 12,
+                            width: 220,
+                            maxWidth: "100%",
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const v = String(cfg._exDraft || "").trim();
+                            if (!v) return;
+                            setPitchRowCfg((p) => ({
+                              ...p,
+                              [row]: { ...cfg, exclude: cfg.exclude.includes(v) ? cfg.exclude : [...cfg.exclude, v], _exDraft: "" },
+                            }));
+                          }}
+                          style={{
+                            borderRadius: 999,
+                            border: `1px solid ${theme.border}`,
+                            background: "rgba(0,0,0,0.35)",
+                            color: theme.text,
+                            padding: "8px 10px",
+                            fontWeight: 950,
+                            cursor: "pointer",
+                            fontSize: 12,
+                          }}
+                        >
+                          Exclude
+                        </button>
+
+                        {cfg.exclude.map((id) => (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => setPitchRowCfg((p) => ({ ...p, [row]: { ...cfg, exclude: cfg.exclude.filter((x) => x !== id) } }))}
+                            style={{
+                              borderRadius: 999,
+                              border: `1px solid ${theme.border}`,
+                              background: "rgba(250,204,21,0.12)",
+                              color: theme.text,
+                              padding: "6px 10px",
+                              fontWeight: 950,
+                              cursor: "pointer",
+                              fontSize: 12,
+                            }}
+                            title="Remove excluded line"
+                          >
+                            {id} ×
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  </div>
+
+
+  <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+    {/* Averages */}
+    
+
+
+
+<div className="abcGrid" style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, background: theme.panel, padding: 8, minWidth: 0, width: "100%", flex: "1 1 640px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+        <div style={{ fontWeight: 950 }}>Suggested loop change + fine adjust (advisory)</div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.35)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
+            onClick={() => applyAutoLoopPlan("factory")}
+            title="Choose the closest achievable loop configuration using discrete loops (no fine-adjust)."
+          >
+            Auto: closest factory loops
+          </button>
+
+          <button
+            type="button"
+            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.35)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
+            onClick={() => applyAutoLoopPlan("minimal")}
+            title="Bring the wing within tolerance with the least loop change, using discrete loops only (no fine-adjust)."
+          >
+            Auto: minimal loop changes
+          </button>
+
+          <button
+            type="button"
+            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(99,102,241,0.14)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
+            onClick={() => applyAutoZeroAndMinimalLoops()}
+            title="Search for the best correction (zeroing) value that results in the fewest loop changes to bring the wing into tolerance. Prefers one longer outlier over multiple outliers."
+          >
+            Auto: zero + minimal loops
+          </button>
+
+          
+          <button
+            type="button"
+            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.14)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
+            onClick={() => applyAutoZeroForBestTrimPitch()}
+            title="Search for the best correction (zeroing) value to optimize trim + factory-style pitch (A vs B, C vs B, D vs B). Does not change loops."
+          >
+            Auto: zero for best trim + pitch
+          </button>
+
+{autoLoopStatus && ((groupLoopChange && Object.keys(groupLoopChange).length > 0) || (groupAdjustments && Object.keys(groupAdjustments).length > 0) || (step4LineCorr && Object.keys(step4LineCorr).length > 0)) ? (
+            <div style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(34,197,94,0.25)", color: theme.text, fontWeight: 950, fontSize: 11 }}>
+              Auto applied
+            </div>
+           ) : null}
+        </div>
+        {autoDecision ? (
+          <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85, display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <span style={{ fontWeight: 900 }}>Auto summary:</span>{" "}
+              <span style={{ fontWeight: 900 }}>{autoDecision.mode}</span>{" "}
+              • correction <span style={{ fontWeight: 900 }}>{Number(autoDecision.corr || 0)}</span>mm
+            </div>
+            {autoDecision.loopChangeCount != null ? (
+              <div>
+                loop changes <span style={{ fontWeight: 900 }}>{autoDecision.loopChangeCount}</span>
+              </div>
+            ) : null}
+            {autoDecision.outliers != null ? (
+              <div>
+                outliers <span style={{ fontWeight: 900 }}>{autoDecision.outliers}</span>
+              </div>
+            ) : null}
+            {autoDecision.maxOver != null ? (
+              <div>
+                max over tol <span style={{ fontWeight: 900 }}>{Math.round(Number(autoDecision.maxOver || 0))}</span>mm
+              </div>
+            ) : null}
+
+            {autoDecision.pitchFails != null ? (
+              <div>
+                pitch fails <span style={{ fontWeight: 900 }}>{autoDecision.pitchFails}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Step 5 — A4 report (print-ready) */}
+        {showReport ? (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 60,
+              overflow: "auto",
+              background: "rgba(10,12,16,0.92)",
+              padding: "28px 0 60px",
+              display: "flex",
+              justifyContent: "center",
+            }}
+          >
+            <style>{`@media print {
+  body { background: #fff !important; }
+  .noPrint { display: none !important; }
+  .a4Page { box-shadow: none !important; border: none !important; border-radius: 0 !important; margin: 0 !important; }
+  @page { size: A4; margin: 12mm; }
+}`}</style>
+
+            <div style={{ width: "210mm" }}>
+              <div className="noPrint" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div style={{ fontSize: 12, opacity: 0.85, color: theme.text }}>
+                  Report preview (A4) • Generated from Step 4
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <button type="button" style={topBtn} onClick={() => setShowReport(false)}>
+                    ← Back to Step 4
+                  </button>
+                  <button type="button" style={topBtn} onClick={() => window.print()}>
+                    Print / Save PDF
+                  </button>
+                </div>
+              </div>
+
+              <div
+                className="a4Page"
+                style={{
+                  width: "210mm",
+                  minHeight: "297mm",
+                  background: "#fff",
+                  color: "#111",
+                  border: "1px solid rgba(0,0,0,0.15)",
+                  borderRadius: 14,
+                  boxShadow: "0 14px 40px rgba(0,0,0,0.35)",
+                  padding: "14mm",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start" }}>
+                  <div>
+                    <div style={{ fontSize: 22, fontWeight: 950, letterSpacing: 0.2 }}>Paraglider Trim Tuning Report</div>
+                    <div style={{ marginTop: 4, fontSize: 12, color: "#444" }}>
+                      File: <span style={{ fontWeight: 900 }}>{importStatus?.ok ? importStatus.name : "—"}</span>
+                    </div>
+                    <div style={{ marginTop: 2, fontSize: 12, color: "#444" }}>
+                      Lines (L+R): <span style={{ fontWeight: 900 }}>{summary.totalLines}</span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "auto auto", gap: "6px 10px", fontSize: 12 }}>
+                    <div style={{ fontWeight: 900, color: "#333" }}>Manufacturer</div>
+                    <div>{meta.make || "—"}</div>
+                    <div style={{ fontWeight: 900, color: "#333" }}>Model</div>
+                    <div>{meta.model || "—"}</div>
+                    <div style={{ fontWeight: 900, color: "#333" }}>Size</div>
+                    <div>{meta.size || "—"}</div>
+                    <div style={{ fontWeight: 900, color: "#333" }}>Serial #</div>
+                    <div>{meta.serial || "—"}</div>
+                    <div style={{ fontWeight: 900, color: "#333" }}>Checked by</div>
+                    <div>{meta.checkedBy || "—"}</div>
+                    <div style={{ fontWeight: 900, color: "#333" }}>Date</div>
+                    <div>{meta.date || "—"}</div>
+                    <div style={{ fontWeight: 900, color: "#333" }}>Tolerance</div>
+                    <div>±{Number(meta.tolerance || 0)} mm</div>
+                    <div style={{ fontWeight: 900, color: "#333" }}>Correction</div>
+                    <div>{Number(meta.correction || 0)} mm</div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 14, border: "1px solid rgba(0,0,0,0.15)", borderRadius: 10, overflow: "hidden" }}>
+                  <div style={{ background: "#f3f4f6", padding: "6px 10px", fontSize: 12, fontWeight: 950 }}>Pitch (factory comparisons)</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, padding: "10px" }}>
+                    {[
+                      { key: "avb", label: "A − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.AvB : null },
+                      { key: "cvb", label: "C − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.CvB : null },
+                      { key: "dvb", label: "D − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.DvB : null },
+                    ].map((row) => (
+                      <div key={row.key} style={{ border: "1px solid rgba(0,0,0,0.12)", borderRadius: 10, padding: "8px 10px" }}>
+                        <div style={{ fontSize: 11, color: "#555", fontWeight: 900 }}>{row.label}</div>
+                        <div style={{ fontSize: 16, fontWeight: 950 }}>
+                          {(() => {
+                            var both = row.v ? row.v.both : null;
+                            var n = both == null || !Number.isFinite(Number(both)) ? null : Number(both);
+                            return n == null ? "—" : (n >= 0 ? `+${n.toFixed(1)}` : n.toFixed(1));
+                          })()} mm
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ padding: "0 10px 10px", fontSize: 11, color: "#555" }}>
+                    Pass/fail uses ±{Number(groupPitchTol || 4)}mm against B (A vs B, C vs B, D vs B).
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 14, border: "1px solid rgba(0,0,0,0.15)", borderRadius: 10, overflow: "hidden" }}>
+                  <div style={{ background: "#f3f4f6", padding: "6px 10px", fontSize: 12, fontWeight: 950 }}>Loop changes</div>
+                  <div style={{ padding: 8, fontSize: 12 }}>
+                    {(groupLoopChange && Object.keys(groupLoopChange).length > 0) ? (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+                        {(() => {
+                          var gids = Object.keys(groupLoopChange).sort();
+                          var byRow = { A: [], B: [], C: [], D: [] };
+                          gids.forEach((gid) => {
+                            var row = (gid || "")[0];
+                            if (byRow[row]) byRow[row].push(gid);
+                          });
+
+                          var renderCol = (rowKey, title, isLast) => (
+                            <div key={rowKey} style={{ minWidth: 0, paddingRight: isLast ? 0 : 10, borderRight: isLast ? "none" : "1px solid rgba(0,0,0,0.15)" }}>
+                              <div style={{ fontWeight: 950, marginBottom: 6, textAlign: "center" }}>{title}</div>
+                              <div style={{ display: "grid", gridTemplateColumns: "72px 1fr", columnGap: 10, rowGap: 6 }}>
+                                {byRow[rowKey].length ? byRow[rowKey].map((gid) => {
+                                  var from = groupLoopBaseline && groupLoopBaseline[gid] != null ? groupLoopBaseline[gid] : "—";
+                                  var to = groupLoopChange[gid];
+                                  return (
+                                    <React.Fragment key={gid}>
+                                      <div style={{ fontWeight: 950 }}>{gid}</div>
+                                      <div>{from} → <span style={{ fontWeight: 950 }}>{to}</span></div>
+                                    </React.Fragment>
+                                  );
+                                }) : (
+                                  <div style={{ gridColumn: "1 / -1", color: "#555" }}>—</div>
+                                )}
+                              </div>
+                            </div>
+                          );
+
+                          return (
+                            <>
+                              {renderCol("A", "A Row", false)}
+                              {renderCol("B", "B Row", false)}
+                              {renderCol("C", "C Row", false)}
+                              {renderCol("D", "D Row", true)}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    ) : (
+                      <div style={{ color: "#555" }}>No loop changes.</div>
+                    )}
+                  </div>
+                </div>
+
+                {autoDecision ? (
+                  <div style={{ marginTop: 14, border: "1px solid rgba(0,0,0,0.15)", borderRadius: 10, overflow: "hidden" }}>
+                    <div style={{ background: "#f3f4f6", padding: "6px 10px", fontSize: 12, fontWeight: 950 }}>Auto decision</div>
+                    <div style={{ padding: 8, display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12, color: "#222" }}>
+                      <div>
+                        mode <span style={{ fontWeight: 950 }}>{autoDecision.mode}</span>
+                      </div>
+                      <div>
+                        correction <span style={{ fontWeight: 950 }}>{Number(autoDecision.corr || 0)}</span>mm
+                      </div>
+                      {autoDecision.loopChangeCount != null ? (
+                        <div>
+                          loop changes <span style={{ fontWeight: 950 }}>{autoDecision.loopChangeCount}</span>
+                        </div>
+                      ) : null}
+                      {autoDecision.outliers != null ? (
+                        <div>
+                          outliers <span style={{ fontWeight: 950 }}>{autoDecision.outliers}</span>
+                        </div>
+                      ) : null}
+                      {autoDecision.maxOver != null ? (
+                        <div>
+                          max over tol <span style={{ fontWeight: 950 }}>{Math.round(Number(autoDecision.maxOver || 0))}</span>mm
+                        </div>
+                      ) : null}
+                      {autoDecision.pitchFails != null ? (
+                        <div>
+                          pitch fails <span style={{ fontWeight: 950 }}>{autoDecision.pitchFails}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div style={{ marginTop: 16, display: "flex", justifyContent: "space-between", gap: 12, fontSize: 11, color: "#555" }}>
+                  <div>Baseline loops shown in Step 3 are reference only and never affect Step 4 calculations.</div>
+                  <div style={{ textAlign: "right" }}>Signature: ________________________</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {autoDecision ? (
+          <details style={{ marginTop: 8, fontSize: 12, opacity: 0.9 }}>
+            <summary style={{ cursor: "pointer", fontWeight: 900 }}>Why this result?</summary>
+            <div style={{ marginTop: 6, lineHeight: 1.35 }}>
+              <div>• Objective: minimize outliers first, then minimize loop changes.</div>
+              {autoDecision.mode && String(autoDecision.mode).indexOf("zero") === 0 ? (
+                <div>• The app searched correction values and chose the one that achieved the best score under that objective.</div>
+              ) : (
+                <div>• The app chose a discrete loop configuration under the selected auto mode.</div>
+              )}
+              {autoDecision.outliers != null ? (
+                autoDecision.outliers === 0 ? (
+                  <div>
+                    • All included lines are within ±{Number(meta && meta.tolerance != null ? meta.tolerance : 0)}mm after applying this plan.
+                  </div>
+                ) : (
+                  <div>
+                    • {autoDecision.outliers} outlier{autoDecision.outliers === 1 ? "" : "s"} remain outside tolerance. Preference is to keep outliers concentrated (line insert use-case) rather than spreading loop changes.
+                  </div>
+                )
+              ) : null}
+              {autoDecision.maxOver != null ? (
+                <div>• Max over tolerance (worst residual) is {Math.round(Number(autoDecision.maxOver || 0))}mm.</div>
+              ) : null}
+              <div>• If you change any loops/adjustments manually, “Auto applied” clears to indicate the plan is no longer purely automatic.</div>
+            </div>
+          </details>
+        ) : null}
+        {autoDecision ? (
+          <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.03)" }}>
+            <div style={{ fontWeight: 950, marginBottom: 6 }}>Actionable plan</div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12, lineHeight: 1.35 }}>
+              <div style={{ minWidth: 260 }}>
+                <div style={{ fontWeight: 900, marginBottom: 4 }}>Loop changes</div>
+                {(groupLoopChange && Object.keys(groupLoopChange).length > 0) ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+                    {(() => {
+                      var gids = Object.keys(groupLoopChange).sort();
+                      var byRow = { A: [], B: [], C: [], D: [] };
+                      gids.forEach((gid) => {
+                        var row = (gid || "")[0];
+                        if (byRow[row]) byRow[row].push(gid);
+                      });
+
+                      var renderCol = (rowKey, title, isLast) => (
+                        <div key={rowKey} style={{ minWidth: 0, paddingRight: isLast ? 0 : 10, borderRight: isLast ? "none" : "1px solid rgba(0,0,0,0.15)" }}>
+                          <div style={{ fontWeight: 900, marginBottom: 6, textAlign: "center" }}>{title}</div>
+                          <div style={{ display: "grid", gridTemplateColumns: "72px 1fr", columnGap: 10, rowGap: 4 }}>
+                            {byRow[rowKey].length ? byRow[rowKey].map((gid) => {
+                              var from = groupLoopBaseline && groupLoopBaseline[gid] != null ? groupLoopBaseline[gid] : "—";
+                              var to = groupLoopChange[gid];
+                              return (
+                                <React.Fragment key={gid}>
+                                  <div style={{ fontWeight: 900 }}>{gid}</div>
+                                  <div>{from} → <span style={{ fontWeight: 900 }}>{to}</span></div>
+                                </React.Fragment>
+                              );
+                            }) : (
+                              <div style={{ gridColumn: "1 / -1", opacity: 0.7 }}>—</div>
+                            )}
+                          </div>
+                        </div>
+                      );
+
+                      return (
+                        <>
+                          {renderCol("A", "A Row", false)}
+                          {renderCol("B", "B Row", false)}
+                          {renderCol("C", "C Row", false)}
+                          {renderCol("D", "D Row", true)}
+                        </>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <div>No loop changes.</div>
+                )}
+              </div>
+
+              <div style={{ minWidth: 260 }}>
+                <div style={{ fontWeight: 900, marginBottom: 4 }}>Notes</div>
+                {autoDecision.outliers != null ? (
+                  autoDecision.outliers === 0 ? (
+                    <div>All included lines are within tolerance. Apply loops as listed.</div>
+                  ) : (
+                    autoDecision.outliers === 1 ? (
+                      <div>
+                        One outlier remains outside tolerance. Consider a line insert on the affected line if needed.
+                      </div>
+                    ) : (
+                      <div>
+                        Multiple outliers remain outside tolerance. Re-measure and inspect before applying further changes.
+                      </div>
+                    )
+                  )
+                ) : (
+                  <div>Apply loops as listed and verify against tolerance.</div>
+                )}
+                {autoDecision.maxOver != null ? (
+                  <div style={{ marginTop: 6 }}>Worst residual (max over tol): <span style={{ fontWeight: 900 }}>{Math.round(Number(autoDecision.maxOver || 0))}</span>mm</div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+      </div>
+      <div style={{ overflow: "auto", border: `1px solid ${theme.border}`, borderRadius: 12 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+          <thead>
+            <tr style={{ background: "rgba(255,255,255,0.05)" }}>
+              <th style={th} rowSpan={2}>Group</th>
+              <th style={th} colSpan={5}>Left</th>
+              <th style={th} colSpan={5}>Right</th>
+            </tr>
+            <tr style={{ background: "rgba(255,255,255,0.05)" }}>
+              {["Rep", "Suggest", "Loop Δ", "Adj", "Residual"].map((h) => (
+                <th key={`L-${h}`} style={th}>{h}</th>
+              ))}
+              {["Rep", "Suggest", "Loop Δ", "Adj", "Residual"].map((h) => (
+                <th key={`R-${h}`} style={th}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {["A", "B", "C", "D"].map((L) => {
+              const sL = abcSuggestions[L].L || null;
+              const sR = abcSuggestions[L].R || null;
+
+              const fmt1 = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Number(n).toFixed(1));
+              const fmti = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Math.round(Number(n)));
+
+              return (
+                <tr key={L} style={{ borderTop: `1px solid ${theme.border}` }}>
+                  <td style={Object.assign({}, td, { fontWeight: 950, color: (PALETTE[L] || PALETTE.A).base })}>{L}</td>
+
+                  <td style={td}>{sL ? sL.repLoop : "—"}</td>
+                  <td style={td}>{sL ? sL.bestLoop : "—"}</td>
+                  <td style={td}>{sL ? fmti(sL.loopDeltaMm) : "—"}</td>
+                  <td style={td}>{sL ? fmti(sL.suggestedAdjMm) : "—"}</td>
+                  <td style={Object.assign({}, td, { fontWeight: 950 })}>{sL ? fmt1(sL.residualAfterAdj) : "—"}</td>
+
+                  <td style={td}>{sR ? sR.repLoop : "—"}</td>
+                  <td style={td}>{sR ? sR.bestLoop : "—"}</td>
+                  <td style={td}>{sR ? fmti(sR.loopDeltaMm) : "—"}</td>
+                  <td style={td}>{sR ? fmti(sR.suggestedAdjMm) : "—"}</td>
+                  <td style={Object.assign({}, td, { fontWeight: 950 })}>{sR ? fmt1(sR.residualAfterAdj) : "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ marginTop: 8, opacity: 0.78, fontSize: 12 }}>
+        Fine adjust is clamped to ±Tolerance (<b>{Number(meta.tolerance || 0)}mm</b>). Suggestions use the most common current loop type in each A/B/C side as the “representative” baseline.
+      </div>
+
+      
+
+      {showLoopModeCounts ? (
+        <div style={{ marginTop: 10, borderTop: `1px solid ${theme.border}`, paddingTop: 10 }}>
+          <div style={{ fontWeight: 950, marginBottom: 6 }}>Loop counts used to pick “Rep”</div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {["A", "B", "C", "D"].map((L) => (
+              <div key={`counts-${L}`} style={{ border: `1px solid ${theme.border}`, borderRadius: 12, padding: 8, background: "rgba(0,0,0,0.25)" }}>
+                <div style={{ fontWeight: 950, marginBottom: 6, color: (PALETTE[L] || PALETTE.A).base }}>{L}</div>
+                {["L", "R"].map((side) => {
+                  const counts = abcLoopModeCounts[L][side] || {};
+                  const entries = Object.entries(counts).sort((a, b) => (Number(b[1]) - Number(a[1])) || String(a[0]).localeCompare(String(b[0])));
+                  return (
+                    <div key={`${L}-${side}`} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
+                      <span style={{ opacity: 0.8, fontWeight: 950, width: 42 }}>{side === "L" ? "Left" : "Right"}</span>
+                      {entries.length === 0 ? (
+                        <span style={{ opacity: 0.7 }}>—</span>
+                      ) : (
+                        entries.map(([lt, c]) => (
+                          <span key={`${L}-${side}-${lt}`} style={{ padding: "3px 8px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.35)", fontWeight: 950, fontSize: 11 }}>
+                            {lt}: {c}
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+
+</div>
+</div>
+
+  <style>{`
+    @media (max-width: 860px) {
+      .abcGrid { grid-template-columns: 1fr !important; }
+    }
+  `}</style>
+</div>
+<div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontWeight: 950 }}>Whole wing — per line lengths</div>
+                      <div style={{ opacity: 0.78, fontSize: 12, marginTop: 4 }}>
+                        Each line side (L/R) is treated as a separate entity. Values use the <b>frozen baseline</b> + Step 4 overrides/adjustments.
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      <button
+                        style={Object.assign({}, topBtn, (showCorrected ? topBtnActive : null))}
+                        onClick={() => setShowCorrected((v) => !v)}
+                        title="Toggle whether correction is applied to measured values"
+                      >
+                        {showCorrected ? "Corrected: ON" : "Corrected: OFF"}
+                      </button>
+
+                      {["A", "B", "C", "D"].map((L) => (
+                        <button
+                          key={L}
+                          style={{
+                            ...topBtn,
+                            background: step4LetterFilter[L] ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
+                            borderColor: step4LetterFilter[L] ? "rgba(255,255,255,0.22)" : theme.border,
+                            color: step4LetterFilter[L] ? theme.text : "rgba(255,255,255,0.65)",
+                          }}
+                          onClick={() => setStep4LetterFilter((p) => ({ ...(p || {}), [L]: !p[L] }))}
+                        >
+                          {L}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {step4LineRows.length === 0 ? (
+                    <div style={{ marginTop: 10, opacity: 0.75 }}>No per-line data available yet. Import data in Step 1 and map lines in Step 2.</div>
+                  ) : (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        overflow: "auto", width: "100%", maxWidth: "100%",
+          minWidth: 0, border: `1px solid ${theme.border}`,
+                        borderRadius: 12,
+                        maxHeight: 520,
+                      }}
+                    >
+                      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 0 }}>
+                        <thead>
+                          <tr>
+                            {[
+                              "Line",
+                              "Group",
+                              "Nominal",
+                              "Raw",
+                              "Corrected",
+                              "Baseline loop",
+                              "After loop",
+                              "Adj (mm)",
+                              "Before",
+                              "After",
+                              "Δ vs nominal",
+                            ].map((h) => (
+                              <th key={h} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 1 })}>
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {step4LineRows.map((r) => {
+                            const sevColor = r.sev === "bad" ? theme.bad : r.sev === "warn" ? theme.warn : r.sev === "green" ? theme.green : r.sev === "good" ? theme.good : "rgba(255,255,255,0.65)";
+                            const rowBg =
+                              r.sev === "bad" ? "rgba(239,68,68,0.08)" : r.sev === "warn" ? "rgba(245,158,11,0.08)" : "transparent";
+
+                            const fmt = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Math.round(Number(n)));
+
+                            return (
+                              <tr key={r.lineId} style={{ borderTop: `1px solid ${theme.border}`, background: rowBg }}>
+                                <td style={Object.assign({}, td, { fontWeight: 950, color: chipColorFromLineId(r.lineId) })}>{r.lineId}</td>
+                                <td style={td}>{r.groupId || "—"}</td>
+                                <td style={td}>{fmt(r.nominal)}</td>
+                                <td style={td}>{fmt(r.raw)}</td>
+                                <td style={td}>{showCorrected ? fmt(r.corrected) : "—"}</td>
+                                <td style={td}>{r.baseLoop}</td>
+                                <td style={td}>{r.afterLoop}</td>
+                                <td style={td}>{fmt(r.adj)}</td>
+                                <td style={td}>{fmt(r.before)}</td>
+                                <td style={td}>{fmt(r.after)}</td>
+                                <td style={Object.assign({}, td, { fontWeight: 950, color: sevColor })}>{r.delta == null ? "—" : fmt(r.delta)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: 10, opacity: 0.78, fontSize: 12 }}>
+                    Tolerance: <b>{Number(meta.tolerance || 0)}mm</b> • Yellow within <b>3mm</b> of tolerance • Red at/over tolerance
+                  </div>
+                </div>
+
+                
+                
+{/* Charts (Step 4 only; uses frozen baseline-derived step4LineRows) */}
+<div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
+  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+    <div style={{ fontWeight: 950, fontSize: 16 }}>Charts</div>
+    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", opacity: 0.9 }}>
+      <span style={{ fontSize: 12, opacity: 0.85 }}>Showing:</span>
+      {(["A", "B", "C", "D"]).map((L) => (
+        <span
+          key={L}
+          style={{
+            padding: "3px 8px",
+            borderRadius: 999,
+            border: `1px solid ${theme.border}`,
+            background: step4LetterFilter[L] ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)",
+            color: step4LetterFilter[L] ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.45)",
+            fontWeight: 950,
+            fontSize: 12,
+          }}
+        >
+          {L}
+        </span>
+      ))}
+    </div>
+  </div>
+
+  
+</div>
+
+{/* Close Step 4 content grid */}
+</div>
+
+            )}
+              </div>
+            </div>
+          </Panel>
+            </div>
+          </div>
+        ) : null}
+
+      </div>
+    </div>
+  );
+}
+
+// ---------------- Styles ----------------
+const th = { textAlign: "left", padding: "8px 8px", fontSize: 12, fontWeight: 950, color: "rgba(255,255,255,0.82)", whiteSpace: "nowrap" };
+const td = { padding: "8px 8px", fontSize: 12, fontWeight: 850, color: "rgba(255,255,255,0.90)", whiteSpace: "nowrap" };
+
+const card = { border: `1px solid ${theme.border}`, borderRadius: 16, background: "linear-gradient(180deg, rgba(0,0,0,0.38), rgba(255,255,255,0.03))", padding: 8 };
+const cardLabel = { opacity: 0.78, fontWeight: 900, fontSize: 12 };
+const cardValue = { marginTop: 4, fontWeight: 950, fontSize: 14 };
+
+const topBtn = {
+  padding: "9px 12px",
+  borderRadius: 12,
+  border: `1px solid ${theme.border}`,
+  background: "rgba(255,255,255,0.08)",
+  color: theme.text,
+  cursor: "pointer",
+  fontWeight: 950,
+  fontSize: 14,
+};
+const topBtnActive = { background: "rgba(59,130,246,0.25)" };
+const chooseBtn = {
+  padding: "10px 14px",
+  borderRadius: 12,
+  border: `1px solid ${theme.border}`,
+  background: "rgba(59,130,246,0.20)",
+  color: theme.text,
+  cursor: "pointer",
+  fontWeight: 950,
+  fontSize: 14,
+};
+const miniBtn = {
+  width: 36,
+  height: 34,
+  borderRadius: 10,
+  border: `1px solid ${theme.border}`,
+  background: "rgba(255,255,255,0.08)",
+  color: theme.text,
+  cursor: "pointer",
+  fontWeight: 950,
+};
+
+// Small input style used in compact Step 4 group table
+const miniInput = {
+  width: 74,
+  padding: "6px 8px",
+  borderRadius: 10,
+  border: `1px solid ${theme.border}`,
+  background: "rgba(255,255,255,0.08)",
+  color: theme.text,
+  fontSize: 12,
+  textAlign: "center",
+};
+
+
+const step123Wrap = {
+  width: "100%",
+  maxWidth: 1100,
+  margin: "0 auto",
+};
+
+
