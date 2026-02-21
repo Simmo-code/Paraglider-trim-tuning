@@ -1,10 +1,10 @@
 /**
  * Play a short 880 Hz sine-wave beep via the Web Audio API.
- * Safe to call before any user gesture on modern browsers – the AudioContext
- * will be created/resumed automatically.
+ * Respects window.__ttBeepMuted — set to true to silence all beeps.
  */
 export const playBeep = () => {
   try {
+    if (window.__ttBeepMuted) return;
     if (!window.__ttBeepCtx) {
       window.__ttBeepCtx = new (window.AudioContext || window.webkitAudioContext)();
     }

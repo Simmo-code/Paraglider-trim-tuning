@@ -1194,6 +1194,20 @@ useEffect(() => {
   const AUTOSYNC_ENABLE = new Uint8Array([0xC0, 0x55, 0x02, 0x01, 0x00, 0x1A]);
 
   const [glmBtState, setGlmBtState] = useState("disconnected"); // disconnected | connecting | connected | error
+
+  const [beepMuted, setBeepMuted] = useState(() => {
+    try { return localStorage.getItem("ttBeepMuted") === "1"; } catch { return false; }
+  });
+  const toggleBeepMuted = () => {
+    setBeepMuted((m) => {
+      const next = !m;
+      window.__ttBeepMuted = next;
+      try { localStorage.setItem("ttBeepMuted", next ? "1" : "0"); } catch {}
+      return next;
+    });
+  };
+  // Keep global flag in sync on mount
+  React.useEffect(() => { window.__ttBeepMuted = beepMuted; }, [beepMuted]);
   const [glmBtName, setGlmBtName] = useState("");
   const [glmBtInfo, setGlmBtInfo] = useState("");
   const [glmLastMm, setGlmLastMm] = useState(null);
@@ -4939,6 +4953,23 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                               title="Apply manual grid to the app and go to Step 2"
                             >
                               Go to Step 2
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={toggleBeepMuted}
+                              style={{
+                                border: `2px solid ${beepMuted ? "rgba(239,68,68,0.7)" : "rgba(255,255,255,0.25)"}`,
+                                background: beepMuted ? "rgba(239,68,68,0.18)" : "rgba(255,255,255,0.08)",
+                                color: theme.text,
+                                borderRadius: 999,
+                                padding: "8px 12px",
+                                fontWeight: 950,
+                                cursor: "pointer",
+                              }}
+                              title={beepMuted ? "Beep is muted — click to unmute" : "Mute beep"}
+                            >
+                              {beepMuted ? "🔇 Muted" : "🔔 Beep"}
                             </button>
 
                             <button
