@@ -2623,6 +2623,79 @@ var abcAverages = useMemo(() => {
 }, [step4LineRows]);
 
 
+// Per-maillon-group average delta (e.g. AR1L, AR2L, BR1L …)
+// This is the correct basis for pitch comparison: group 1 vs group 1, group 2 vs group 2.
+var groupPitchAverages = useMemo(() => {
+  // out[groupId] = { avg, n, letter, bucket, side }
+  const out = {};
+  for (const r of step4LineRows) {
+    if (!r.groupId) continue;
+    if (!Number.isFinite(r.delta)) continue;
+    if (!Number.isFinite(r.after) || Number(r.after) === 0) continue;
+    const gid = String(r.groupId);
+    if (!out[gid]) {
+      // Parse letter, bucket, side from groupId e.g. "AR1L" -> letter=A, bucket=1, side=L
+      const m = gid.match(/^([A-Z]+?)R?(\d+)([LR])$/i);
+      out[gid] = {
+        avg: null, sum: 0, n: 0,
+        letter: m ? m[1].toUpperCase() : r.letter,
+        bucket: m ? Number(m[2]) : null,
+        side: m ? m[3].toUpperCase() : r.side,
+      };
+    }
+    out[gid].sum += Number(r.delta);
+    out[gid].n += 1;
+  }
+  for (const gid of Object.keys(out)) {
+    const e = out[gid];
+    e.avg = e.n > 0 ? e.sum / e.n : null;
+  }
+  return out;
+}, [step4LineRows]);
+
+// Per-group pitch comparison: each non-B group vs its B-row counterpart (same bucket + side).
+// e.g. AR1L vs BR1L, CR2R vs BR2R etc.
+var pitchByGroup = useMemo(() => {
+  const out = []; // { groupId, bGroupId, letter, bucket, side, groupAvg, bAvg, diff }
+  for (const [gid, entry] of Object.entries(groupPitchAverages)) {
+    if (entry.letter === "B") continue; // B is the reference, skip
+    if (entry.bucket == null) continue;
+    if (!Number.isFinite(entry.avg)) continue;
+
+    // Find the B-row counterpart: same bucket number, same side
+    // B group prefix can be "BR" so groupId would be "BR{bucket}{side}"
+    // We search groupPitchAverages for letter=B, same bucket, same side
+    let bEntry = null;
+    let bGid = null;
+    for (const [bgid, be] of Object.entries(groupPitchAverages)) {
+      if (be.letter === "B" && be.bucket === entry.bucket && be.side === entry.side) {
+        bEntry = be;
+        bGid = bgid;
+        break;
+      }
+    }
+    if (!bEntry || !Number.isFinite(bEntry.avg)) continue;
+
+    out.push({
+      groupId: gid,
+      bGroupId: bGid,
+      letter: entry.letter,
+      bucket: entry.bucket,
+      side: entry.side,
+      groupAvg: entry.avg,
+      bAvg: bEntry.avg,
+      diff: entry.avg - bEntry.avg,   // positive = this group longer than B
+    });
+  }
+  // Sort: letter, then bucket, then side
+  out.sort((a, b) => {
+    if (a.letter !== b.letter) return a.letter.localeCompare(b.letter);
+    if (a.bucket !== b.bucket) return a.bucket - b.bucket;
+    return a.side.localeCompare(b.side);
+  });
+  return out;
+}, [groupPitchAverages]);
+
 var pitchAverages = useMemo(() => {
   if (!pitchAdvEnabled) return abcAverages;
 
@@ -2761,10 +2834,13 @@ const pitchStats = useMemo(() => {
       }
       return out;
     })(),
+    // Per-group pitch comparisons — each group vs its B-row counterpart (same bucket + side).
+    // This is the correct Craig Gamma / factory method: A1L vs B1L, C2R vs B2R etc.
+    byGroup: pitchByGroup,
     front,
     rear,
   };
-}, [pitchAverages, pitchAdvEnabled, pitchRefRow, pitchCompare]);
+}, [pitchAverages, pitchAdvEnabled, pitchRefRow, pitchCompare, pitchByGroup]);
 
 
 
@@ -3002,15 +3078,10 @@ const abcSuggestions = useMemo(() => {
     var tol = Number(meta && meta.tolerance != null ? meta.tolerance : 0);
     if (!isFinite(tol)) tol = 0;
 
-    var center = null;
-    if (zeroingStats && Number.isFinite(Number(zeroingStats.wholeMedian))) center = Math.round(Number(zeroingStats.wholeMedian));
-    if (center == null) {
-      var cur = Number(meta && meta.correction != null ? meta.correction : 0);
-      if (!isFinite(cur)) cur = 0;
-      center = Math.round(cur);
-    }
+    var center = Math.round(Number(meta && meta.correction != null ? meta.correction : 0));
+    if (!isFinite(center)) center = 0;
 
-    // Search around the suggested correction. Keep the range conservative to avoid unexpected jumps.
+    // Search ±20mm around the current correction value.
     var start = center - 20;
     var end = center + 20;
 
@@ -3228,26 +3299,153 @@ const abcSuggestions = useMemo(() => {
     setAutoLoopStatus("zero+minimal");
   }
   function applyAutoZeroForBestTrimPitch() {
-    // Auto: optimize pitch using closest factory loops, then set zeroing (meta.correction) to best overall centering value.
-    // Pitch comparisons are factory-style (A vs B, C vs B, D vs B). A global correction cannot change those comparisons by itself,
-    // so this mode is allowed to adjust loops (factory discrete) first.
+    // ─────────────────────────────────────────────────────────────────────────
+    // SMART AUTO-TRIM  —  Best correction + pitch-aware loop changes
+    //
+    // Searches correction -50…+50 mm. For each candidate:
+    //   PASS 1 (B-row):  pick the loop that levels each B group closest to zero.
+    //   PASS 2 (A,C,D):  pick the loop that satisfies BOTH individual tolerance
+    //                    AND pitch tolerance vs the corresponding B group
+    //                    (same bucket + side), with fewest/smallest changes.
+    // Scored by: pitch fails → line fails → loop change count.
+    // ─────────────────────────────────────────────────────────────────────────
     if (step !== 4) return;
     if (!groupLoopBaseline) return;
 
-    // 1) Choose closest factory loops (this is what actually influences pitch).
-    applyAutoLoopPlan("factory");
+    var lineTol  = Number(meta && meta.tolerance  != null ? meta.tolerance  : 10); if (!isFinite(lineTol))  lineTol  = 10;
+    var pitchTol = Number(groupPitchTol != null ? groupPitchTol : 4);              if (!isFinite(pitchTol)) pitchTol = 4;
 
-    // 2) Apply best zeroing value for overall trim centering (does not affect pitch comparisons).
-    var center = null;
-    if (zeroingStats && Number.isFinite(Number(zeroingStats.wholeMedian))) center = Math.round(Number(zeroingStats.wholeMedian));
-    if (center == null) {
-      var cur = Number(meta && meta.correction != null ? meta.correction : 0);
-      if (!isFinite(cur)) cur = 0;
-      center = Math.round(cur);
+    var loopMm = function(t) {
+      var v = Number(loopSizes && loopSizes[t] != null ? loopSizes[t] : 0);
+      return isFinite(v) ? v : 0;
+    };
+
+    var loopsSorted = (LOOP_TYPES || []).slice().sort(function(a, b) { return loopMm(a) - loopMm(b); });
+
+    var parseGid = function(gid) {
+      var m = String(gid || "").match(/^([A-Z]+?)R?(\d+)([LR])$/i);
+      if (!m) return null;
+      return { letter: m[1].toUpperCase(), bucket: Number(m[2]), side: m[3].toUpperCase() };
+    };
+
+    var bestLoopForGroup = function(gid, avgDelta, bAvg) {
+      var baseLoop = (groupLoopBaseline && groupLoopBaseline[gid]) ? groupLoopBaseline[gid] : "SL";
+      var baseMm   = loopMm(baseLoop);
+      var withinLine  = Math.abs(avgDelta) <= lineTol;
+      var withinPitch = (bAvg == null) ? true : Math.abs(avgDelta - bAvg) <= pitchTol;
+      if (withinLine && withinPitch) return { loop: baseLoop, changed: false };
+
+      var best = null;
+      for (var ki = 0; ki < loopsSorted.length; ki++) {
+        var cand     = loopsSorted[ki];
+        var shift    = loopMm(cand) - baseMm;
+        var newDelta = avgDelta + shift;
+        var lineOk   = Math.abs(newDelta) <= lineTol;
+        var pitchOk  = (bAvg == null) ? true : Math.abs(newDelta - bAvg) <= pitchTol;
+        var failScore = (lineOk ? 0 : 2) + (pitchOk ? 0 : 1);
+        var score     = failScore * 1e9 + (cand !== baseLoop ? 1e6 : 0) + Math.abs(shift) * 1e3 + Math.abs(newDelta);
+        if (best == null || score < best.score) best = { loop: cand, changed: cand !== baseLoop, score: score };
+      }
+      return best || { loop: baseLoop, changed: false };
+    };
+
+    var computePlan = function(corrVal) {
+      var sums = {}, counts = {};
+      var i;
+      for (i = 0; i < (wideRows || []).length; i++) {
+        var wr = wideRows[i];
+        if (!wr) continue;
+        var letter = String(wr.letter || "").toUpperCase();
+        if (!(step4LetterFilter && step4LetterFilter[letter])) continue;
+        var idx = Number(wr.idx);
+        if (!isFinite(idx)) continue;
+        var nominal = Number(wr.nominal);
+        if (!isFinite(nominal)) continue;
+        for (var si = 0; si < 2; si++) {
+          var side   = si === 0 ? "L" : "R";
+          var lineId = letter + idx + side;
+          var raw    = Number(si === 0 ? wr.measuredL : wr.measuredR);
+          if (!isFinite(raw)) continue;
+          var lc  = Number(step4LineCorr && step4LineCorr[lineId] != null ? step4LineCorr[lineId] : 0);
+          var gid = String(lineToGroup && lineToGroup[lineId] != null ? lineToGroup[lineId] : "").trim();
+          if (!gid) continue;
+          var bl  = (groupLoopBaseline && groupLoopBaseline[gid]) ? groupLoopBaseline[gid] : "SL";
+          var d0  = raw + (isFinite(lc) ? lc : 0) + corrVal + loopMm(bl) - nominal;
+          if (!isFinite(d0)) continue;
+          sums[gid]   = (sums[gid]   || 0) + d0;
+          counts[gid] = (counts[gid] || 0) + 1;
+        }
+      }
+
+      var groupAvg = {};
+      var gids = Object.keys(sums);
+      for (var gi = 0; gi < gids.length; gi++) {
+        var g = gids[gi];
+        if (counts[g]) groupAvg[g] = sums[g] / counts[g];
+      }
+
+      // B-row lookup by bucket+side
+      var bAvgMap = {};
+      for (var bi = 0; bi < gids.length; bi++) {
+        var bp = parseGid(gids[bi]);
+        if (!bp || bp.letter !== "B") continue;
+        if (Number.isFinite(groupAvg[gids[bi]])) bAvgMap[bp.bucket + bp.side] = groupAvg[gids[bi]];
+      }
+
+      var changes = {};
+      var pitchFails = 0, lineFails = 0;
+
+      // PASS 1 — B-row: level each group toward zero
+      for (var p1 = 0; p1 < gids.length; p1++) {
+        var p1gid = gids[p1];
+        var p1p   = parseGid(p1gid);
+        if (!p1p || p1p.letter !== "B") continue;
+        var p1avg = groupAvg[p1gid];
+        if (!isFinite(p1avg)) continue;
+        var p1res = bestLoopForGroup(p1gid, p1avg, null);
+        if (p1res.changed) changes[p1gid] = p1res.loop;
+        var p1newAvg = p1avg + loopMm(p1res.loop) - loopMm((groupLoopBaseline && groupLoopBaseline[p1gid]) ? groupLoopBaseline[p1gid] : "SL");
+        bAvgMap[p1p.bucket + p1p.side] = p1newAvg; // update so PASS 2 sees adjusted B
+        if (Math.abs(p1newAvg) > lineTol) lineFails++;
+      }
+
+      // PASS 2 — A, C, D: pitch-aware loop selection vs updated B
+      for (var p2 = 0; p2 < gids.length; p2++) {
+        var p2gid = gids[p2];
+        var p2p   = parseGid(p2gid);
+        if (!p2p || p2p.letter === "B") continue;
+        var p2avg = groupAvg[p2gid];
+        if (!isFinite(p2avg)) continue;
+        var bRef  = bAvgMap[p2p.bucket + p2p.side];
+        var p2res = bestLoopForGroup(p2gid, p2avg, Number.isFinite(bRef) ? bRef : null);
+        if (p2res.changed) changes[p2gid] = p2res.loop;
+        var p2newAvg = p2avg + loopMm(p2res.loop) - loopMm((groupLoopBaseline && groupLoopBaseline[p2gid]) ? groupLoopBaseline[p2gid] : "SL");
+        if (Math.abs(p2newAvg) > lineTol) lineFails++;
+        if (Number.isFinite(bRef) && Math.abs(p2newAvg - bRef) > pitchTol) pitchFails++;
+      }
+
+      var loopChanges = Object.keys(changes).length;
+      return { score: pitchFails * 1e9 + lineFails * 1e6 + loopChanges, corr: corrVal, changes: changes, pitchFails: pitchFails, lineFails: lineFails, loopChanges: loopChanges };
+    };
+
+    // Find search centre — start from currently set correction, not raw median
+    // (raw median ignores loop adjustments and is meaningless as a search centre)
+    var center = Math.round(Number((meta && meta.correction != null) ? meta.correction : 0));
+    if (!isFinite(center)) center = 0;
+
+    var best = null;
+    for (var c = center - 50; c <= center + 50; c++) {
+      var res = computePlan(c);
+      if (!best || res.score < best.score || (res.score === best.score && Math.abs(c - center) < Math.abs(best.corr - center))) best = res;
     }
+    if (!best) return;
 
-    setMeta((p) => Object.assign({}, p, { correction: center }));
+    setGroupAdjustments({});
+    setGroupLoopChange(best.changes || {});
+    setMeta(function(p) { return Object.assign({}, p, { correction: Math.round(Number(best.corr || 0)) }); });
     if (!showCorrected) setShowCorrected(true);
+    setAutoLoopStatus("pitch+trim");
+    setAutoDecision({ mode: "pitch + trim", corr: best.corr, loopChangeCount: best.loopChanges, pitchFails: best.pitchFails, outliers: best.lineFails, maxOver: null });
   }
 
 
@@ -3361,7 +3559,7 @@ function setRange(letter, bucket, field, value) {
     setTimeout(() => {
       if (!diagramBoxRef.current) return;
       const el2 = diagramBoxRef.current;
-      const X_OFFSET = -180; // negative = left, positive = right
+      const X_OFFSET = 0; // negative = left, positive = right
       el2.scrollLeft = Math.round((el2.scrollWidth - el2.clientWidth) / 2) + X_OFFSET;
       el2.scrollTop = 0;
     }, 150);
@@ -6290,17 +6488,15 @@ onPaste={(e) => {
                       <span style={{ fontSize: 12, opacity: 0.75 }}>mm</span>
                     </div>
                   
-	                    <button
-	                      type="button"
-	                      title="Reset all loop overrides"
-	                      onClick={() => {
-	                        // Reset BOTH loop overrides and fine adjustments so the wing returns
-	                        // to the baseline loop set recorded in Step 3.
-	                        setGroupLoopChange({});
-	                        setGroupAdjustments({});
-			                        setAutoLoopStatus(null);
-                    setAutoDecision(null);
-	                      }}
+                    <button
+                      type="button"
+                      title="Reset all loop overrides and correction"
+                      onClick={() => {
+                        setGroupLoopChange({});
+                        setGroupAdjustments({});
+                        setAutoLoopStatus(null);
+                        setAutoDecision(null);
+                      }}
                       style={{
                         marginTop: 10,
                         width: "100%",
@@ -6316,6 +6512,27 @@ onPaste={(e) => {
                       }}
                     >
                       Reset all loops
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => applyAutoZeroForBestTrimPitch()}
+                      title={`Searches correction -50…+50mm. Levels B-row first, then picks loops for A/C/D satisfying both line tolerance (±${meta.tolerance}mm) and pitch tolerance (±${groupPitchTol}mm vs B). Minimises pitch fails → line fails → loop changes.`}
+                      style={{
+                        marginTop: 8,
+                        width: "100%",
+                        border: "1px solid rgba(34,197,94,0.7)",
+                        background: "rgba(34,197,94,0.15)",
+                        color: "rgba(134,239,172,0.95)",
+                        borderRadius: 999,
+                        padding: "8px 10px",
+                        fontWeight: 950,
+                        fontSize: 12,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      ✦ Best correction + pitch trim
                     </button>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8, width: 320, maxWidth: "100%" }}>
                       
@@ -6373,52 +6590,85 @@ onPaste={(e) => {
                       />
                     </div>
 
-                    <div style={{ marginTop: 10, border: `1px solid ${theme.border}`, borderRadius: 12, background: "rgba(0,0,0,0.22)", padding: 8, width: 320, maxWidth: "100%" }}>
-                      <div style={{ fontWeight: 950, fontSize: 13, marginBottom: 8 }}>Pitch balance (adjusted)</div>
-                      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 0, tableLayout: "fixed" }}>
-                        <thead>
-                          <tr style={{ background: "rgba(255,255,255,0.05)" }}>
-                            <th style={Object.assign({}, th, { fontSize: 12, padding: "6px 8px" })}>Metric</th>
-                            <th style={Object.assign({}, th, { fontSize: 12, padding: "6px 8px" })}>Left</th>
-                            <th style={Object.assign({}, th, { fontSize: 12, padding: "6px 8px" })}>Right</th>
-                            <th style={Object.assign({}, th, { fontSize: 12, padding: "6px 8px" })}>Whole wing</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(pitchStats && pitchStats.comparisonsList ? pitchStats.comparisonsList : [
-                            { key: "avb", label: "A − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.AvB : null },
-                            { key: "cvb", label: "C − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.CvB : null },
-                            { key: "dvb", label: "D − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.DvB : null },
-                          ]).map((row) => {
-                            const f1 = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Number(n).toFixed(1));
-                            const vL = row.v ? row.v.L : null;
-                            const vR = row.v ? row.v.R : null;
-                            const vB = row.v ? row.v.both : null;
 
-                            const sevL = severity(vL, groupPitchTol);
-                            const sevR = severity(vR, groupPitchTol);
-                            const sevB = severity(vB, groupPitchTol);
 
-                            const colFor = (sev) => {
-                              if (sev === "red") return "rgba(255,90,90,1)";
-                              if (sev === "yellow") return "rgba(255,215,90,1)";
-                              return "rgba(140,255,190,1)";
-                            };
+                  </div>
+                </div>
 
-                            return (
-                              <tr key={row.key} style={{ borderTop: `1px solid ${theme.border}` }}>
-                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 11, padding: "7px 8px" })}>{row.label}</td>
-                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 11, padding: "7px 8px", color: colFor(sevL) })}>{f1(vL)}</td>
-                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 11, padding: "7px 8px", color: colFor(sevR) })}>{f1(vR)}</td>
-                                <td style={Object.assign({}, td, { fontWeight: 950, fontSize: 11, padding: "7px 8px", color: colFor(sevB) })}>{f1(vB)}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                {/* Pitch balance — per group vs B — full width below wing shape */}
+                <div style={{ marginTop: 14, border: `1px solid ${theme.border}`, borderRadius: 12, background: "rgba(0,0,0,0.22)", padding: "10px 14px" }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 8, flexWrap: "wrap" }}>
+                    <div style={{ fontWeight: 950, fontSize: 13 }}>Pitch balance — per group vs B-row</div>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>
+                      Average delta of each maillon group compared to its B-row counterpart (same group number &amp; side). Tolerance ±{groupPitchTol}mm.
                     </div>
-
-</div>
+                  </div>
+                  {(!pitchStats || !pitchStats.byGroup || pitchStats.byGroup.length === 0) ? (
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", padding: "6px 0" }}>No group data — assign lines to groups in Step 3.</div>
+                  ) : (() => {
+                    const f1 = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : (n >= 0 ? "+" : "") + Number(n).toFixed(1));
+                    const colFor = (diff) => {
+                      if (diff == null || !Number.isFinite(diff)) return "rgba(255,255,255,0.35)";
+                      const ad = Math.abs(diff);
+                      if (ad > groupPitchTol) return "rgba(255,90,90,1)";
+                      if (ad > groupPitchTol * 0.7) return "rgba(255,215,90,1)";
+                      return "rgba(140,255,190,1)";
+                    };
+                    const letters = ["A", "C", "D"];
+                    // Collect all unique bucket numbers across all rows
+                    const allBuckets = Array.from(new Set(pitchStats.byGroup.map((r) => r.bucket))).sort((a, b) => a - b);
+                    return (
+                      <div style={{ overflowX: "auto" }}>
+                        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 480 }}>
+                          <thead>
+                            <tr style={{ background: "rgba(255,255,255,0.05)" }}>
+                              <th style={Object.assign({}, th, { fontSize: 11, padding: "5px 8px", textAlign: "left", width: 60 })}>Row</th>
+                              {allBuckets.map((b) => (
+                                <th key={`hL${b}`} colSpan={2} style={Object.assign({}, th, { fontSize: 11, padding: "5px 8px", textAlign: "center" })}>
+                                  Group {b}
+                                </th>
+                              ))}
+                            </tr>
+                            <tr style={{ background: "rgba(255,255,255,0.03)" }}>
+                              <th style={Object.assign({}, th, { fontSize: 10, padding: "3px 8px", textAlign: "left", color: "rgba(255,255,255,0.4)" })}>vs B</th>
+                              {allBuckets.map((b) => (
+                                [
+                                  <th key={`sL${b}`} style={Object.assign({}, th, { fontSize: 10, padding: "3px 6px", color: "rgba(255,255,255,0.4)" })}>Left</th>,
+                                  <th key={`sR${b}`} style={Object.assign({}, th, { fontSize: 10, padding: "3px 6px", color: "rgba(255,255,255,0.4)" })}>Right</th>,
+                                ]
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {letters.map((letter) => {
+                              const hasAny = pitchStats.byGroup.some((r) => r.letter === letter);
+                              if (!hasAny) return null;
+                              return (
+                                <tr key={letter} style={{ borderTop: `1px solid rgba(255,255,255,0.07)` }}>
+                                  <td style={Object.assign({}, td, { fontSize: 12, fontWeight: 900, padding: "6px 8px" })}>{letter}</td>
+                                  {allBuckets.map((b) => {
+                                    const left  = pitchStats.byGroup.find((r) => r.letter === letter && r.bucket === b && r.side === "L");
+                                    const right = pitchStats.byGroup.find((r) => r.letter === letter && r.bucket === b && r.side === "R");
+                                    return [
+                                      <td key={`L${b}`} style={Object.assign({}, td, { fontSize: 12, fontWeight: 900, padding: "6px 8px", textAlign: "center", color: colFor(left ? left.diff : null) })}>
+                                        {left ? f1(left.diff) : "—"}
+                                      </td>,
+                                      <td key={`R${b}`} style={Object.assign({}, td, { fontSize: 12, fontWeight: 900, padding: "6px 8px", textAlign: "center", color: colFor(right ? right.diff : null) })}>
+                                        {right ? f1(right.diff) : "—"}
+                                      </td>,
+                                    ];
+                                  })}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                        <div style={{ marginTop: 8, fontSize: 10, color: "rgba(255,255,255,0.35)" }}>
+                          Values shown are: group avg Δ minus B-row counterpart avg Δ. Green = within ±{groupPitchTol}mm · Yellow = within {Math.round(groupPitchTol * 0.7)}–{groupPitchTol}mm · Red = outside tolerance.
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div
@@ -7563,14 +7813,13 @@ onPaste={(e) => {
             Auto: zero + minimal loops
           </button>
 
-          
           <button
             type="button"
-            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.14)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
+            style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(34,197,94,0.18)", color: theme.text, fontWeight: 950, cursor: "pointer" }}
             onClick={() => applyAutoZeroForBestTrimPitch()}
-            title="Search for the best correction (zeroing) value to optimize trim + factory-style pitch (A vs B, C vs B, D vs B). Does not change loops."
+            title={`Searches all correction values (-50…+50 mm). Levels B-row first, then picks loops for A/C/D that satisfy both individual tolerance (±${meta.tolerance}mm) and pitch tolerance (±${groupPitchTol}mm vs B). Minimises pitch fails → line fails → loop changes.`}
           >
-            Auto: zero for best trim + pitch
+            ✦ Auto: best correction + pitch trim
           </button>
 
 {autoLoopStatus && ((groupLoopChange && Object.keys(groupLoopChange).length > 0) || (groupAdjustments && Object.keys(groupAdjustments).length > 0) || (step4LineCorr && Object.keys(step4LineCorr).length > 0)) ? (
@@ -7691,28 +7940,39 @@ onPaste={(e) => {
                 </div>
 
                 <div style={{ marginTop: 14, border: "1px solid rgba(0,0,0,0.15)", borderRadius: 10, overflow: "hidden" }}>
-                  <div style={{ background: "#f3f4f6", padding: "6px 10px", fontSize: 12, fontWeight: 950 }}>Pitch (factory comparisons)</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, padding: "10px" }}>
-                    {[
-                      { key: "avb", label: "A − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.AvB : null },
-                      { key: "cvb", label: "C − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.CvB : null },
-                      { key: "dvb", label: "D − B", v: pitchStats && pitchStats.comparisons ? pitchStats.comparisons.DvB : null },
-                    ].map((row) => (
-                      <div key={row.key} style={{ border: "1px solid rgba(0,0,0,0.12)", borderRadius: 10, padding: "8px 10px" }}>
-                        <div style={{ fontSize: 11, color: "#555", fontWeight: 900 }}>{row.label}</div>
-                        <div style={{ fontSize: 16, fontWeight: 950 }}>
-                          {(() => {
-                            var both = row.v ? row.v.both : null;
-                            var n = both == null || !Number.isFinite(Number(both)) ? null : Number(both);
-                            return n == null ? "—" : (n >= 0 ? `+${n.toFixed(1)}` : n.toFixed(1));
-                          })()} mm
-                        </div>
+                  <div style={{ background: "#f3f4f6", padding: "6px 10px", fontSize: 12, fontWeight: 950 }}>Pitch — per group vs B-row</div>
+                  <div style={{ padding: "8px 10px", fontSize: 11, color: "#555", marginBottom: 4 }}>
+                    Each group average compared to its B-row counterpart (same group number &amp; side). Tolerance ±{Number(groupPitchTol || 4)}mm.
+                  </div>
+                  {(!pitchStats || !pitchStats.byGroup || pitchStats.byGroup.length === 0) ? (
+                    <div style={{ padding: "6px 10px", fontSize: 11, color: "#888" }}>No group data.</div>
+                  ) : (() => {
+                    const f1 = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : (n >= 0 ? "+" : "") + Number(n).toFixed(1));
+                    const colFor = (diff) => {
+                      if (diff == null || !Number.isFinite(diff)) return "#888";
+                      return Math.abs(diff) > groupPitchTol ? "#c00" : "#186a3b";
+                    };
+                    const letters = ["A", "C", "D"];
+                    return (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, padding: "0 10px 10px" }}>
+                        {letters.map((letter) => {
+                          const rows = pitchStats.byGroup.filter((r) => r.letter === letter);
+                          if (!rows.length) return null;
+                          return (
+                            <div key={letter}>
+                              <div style={{ fontWeight: 900, fontSize: 11, marginBottom: 4 }}>{letter} vs B</div>
+                              {rows.map((r) => (
+                                <div key={r.groupId} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, padding: "2px 0", borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
+                                  <span style={{ fontWeight: 700 }}>{r.groupId}</span>
+                                  <span style={{ color: colFor(r.diff), fontWeight: 900 }}>{f1(r.diff)} mm</span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })}
                       </div>
-                    ))}
-                  </div>
-                  <div style={{ padding: "0 10px 10px", fontSize: 11, color: "#555" }}>
-                    Pass/fail uses ±{Number(groupPitchTol || 4)}mm against B (A vs B, C vs B, D vs B).
-                  </div>
+                    );
+                  })()}
                 </div>
 
                 <div style={{ marginTop: 14, border: "1px solid rgba(0,0,0,0.15)", borderRadius: 10, overflow: "hidden" }}>
