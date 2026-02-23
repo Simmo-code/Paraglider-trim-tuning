@@ -6674,7 +6674,25 @@ onPaste={(e) => {
                     {/* Pitch profile — right side */}
                     <div style={{ flex: "0 0 230px" }}>
                       <div style={{ fontWeight: 950, fontSize: 12, marginBottom: 6, opacity: 0.8 }}>Pitch profile</div>
-                      <PitchProfileChart pitchStats={pitchStats} tolerance={Number(groupPitchTol || 5)} height={210} />
+                      <PitchProfileChart pitchStats={pitchStats} tolerance={Number(groupPitchTol || 5)} height={320} />
+                      {/* Correction pill */}
+                      <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6, border: `1px solid ${theme.border}`, borderRadius: 999, padding: "6px 10px", background: "rgba(0,0,0,0.45)" }}>
+                        <span style={{ fontSize: 12, opacity: 0.8, whiteSpace: "nowrap" }}>Correction</span>
+                        <div style={{ display: "grid", gridTemplateRows: "1fr 1fr", gap: 2 }}>
+                          <button type="button"
+                            style={{ width: 20, height: 13, borderRadius: 4, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.08)", color: theme.text, cursor: "pointer", fontWeight: 950, lineHeight: 1, fontSize: 9 }}
+                            onClick={() => setMeta((p) => ({ ...p, correction: Math.round(Number(p.correction || 0)) + 1 }))}>▲</button>
+                          <button type="button"
+                            style={{ width: 20, height: 13, borderRadius: 4, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.08)", color: theme.text, cursor: "pointer", fontWeight: 950, lineHeight: 1, fontSize: 9 }}
+                            onClick={() => setMeta((p) => ({ ...p, correction: Math.round(Number(p.correction || 0)) - 1 }))}>▼</button>
+                        </div>
+                        <input type="number"
+                          value={Number(meta && meta.correction != null ? meta.correction : 0)}
+                          onChange={(e) => { const v = Number(e.target.value || 0); if (isFinite(v)) setMeta((p) => ({ ...p, correction: v })); }}
+                          style={{ width: 64, background: "transparent", color: theme.text, border: `1px solid ${theme.border}`, borderRadius: 8, padding: "3px 6px", fontWeight: 900, outline: "none", fontSize: 12, userSelect: "auto" }}
+                        />
+                        <span style={{ fontSize: 11, opacity: 0.7 }}>mm</span>
+                      </div>
                     </div>
                   </div>{/* end inner flex */}
                 </div>{/* end pitch balance panel */}
