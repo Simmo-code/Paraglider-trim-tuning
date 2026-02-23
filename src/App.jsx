@@ -642,6 +642,7 @@ useEffect(() => {
   const MANUAL_DEFAULT_GROUPS = ["A", "B", "C", "D"];
 
   const [showManualGrid, setShowManualGrid] = useState(false);
+  const [manualGridZoom, setManualGridZoom] = useState(0.8);
   const [manualPasteBox, setManualPasteBox] = useState("");
   const [manualPasteOpen, setManualPasteOpen] = useState(false);
   const [showMeasureMode, setShowMeasureMode] = useState(false);
@@ -3559,7 +3560,7 @@ function setRange(letter, bucket, field, value) {
     setTimeout(() => {
       if (!diagramBoxRef.current) return;
       const el2 = diagramBoxRef.current;
-      const X_OFFSET = 0; // negative = left, positive = right
+      const X_OFFSET = -170; // negative = left, positive = right
       el2.scrollLeft = Math.round((el2.scrollWidth - el2.clientWidth) / 2) + X_OFFSET;
       el2.scrollTop = 0;
     }, 150);
@@ -4366,7 +4367,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                         position: "fixed",
                         inset: 0,
                         zIndex: 9999,
-                        background: theme.bg,
+                        background: "rgba(0,0,0,0.88)",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -4381,7 +4382,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                           maxHeight: "88vh",
                           borderRadius: 18,
                           border: `2px solid ${theme.border}`,
-                          background: theme.panel,
+                          background: "#1c2030",
                           boxShadow: "0 24px 80px rgba(0,0,0,0.55)",
                           overflow: "hidden",
                           display: "flex",
@@ -4734,9 +4735,18 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                           }}
                         >
                           <div>
-                            <div style={{ fontWeight: 950, letterSpacing: -0.2, fontSize: 21 }}>Manual entry (wide grid)
-        
-</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                              <div style={{ fontWeight: 950, letterSpacing: -0.2, fontSize: 21 }}>Manual entry (wide grid)</div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 12px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.4)" }}>
+                                <span style={{ fontSize: 12, opacity: 0.8 }}>Zoom</span>
+                                <input type="range" min={0.4} max={1.2} step={0.05} value={manualGridZoom}
+                                  onChange={(e) => setManualGridZoom(Number(e.target.value))}
+                                  style={{ width: 100, accentColor: "#60a5fa" }} />
+                                <span style={{ fontSize: 12, fontFamily: "monospace", minWidth: 36 }}>{Math.round(manualGridZoom * 100)}%</span>
+                                <button type="button" onClick={() => setManualGridZoom(0.8)}
+                                  style={{ fontSize: 10, padding: "2px 8px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.06)", color: "#aab1c3", cursor: "pointer" }}>reset</button>
+                              </div>
+                            </div>
 
                             <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.55)" }}>
@@ -5236,6 +5246,7 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
                           ref={manualScrollRef}
                           style={{ padding: 12, overflow: "auto", userSelect: manualSelecting ? "none" : "auto" }}
                         >
+                          <div style={{ transform: `scale(${manualGridZoom})`, transformOrigin: "top left", width: `${100 / manualGridZoom}%` }}>
                           <div style={{ border: `1px solid ${theme.border}`, borderRadius: 12, background: theme.panel2 }}>
                             <table style={{ width: "max-content", borderCollapse: "separate", borderSpacing: 0, fontSize: 12 }}>
                               <thead>
@@ -5527,6 +5538,7 @@ onPaste={(e) => {
                               </tbody>
                             </table>
                           </div>
+                          </div>{/* end zoom wrapper */}
                         </div>
                       </div>
                     </div>
