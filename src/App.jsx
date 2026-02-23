@@ -6426,7 +6426,7 @@ onPaste={(e) => {
                 </div>
 
                 {/* Action buttons below chart — horizontal row */}
-                <div style={{ marginTop: 5, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button
                     type="button"
                     title="Reset all loop overrides"
@@ -6454,7 +6454,7 @@ onPaste={(e) => {
                 </div>
 
                 {/* Pitch balance + Pitch profile row */}
-                <div style={{ marginTop: 6, border: `1px solid ${theme.border}`, borderRadius: 12, background: "rgba(0,0,0,0.22)", padding: "10px 14px" }}>
+                <div style={{ marginTop: 1, border: `1px solid ${theme.border}`, borderRadius: 12, background: "rgba(0,0,0,0.22)", padding: "10px 14px" }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 8, flexWrap: "wrap" }}>
                     <div style={{ fontWeight: 950, fontSize: 13 }}>Pitch balance — per group vs B-row</div>
                     <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>
