@@ -2,7 +2,7 @@ import React from "react";
 import { LOOP_TYPES } from "../../utils/constants.js";
 import { severity } from "../../utils/trim.js";
 
-export function RearViewChart({ rows, tolerance, height, loopTypes, groupLoopChange, setGroupLoopChange }) {
+export function RearViewChart({ rows, tolerance, height, loopTypes, groupLoopChange, setGroupLoopChange, correction, onCorrectionChange }) {
   const width = 1240;
   const heightPx = Number.isFinite(Number(height)) ? Number(height) : 460;
   const pad = 24;
@@ -14,6 +14,7 @@ export function RearViewChart({ rows, tolerance, height, loopTypes, groupLoopCha
   const [showGroupCuts, setShowGroupCuts] = React.useState(true);
   const [spanMode, setSpanMode] = React.useState("real");
   const [pickedGroupId, setPickedGroupId] = React.useState(null);
+  const [zoom, setZoom] = React.useState(1.0);
 
   const baselineLoopByGroupKey = React.useMemo(() => {
     const out = {};
@@ -218,7 +219,7 @@ function groupBands(letter, side) {
 }
 
   return (
-    <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018" }}>
+    <div style={{ border: "1px solid #2a2f3f", borderRadius: 14, padding: 12, background: "#0e1018", width: "100%", boxSizing: "border-box", overflow: "hidden" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div>
           <div style={{ fontWeight: 900, marginBottom: 6 }}>Rear view wing shape (A/B/C/D rows)</div>
@@ -258,13 +259,45 @@ function groupBands(letter, side) {
             <input type="checkbox" checked={showBeforePoints} onChange={(e) => setShowBeforePoints(e.target.checked)} />
             Before points
           </label>
+
+          <label style={{ color: "#aab1c3", fontSize: 12, display: "flex", gap: 6, alignItems: "center" }}>
+            Height
+            <input
+              type="range" min={0.5} max={1} step={0.05} value={zoom}
+              onChange={(e) => setZoom(Number(e.target.value))}
+              style={{ width: 80, accentColor: "#60a5fa" }}
+            />
+            <button
+              type="button"
+              onClick={() => setZoom(1.0)}
+              style={{ fontSize: 10, padding: "2px 7px", borderRadius: 999, border: "1px solid #2a2f3f", background: "rgba(255,255,255,0.06)", color: "#aab1c3", cursor: "pointer" }}
+            >reset</button>
+          </label>
+
+          {/* Correction widget inline in toolbar */}
+          {onCorrectionChange && (
+            <div style={{ display: "flex", gap: 5, alignItems: "center", border: "1px solid #2a2f3f", borderRadius: 999, padding: "4px 10px", background: "rgba(0,0,0,0.4)" }}>
+              <span style={{ fontSize: 11, opacity: 0.8, whiteSpace: "nowrap" }}>Correction</span>
+              <div style={{ display: "grid", gridTemplateRows: "1fr 1fr", gap: 2 }}>
+                <button type="button" style={{ width: 20, height: 13, borderRadius: 4, border: "1px solid #2a2f3f", background: "rgba(255,255,255,0.08)", color: "#eef1ff", cursor: "pointer", fontWeight: 950, lineHeight: 1, fontSize: 9 }}
+                  onClick={() => onCorrectionChange(Math.round(Number(correction || 0)) + 1)}>▲</button>
+                <button type="button" style={{ width: 20, height: 13, borderRadius: 4, border: "1px solid #2a2f3f", background: "rgba(255,255,255,0.08)", color: "#eef1ff", cursor: "pointer", fontWeight: 950, lineHeight: 1, fontSize: 9 }}
+                  onClick={() => onCorrectionChange(Math.round(Number(correction || 0)) - 1)}>▼</button>
+              </div>
+              <input type="number" value={Number(correction || 0)}
+                onChange={(e) => { const v = Number(e.target.value || 0); if (isFinite(v)) onCorrectionChange(v); }}
+                style={{ width: 70, background: "transparent", color: "#eef1ff", border: "1px solid #2a2f3f", borderRadius: 8, padding: "3px 6px", fontWeight: 900, outline: "none", fontSize: 12 }}
+              />
+              <span style={{ fontSize: 11, opacity: 0.7 }}>mm</span>
+            </div>
+          )}
         </div>
       </div>
 
       <div style={{ height: 10 }} />
 
-      <div style={{ overflowX: "auto", maxWidth: "100%" }}>
-        <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>
+      <div style={{ width: "100%", overflow: "hidden" }}>
+        <svg width="100%" viewBox={`0 0 ${width} ${Math.round(height / zoom)}`} style={{ display: "block" }}>
           {/* Top labels */}
           <text x={pad} y={pad + 16} fill="rgba(170,177,195,0.9)" fontSize="12" fontFamily="ui-monospace, Menlo, Consolas, monospace">
             LEFT

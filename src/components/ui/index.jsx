@@ -5,12 +5,12 @@ import { theme } from "../../utils/constants.js";
 
 export function Panel({ title, right, children, tint = false }) {
   return (
-    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 18, background: tint ? "linear-gradient(180deg, rgba(59,130,246,0.08), rgba(255,255,255,0.04))" : theme.panel, overflow: "visible" }}>
+    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 18, background: tint ? "linear-gradient(180deg, rgba(59,130,246,0.08), rgba(255,255,255,0.04))" : theme.panel, overflow: "hidden", minWidth: 0, width: "100%", boxSizing: "border-box" }}>
       <div style={{ padding: "10px 12px", borderBottom: `1px solid ${theme.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", background: "rgba(255,255,255,0.035)" }}>
         <div style={{ fontWeight: 950, letterSpacing: -0.2, fontSize: 16 }}>{title}</div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>{right}</div>
       </div>
-      <div style={{ padding: 12 }}>{children}</div>
+      <div style={{ padding: 8, minWidth: 0, overflow: "hidden" }}>{children}</div>
     </div>
   );
 }
@@ -75,10 +75,10 @@ export function Toggle({ value, onChange, label }) {
   );
 }
 
-export function FactorySelect({ value, onChange, disabled, title, minWidth = 160, opacity, children, className }) {
+export function FactorySelect({ value, onChange, disabled, title, minWidth = 160, opacity, children }) {
   return (
     <select
-      className={["factory-select", className].filter(Boolean).join(" ")}
+      className="factory-select"
       value={value}
       onChange={onChange}
       disabled={disabled}

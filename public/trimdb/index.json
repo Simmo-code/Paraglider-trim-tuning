@@ -1,8 +1,6 @@
 {
   "makes": [
-    {
-      "make": "Ozone",
-      "file": "Ozone.json"
-    }
+    { "make": "Flow",  "file": "flow/_exports/Flow.json" },
+    { "make": "Ozone", "file": "Ozone.json" }
   ]
 }

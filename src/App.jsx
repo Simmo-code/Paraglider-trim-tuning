@@ -3955,9 +3955,10 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
   }
 
   return (
-    <div style={{ minHeight: "100vh", overflowX: "hidden", background: theme.bg, color: theme.text, padding: "clamp(8px, 3vw, 16px)", fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial' }}>
+    <div style={{ minHeight: "100vh", overflowX: "clip", background: theme.bg, color: theme.text, padding: "clamp(8px, 3vw, 16px)", fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial', boxSizing: "border-box", width: "100%" }}>
       {/* scrollbars styling */}
       <style>{`
+        *, *::before, *::after { box-sizing: border-box; }
         .diagramScrollBox { scrollbar-width: auto; scrollbar-color: rgba(255,255,255,0.55) rgba(0,0,0,0.35); }
         .diagramScrollBox::-webkit-scrollbar { height: 16px; width: 16px; }
         .diagramScrollBox::-webkit-scrollbar-track { background: rgba(0,0,0,0.35); }
@@ -3991,7 +3992,9 @@ el.scrollTop  = Math.round(maxTop / 2) - 60;
 `}</style>
 
       {/* reduced overall width to match overrides panel */}
-      <div style={step !== 4 ? { width: "100%", maxWidth: 920, margin: "0 auto", paddingLeft: 12, paddingRight: 12, display: "grid", gap: 10 } : { width: "100%", maxWidth: 1600, margin: "0 auto", paddingLeft: 12, paddingRight: 12, display: "grid", gap: 10 }}>
+      <div style={step !== 4
+        ? { width: "100%", maxWidth: 920, margin: "0 auto", paddingLeft: 12, paddingRight: 12, display: "grid", gap: 10, boxSizing: "border-box" }
+        : { width: "100%", maxWidth: 1100, margin: "0 auto", paddingLeft: 12, paddingRight: 12, display: "grid", gap: 10, boxSizing: "border-box", overflow: "hidden" }}>
         {/* Header */}
         <div className="resp-header" style={{ border: `1px solid ${theme.border}`, borderRadius: 22, padding: 14, background: "linear-gradient(180deg, rgba(59,130,246,0.16), rgba(255,255,255,0.03))" }}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -6257,8 +6260,8 @@ onPaste={(e) => {
 
         {/* Step 4 */}
         {step === 4 ? (
-          <div style={{ display: "flex", justifyContent: "center", width: "100%" }}>
-            <div style={{ width: "100%", maxWidth: 1600 }}>
+          <div style={{ display: "flex", justifyContent: "center", width: "100%", overflow: "hidden" }}>
+            <div style={{ width: "100%", maxWidth: 1100, minWidth: 0, overflow: "hidden" }}>
               <Panel
             tint
             title="Step 4 — Trim (frozen baseline)"
@@ -6282,14 +6285,14 @@ onPaste={(e) => {
               </div>
             }
           >
-            <div style={{ overflowX: "auto", overflowY: "hidden", WebkitOverflowScrolling: "touch", touchAction: "pan-x" }}>
+            <div style={{ minWidth: 0, width: "100%", overflow: "hidden" }}>
               <div style={{ minWidth: 0 }}>
               {!loaded ? (
               <WarningBanner title="No file loaded">Go back to Step 1 and import a file (or load test data).</WarningBanner>
             ) : groupLoopBaseline === null ? (
               <WarningBanner title="Baseline not frozen yet">
                 Step 4 must freeze a snapshot of Step 3 <b>exactly once</b>. Click “Freeze baseline now” to continue.
-                <div style={{ marginTop: 10 }}>
+                <div style={{ marginTop: 6 }}>
                   <button
                     style={Object.assign({}, topBtn, { background: "rgba(34,197,94,0.18)" })}
                     onClick={() => setGroupLoopBaseline(deepClone(groupLoopSetup || {}))}
@@ -6396,280 +6399,273 @@ onPaste={(e) => {
                     </div>
                   </div>
                 </div>
-                <div style={{ marginTop: 10, display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
-                  <div style={{ flex: "1 1 720px", minWidth: 0 }}>
-                    <RearViewChart
-                      rows={step4LineRows}
-                      tolerance={Number(meta && meta.tolerance != null ? meta.tolerance : 0)}
-                      height={520}
-                      loopTypes={LOOP_TYPES}
-                      groupLoopChange={groupLoopChange}
-                      setGroupLoopChange={setGroupLoopChange}
-                    />
-                  </div>
-
-                  <div style={{ flex: "0 0 auto" }}>
-                    <div
-                      style={{
-                        border: `1px solid ${theme.border}`,
-                        background: "rgba(0,0,0,0.55)",
-                        borderRadius: 999,
-                        padding: "8px 10px",
-                        display: "flex",
-                        gap: 8,
-                        alignItems: "center",
-                      }}
-                      title="Correction (mm)"
-                    >
-                      <span style={{ fontSize: 12, opacity: 0.8 }}>Correction</span>
-
-                      <div style={{ display: "grid", gridTemplateRows: "1fr 1fr", gap: 4 }}>
-                        <button
-                          type="button"
-                          style={{ width: 28, height: 18, borderRadius: 8, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.08)", color: theme.text, cursor: "pointer", fontWeight: 950, lineHeight: 1 }}
-                          onClick={() => {
-                            setMeta((p) => {
-                              var vRaw = (p && p.correction != null) ? p.correction : 0;
-                              var v = Number(vRaw);
-                              if (!isFinite(v)) v = 0;
-
-                              // Nudge by exactly +1mm from the current displayed value.
-                              // Do NOT clamp here; users may temporarily be far outside tolerance.
-                              var next = v + 1;
-                              next = Math.round(next);
-                              return Object.assign({}, p, { correction: next });
-                            });
-                          }}
-                        >
-                          ▲
-                        </button>
-                        <button
-                          type="button"
-                          style={{ width: 28, height: 18, borderRadius: 8, border: `1px solid ${theme.border}`, background: "rgba(255,255,255,0.08)", color: theme.text, cursor: "pointer", fontWeight: 950, lineHeight: 1 }}
-                          onClick={() => {
-                            setMeta((p) => {
-                              var vRaw = (p && p.correction != null) ? p.correction : 0;
-                              var v = Number(vRaw);
-                              if (!isFinite(v)) v = 0;
-
-                              // Nudge by exactly -1mm from the current displayed value.
-                              // Do NOT clamp here; users may temporarily be far outside tolerance.
-                              var next = v - 1;
-                              next = Math.round(next);
-                              return Object.assign({}, p, { correction: next });
-                            });
-                          }}
-                        >
-                          ▼
-                        </button>
-                      </div>
-
-                      <input
-                        type="number"
-                        value={Number(meta && meta.correction != null ? meta.correction : 0)}
-                        onChange={(e) => {
-                          var v = Number(e.target.value || 0);
-                          if (!isFinite(v)) v = 0;
-                          // Do NOT clamp here; allow any value and let other parts clamp if needed.
-                          setMeta((p) => ({ ...p, correction: v }));
-                        }}
-                        style={{
-                          width: 90,
-                          background: "transparent",
-                          color: theme.text,
-                          border: `1px solid ${theme.border}`,
-                          borderRadius: 12,
-                          padding: "6px 8px",
-                          fontWeight: 900,
-                          outline: "none",
-                                              userSelect: "auto",
-                        }}
-                      />
-                      <span style={{ fontSize: 12, opacity: 0.75 }}>mm</span>
-                    </div>
-                  
-                    <button
-                      type="button"
-                      title="Reset all loop overrides and correction"
-                      onClick={() => {
-                        setGroupLoopChange({});
-                        setGroupAdjustments({});
-                        setAutoLoopStatus(null);
-                        setAutoDecision(null);
-                      }}
-                      style={{
-                        marginTop: 10,
-                        width: "100%",
-                        border: "1px solid rgba(255,220,80,0.55)",
-                        background: "rgba(0,0,0,0.45)",
-                        color: "rgba(255,220,80,0.95)",
-                        borderRadius: 999,
-                        padding: "8px 10px",
-                        fontWeight: 950,
-                        fontSize: 12,
-                        cursor: "pointer",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      Reset all loops
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => applyAutoZeroForBestTrimPitch()}
-                      title={`Searches correction -50…+50mm. Levels B-row first, then picks loops for A/C/D satisfying both line tolerance (±${meta.tolerance}mm) and pitch tolerance (±${groupPitchTol}mm vs B). Minimises pitch fails → line fails → loop changes.`}
-                      style={{
-                        marginTop: 8,
-                        width: "100%",
-                        border: "1px solid rgba(34,197,94,0.7)",
-                        background: "rgba(34,197,94,0.15)",
-                        color: "rgba(134,239,172,0.95)",
-                        borderRadius: 999,
-                        padding: "8px 10px",
-                        fontWeight: 950,
-                        fontSize: 12,
-                        cursor: "pointer",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      ✦ Best correction + pitch trim
-                    </button>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8, width: 320, maxWidth: "100%" }}>
-                      
-                      <button
-                        type="button"
-                        onClick={() => applyAutoLoopPlan("factory")}
-                        title="Choose the closest achievable loop configuration using discrete loops (no fine-adjust)."
-                        style={{
-                          marginTop: 0,
-                          width: "100%",
-                          border: "1px solid rgba(96,165,250,0.65)",
-                          background: "rgba(0,0,0,0.45)",
-                          color: "rgba(147,197,253,0.95)",
-                          borderRadius: 999,
-                          padding: "8px 10px",
-                          fontWeight: 950,
-                          fontSize: 12,
-                          cursor: "pointer",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        Closest factory loops
-                      </button>
-                      
-                      <button
-                        type="button"
-                        onClick={() => applyAutoLoopPlan("minimal")}
-                        title="Choose the smallest set of loop changes using fine-adjust where needed."
-                        style={{
-                          marginTop: 0,
-                          width: "100%",
-                          border: "1px solid rgba(96,165,250,0.65)",
-                          background: "rgba(0,0,0,0.45)",
-                          color: "rgba(147,197,253,0.95)",
-                          borderRadius: 999,
-                          padding: "8px 10px",
-                          fontWeight: 950,
-                          fontSize: 12,
-                          cursor: "pointer",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        Minimal loop changes
-                      </button>
-
-                    </div>
-
-
-                    <div style={{ marginTop: 10, border: `1px solid ${theme.border}`, borderRadius: 12, background: "rgba(0,0,0,0.22)", padding: 8, width: 320, maxWidth: "100%" }}>
-                      <div style={{ fontWeight: 950, fontSize: 13, marginBottom: 8 }}>Pitch profile</div>
-                      <PitchProfileChart
-                        pitchStats={pitchStats}
-                        tolerance={Number(groupPitchTol || 5)}
-                        height={220}
-                      />
-                    </div>
-
-
-
-                  </div>
+                {/* RearViewChart — full width */}
+                <div style={{ marginTop: 6 }}>
+                  <RearViewChart
+                    rows={step4LineRows}
+                    tolerance={Number(meta && meta.tolerance != null ? meta.tolerance : 0)}
+                    height={480}
+                    loopTypes={LOOP_TYPES}
+                    groupLoopChange={groupLoopChange}
+                    setGroupLoopChange={setGroupLoopChange}
+                    correction={meta && meta.correction != null ? meta.correction : 0}
+                    onCorrectionChange={(v) => setMeta((p) => ({ ...p, correction: v }))}
+                  />
                 </div>
 
-                {/* Pitch balance — per group vs B — full width below wing shape */}
-                <div style={{ marginTop: 14, border: `1px solid ${theme.border}`, borderRadius: 12, background: "rgba(0,0,0,0.22)", padding: "10px 14px" }}>
+                {/* Action buttons below chart — horizontal row */}
+                <div style={{ marginTop: 5, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    title="Reset all loop overrides"
+                    onClick={() => { setGroupLoopChange({}); setGroupAdjustments({}); setAutoLoopStatus(null); setAutoDecision(null); }}
+                    style={{ flex: "1 1 160px", border: "1px solid rgba(255,220,80,0.55)", background: "rgba(0,0,0,0.45)", color: "rgba(255,220,80,0.95)", borderRadius: 999, padding: "5px 10px", fontWeight: 950, fontSize: 11, cursor: "pointer", lineHeight: 1.3 }}
+                  >Reset all loops</button>
+                  <button
+                    type="button"
+                    onClick={() => applyAutoZeroForBestTrimPitch()}
+                    title={`Searches correction ±50mm around current value. Levels B-row first, then picks loops minimising pitch fails → line fails → loop changes.`}
+                    style={{ flex: "1 1 200px", border: "1px solid rgba(34,197,94,0.7)", background: "rgba(34,197,94,0.15)", color: "rgba(134,239,172,0.95)", borderRadius: 999, padding: "5px 10px", fontWeight: 950, fontSize: 11, cursor: "pointer", lineHeight: 1.3 }}
+                  >✦ Best correction + pitch trim</button>
+                  <button
+                    type="button"
+                    onClick={() => applyAutoLoopPlan("factory")}
+                    title="Choose the closest achievable loop configuration using discrete loops."
+                    style={{ flex: "1 1 160px", border: "1px solid rgba(96,165,250,0.65)", background: "rgba(0,0,0,0.45)", color: "rgba(147,197,253,0.95)", borderRadius: 999, padding: "5px 10px", fontWeight: 950, fontSize: 11, cursor: "pointer", lineHeight: 1.3 }}
+                  >Closest factory loops</button>
+                  <button
+                    type="button"
+                    onClick={() => applyAutoLoopPlan("minimal")}
+                    title="Choose the smallest set of loop changes using fine-adjust where needed."
+                    style={{ flex: "1 1 160px", border: "1px solid rgba(96,165,250,0.65)", background: "rgba(0,0,0,0.45)", color: "rgba(147,197,253,0.95)", borderRadius: 999, padding: "5px 10px", fontWeight: 950, fontSize: 11, cursor: "pointer", lineHeight: 1.3 }}
+                  >Minimal loop changes</button>
+                </div>
+
+                {/* Pitch balance + Pitch profile row */}
+                <div style={{ marginTop: 6, border: `1px solid ${theme.border}`, borderRadius: 12, background: "rgba(0,0,0,0.22)", padding: "10px 14px" }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 8, flexWrap: "wrap" }}>
                     <div style={{ fontWeight: 950, fontSize: 13 }}>Pitch balance — per group vs B-row</div>
                     <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>
                       Average delta of each maillon group compared to its B-row counterpart (same group number &amp; side). Tolerance ±{groupPitchTol}mm.
                     </div>
                   </div>
-                  {(!pitchStats || !pitchStats.byGroup || pitchStats.byGroup.length === 0) ? (
+                  {/* Inner flex: chart+table on left, pitch profile on right */}
+                  <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap", overflow: "hidden" }}>
+                    <div style={{ flex: "1 1 360px", minWidth: 0, overflow: "hidden" }}>
+                    {(!pitchStats || !pitchStats.byGroup || pitchStats.byGroup.length === 0) ? (
                     <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", padding: "6px 0" }}>No group data — assign lines to groups in Step 3.</div>
                   ) : (() => {
                     const f1 = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : (n >= 0 ? "+" : "") + Number(n).toFixed(1));
+                    const ptol = Number(groupPitchTol) || 4;
                     const colFor = (diff) => {
                       if (diff == null || !Number.isFinite(diff)) return "rgba(255,255,255,0.35)";
                       const ad = Math.abs(diff);
-                      if (ad > groupPitchTol) return "rgba(255,90,90,1)";
-                      if (ad > groupPitchTol * 0.7) return "rgba(255,215,90,1)";
+                      if (ad > ptol) return "rgba(255,90,90,1)";
+                      if (ad > ptol * 0.7) return "rgba(255,215,90,1)";
                       return "rgba(140,255,190,1)";
                     };
-                    const letters = ["A", "C", "D"];
-                    // Collect all unique bucket numbers across all rows
-                    const allBuckets = Array.from(new Set(pitchStats.byGroup.map((r) => r.bucket))).sort((a, b) => a - b);
+
+                    // Build column headers: Left groups right-to-left, then Right groups left-to-right
+                    // Group names come from actual groupIds e.g. AR1L, BR2R
+                    const allBuckets = Array.from(new Set(
+                      [...pitchStats.byGroup, ...Object.values(groupPitchAverages)].map((r) => r.bucket)
+                    )).filter(Boolean).sort((a, b) => a - b);
+
+                    // All letters including B
+                    const allLetters = ["A", "B", "C", "D"];
+
+                    // Get actual groupId name for a letter+bucket+side (strip the trailing side letter for display)
+                    const getGroupName = (letter, bucket, side) => {
+                      // Find in groupPitchAverages
+                      const entry = Object.entries(groupPitchAverages).find(([, e]) =>
+                        e.letter === letter && e.bucket === bucket && e.side === side
+                      );
+                      if (entry) return entry[0]; // e.g. "AR1L"
+                      // Find in byGroup
+                      const bg = pitchStats.byGroup.find((r) => r.letter === letter && r.bucket === bucket && r.side === side);
+                      if (bg) return bg.groupId;
+                      return `${letter}${bucket}${side}`;
+                    };
+
+                    const getBAvg = (bucket, side) => {
+                      const e = Object.values(groupPitchAverages).find((x) => x.letter === "B" && x.bucket === bucket && x.side === side);
+                      return e ? e.avg : null;
+                    };
+
+                    const getGroupAvg = (letter, bucket, side) => {
+                      if (letter === "B") return getBAvg(bucket, side);
+                      const r = pitchStats.byGroup.find((x) => x.letter === letter && x.bucket === bucket && x.side === side);
+                      return r ? r.groupAvg : null;
+                    };
+
+                    const getDiff = (letter, bucket, side) => {
+                      if (letter === "B") return 0;
+                      const r = pitchStats.byGroup.find((x) => x.letter === letter && x.bucket === bucket && x.side === side);
+                      return r ? r.diff : null;
+                    };
+
+                    // ── SVG pitch chart ──
+                    // X axis: Left groups (bucket N..1) then Right groups (bucket 1..N) — wing span view
+                    // Y axis: diff from B (mm). B is always 0 baseline.
+                    const svgW = 700, svgH = 160, padL = 48, padR = 16, padT = 20, padB = 32;
+                    const innerW = svgW - padL - padR;
+                    const innerH = svgH - padT - padB;
+
+                    // X positions: Left groups descending bucket (outer wing left → centre), then Right ascending
+                    const leftCols  = allBuckets.slice().reverse().map((b) => ({ bucket: b, side: "L" }));
+                    const rightCols = allBuckets.map((b) => ({ bucket: b, side: "R" }));
+                    const cols = [...leftCols, ...rightCols];
+                    const colX = (i) => padL + (i + 0.5) * (innerW / cols.length);
+
+                    // Y scale: ±(ptol * 2) with some headroom
+                    const yRange = Math.max(ptol * 2, 8);
+                    const yScale = (v) => padT + innerH / 2 - (v / yRange) * (innerH / 2);
+
+                    const rowColours = { A: "#60a5fa", B: "#4ade80", C: "#f472b6", D: "#fb923c" };
+
+                    const makeLine = (letter) => {
+                      const pts = cols.map((col, i) => {
+                        const diff = getDiff(letter, col.bucket, col.side);
+                        if (!Number.isFinite(diff)) return null;
+                        return { x: colX(i), y: yScale(diff), diff };
+                      });
+                      const valid = pts.filter(Boolean);
+                      if (valid.length < 2) return null;
+                      const d = valid.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+                      return { d, pts, colour: rowColours[letter] || "#aaa", letter };
+                    };
+
+                    const chartLines = allLetters.map(makeLine).filter(Boolean);
+                    const tolY1 = yScale(ptol);
+                    const tolY2 = yScale(-ptol);
+                    const zeroY = yScale(0);
+
                     return (
-                      <div style={{ overflowX: "auto" }}>
-                        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 480 }}>
-                          <thead>
-                            <tr style={{ background: "rgba(255,255,255,0.05)" }}>
-                              <th style={Object.assign({}, th, { fontSize: 11, padding: "5px 8px", textAlign: "left", width: 60 })}>Row</th>
-                              {allBuckets.map((b) => (
-                                <th key={`hL${b}`} colSpan={2} style={Object.assign({}, th, { fontSize: 11, padding: "5px 8px", textAlign: "center" })}>
-                                  Group {b}
-                                </th>
-                              ))}
-                            </tr>
-                            <tr style={{ background: "rgba(255,255,255,0.03)" }}>
-                              <th style={Object.assign({}, th, { fontSize: 10, padding: "3px 8px", textAlign: "left", color: "rgba(255,255,255,0.4)" })}>vs B</th>
-                              {allBuckets.map((b) => (
-                                [
-                                  <th key={`sL${b}`} style={Object.assign({}, th, { fontSize: 10, padding: "3px 6px", color: "rgba(255,255,255,0.4)" })}>Left</th>,
-                                  <th key={`sR${b}`} style={Object.assign({}, th, { fontSize: 10, padding: "3px 6px", color: "rgba(255,255,255,0.4)" })}>Right</th>,
-                                ]
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {letters.map((letter) => {
-                              const hasAny = pitchStats.byGroup.some((r) => r.letter === letter);
-                              if (!hasAny) return null;
-                              return (
-                                <tr key={letter} style={{ borderTop: `1px solid rgba(255,255,255,0.07)` }}>
-                                  <td style={Object.assign({}, td, { fontSize: 12, fontWeight: 900, padding: "6px 8px" })}>{letter}</td>
-                                  {allBuckets.map((b) => {
-                                    const left  = pitchStats.byGroup.find((r) => r.letter === letter && r.bucket === b && r.side === "L");
-                                    const right = pitchStats.byGroup.find((r) => r.letter === letter && r.bucket === b && r.side === "R");
-                                    return [
-                                      <td key={`L${b}`} style={Object.assign({}, td, { fontSize: 12, fontWeight: 900, padding: "6px 8px", textAlign: "center", color: colFor(left ? left.diff : null) })}>
-                                        {left ? f1(left.diff) : "—"}
-                                      </td>,
-                                      <td key={`R${b}`} style={Object.assign({}, td, { fontSize: 12, fontWeight: 900, padding: "6px 8px", textAlign: "center", color: colFor(right ? right.diff : null) })}>
-                                        {right ? f1(right.diff) : "—"}
-                                      </td>,
-                                    ];
-                                  })}
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                        <div style={{ marginTop: 8, fontSize: 10, color: "rgba(255,255,255,0.35)" }}>
-                          Values shown are: group avg Δ minus B-row counterpart avg Δ. Green = within ±{groupPitchTol}mm · Yellow = within {Math.round(groupPitchTol * 0.7)}–{groupPitchTol}mm · Red = outside tolerance.
+                      <div>
+                        {/* SVG chart */}
+                        <div style={{ marginBottom: 12 }}>
+                          <svg viewBox={`0 0 ${svgW} ${svgH}`} width="100%" height="auto" style={{ display: "block", background: "rgba(0,0,0,0.2)", borderRadius: 10 }}>
+                            {/* Tolerance band */}
+                            <rect x={padL} y={tolY1} width={innerW} height={tolY2 - tolY1} fill="rgba(74,222,128,0.07)" />
+                            {/* Tolerance lines */}
+                            <line x1={padL} y1={tolY1} x2={padL + innerW} y2={tolY1} stroke="rgba(74,222,128,0.35)" strokeWidth={1} strokeDasharray="4 3" />
+                            <line x1={padL} y1={tolY2} x2={padL + innerW} y2={tolY2} stroke="rgba(74,222,128,0.35)" strokeWidth={1} strokeDasharray="4 3" />
+                            <text x={padL - 4} y={tolY1 + 4} textAnchor="end" fontSize={9} fill="rgba(74,222,128,0.6)">+{ptol}</text>
+                            <text x={padL - 4} y={tolY2 + 4} textAnchor="end" fontSize={9} fill="rgba(74,222,128,0.6)">−{ptol}</text>
+                            {/* Zero (B baseline) */}
+                            <line x1={padL} y1={zeroY} x2={padL + innerW} y2={zeroY} stroke="rgba(74,222,128,0.6)" strokeWidth={1.5} />
+                            <text x={padL - 4} y={zeroY + 4} textAnchor="end" fontSize={9} fill="rgba(74,222,128,0.8)">0</text>
+                            {/* Centre divider */}
+                            <line x1={padL + innerW / 2} y1={padT} x2={padL + innerW / 2} y2={padT + innerH} stroke="rgba(255,255,255,0.1)" strokeWidth={1} strokeDasharray="3 3" />
+                            <text x={padL + innerW / 2} y={padT + innerH + 14} textAnchor="middle" fontSize={9} fill="rgba(255,255,255,0.3)">Centre</text>
+                            {/* Column ticks and labels */}
+                            {cols.map((col, i) => (
+                              <g key={`col${i}`}>
+                                <line x1={colX(i)} y1={padT + innerH} x2={colX(i)} y2={padT + innerH + 4} stroke="rgba(255,255,255,0.2)" strokeWidth={1} />
+                                <text x={colX(i)} y={padT + innerH + 14} textAnchor="middle" fontSize={8} fill="rgba(255,255,255,0.4)">
+                                  {getGroupName("B", col.bucket, col.side)}
+                                </text>
+                              </g>
+                            ))}
+                            {/* Y axis */}
+                            <line x1={padL} y1={padT} x2={padL} y2={padT + innerH} stroke="rgba(255,255,255,0.15)" strokeWidth={1} />
+                            {/* Data lines */}
+                            {chartLines.map((line) => (
+                              <g key={line.letter}>
+                                <path d={line.d} fill="none" stroke={line.colour} strokeWidth={2} strokeLinejoin="round" />
+                                {line.pts.map((p, i) => p && (
+                                  <circle key={i} cx={p.x} cy={p.y} r={4} fill={line.colour}
+                                    stroke={Math.abs(p.diff) > ptol ? "rgba(255,80,80,0.9)" : "rgba(0,0,0,0.5)"}
+                                    strokeWidth={Math.abs(p.diff) > ptol ? 2 : 1}
+                                  />
+                                ))}
+                                {/* Row label at rightmost point */}
+                                {(() => {
+                                  const last = line.pts.filter(Boolean).at(-1);
+                                  return last ? <text x={last.x + 6} y={last.y + 4} fontSize={10} fontWeight="bold" fill={line.colour}>{line.letter}</text> : null;
+                                })()}
+                              </g>
+                            ))}
+                            {/* Legend */}
+                            {allLetters.map((L, i) => (
+                              <g key={L}>
+                                <rect x={padL + i * 40} y={6} width={12} height={4} rx={2} fill={rowColours[L] || "#aaa"} />
+                                <text x={padL + i * 40 + 15} y={12} fontSize={9} fill={rowColours[L] || "#aaa"}>{L}{L === "B" ? " (ref)" : ""}</text>
+                              </g>
+                            ))}
+                          </svg>
+                        </div>
+
+                        {/* Table */}
+                        <div style={{ overflowX: "auto" }}>
+                          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 480 }}>
+                            <thead>
+                              <tr style={{ background: "rgba(255,255,255,0.05)" }}>
+                                <th style={Object.assign({}, th, { fontSize: 11, padding: "5px 8px", textAlign: "left", width: 36 })}>Row</th>
+                                {leftCols.map((col) => (
+                                  <th key={`hL${col.bucket}`} style={Object.assign({}, th, { fontSize: 11, padding: "5px 6px", textAlign: "center", color: "rgba(180,210,255,0.9)" })}>
+                                    {getGroupName("B", col.bucket, col.side)}
+                                  </th>
+                                ))}
+                                {rightCols.map((col) => (
+                                  <th key={`hR${col.bucket}`} style={Object.assign({}, th, { fontSize: 11, padding: "5px 6px", textAlign: "center", color: "rgba(255,200,180,0.9)" })}>
+                                    {getGroupName("B", col.bucket, col.side)}
+                                  </th>
+                                ))}
+                              </tr>
+                              <tr style={{ background: "rgba(255,255,255,0.02)" }}>
+                                <th style={Object.assign({}, th, { fontSize: 9, padding: "2px 8px", textAlign: "left", color: "rgba(255,255,255,0.3)" })}></th>
+                                {leftCols.map((col) => (
+                                  <th key={`slL${col.bucket}`} style={Object.assign({}, th, { fontSize: 9, padding: "2px 6px", color: "rgba(180,210,255,0.5)" })}>L</th>
+                                ))}
+                                {rightCols.map((col) => (
+                                  <th key={`slR${col.bucket}`} style={Object.assign({}, th, { fontSize: 9, padding: "2px 6px", color: "rgba(255,200,180,0.5)" })}>R</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {allLetters.map((letter) => {
+                                const hasAny = letter === "B"
+                                  ? Object.values(groupPitchAverages).some((e) => e.letter === "B")
+                                  : pitchStats.byGroup.some((r) => r.letter === letter);
+                                if (!hasAny) return null;
+                                const isB = letter === "B";
+                                return (
+                                  <tr key={letter} style={{ borderTop: `1px solid rgba(255,255,255,0.07)`, background: isB ? "rgba(74,222,128,0.05)" : undefined }}>
+                                    <td style={Object.assign({}, td, { fontSize: 12, fontWeight: 900, padding: "6px 8px", color: rowColours[letter] || theme.text })}>
+                                      {letter}{isB ? " ★" : ""}
+                                    </td>
+                                    {[...leftCols, ...rightCols].map((col, i) => {
+                                      const val = isB ? getBAvg(col.bucket, col.side) : getDiff(letter, col.bucket, col.side);
+                                      const color = isB
+                                        ? "rgba(74,222,128,0.8)"
+                                        : colFor(val);
+                                      return (
+                                        <td key={i} style={Object.assign({}, td, { fontSize: 12, fontWeight: 900, padding: "6px 6px", textAlign: "center", color })}>
+                                          {f1(val)}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                          <div style={{ marginTop: 8, fontSize: 10, color: "rgba(255,255,255,0.3)" }}>
+                            B ★ shows absolute avg Δ (reference). A/C/D show diff vs B counterpart. Columns named by B-row group ID. Green ≤ ±{ptol}mm · Yellow approaching · Red outside.
+                          </div>
                         </div>
                       </div>
                     );
                   })()}
-                </div>
+                    </div>{/* end chart+table column */}
+                    {/* Pitch profile — right side */}
+                    <div style={{ flex: "0 0 230px" }}>
+                      <div style={{ fontWeight: 950, fontSize: 12, marginBottom: 6, opacity: 0.8 }}>Pitch profile</div>
+                      <PitchProfileChart pitchStats={pitchStats} tolerance={Number(groupPitchTol || 5)} height={210} />
+                    </div>
+                  </div>{/* end inner flex */}
+                </div>{/* end pitch balance panel */}
 
                 <div
                   style={{
@@ -6863,241 +6859,67 @@ onPaste={(e) => {
 
                   {groupsInUse.length === 0 ? (
                     <div style={{ marginTop: 10, opacity: 0.75 }}>No groups detected. Complete Step 2 mapping first.</div>
-                  ) : (() => { try { return (
-                    <div style={{ marginTop: 10, overflow: "auto", width: "100%", maxWidth: "100%",
-          minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 12 }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 0 }}>
-                        <thead>
-                          <tr>
-                            <th rowSpan={2} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2 })}>Group</th>
-                            <th colSpan={5} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2, textAlign: "center" })}>Left</th>
-                            <th colSpan={5} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 2, textAlign: "center" })}>Right</th>
-                          </tr>
-                          <tr>
-                            {["Baseline loop", "Override loop", "Loop Δ (mm)", "Adjust (mm)", "Total Δ (mm)"].map((h) => (
-                              <th key={"L-"+h} style={Object.assign({}, th, { position: "sticky", top: 34, background: theme.panel2, zIndex: 2 })}>{h}</th>
-                            ))}
-                            {["Baseline loop", "Override loop", "Loop Δ (mm)", "Adjust (mm)", "Total Δ (mm)"].map((h) => (
-                              <th key={"R-"+h} style={Object.assign({}, th, { position: "sticky", top: 34, background: theme.panel2, zIndex: 2 })}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(function () {
-                            const parse = (s) => {
-                              const m = String(s || "").match(/^([A-Z]+)(\d+)([LR])$/i);
-                              if (!m) return null;
-                              return { p: m[1].toUpperCase(), n: Number(m[2] || 0), side: m[3].toUpperCase() };
-                            };
-
-                            const byKey = new Map();
-                            (groupsInUse || []).forEach((g) => {
-                              const p = parse(g);
-                              if (!p) {
-                                byKey.set(g, { key: g, L: null, R: null, single: g, labelL: g, labelR: "" });
-                                return;
-                              }
-                              const key = `${p.p}${p.n}`;
-                              const cur = byKey.get(key) || { key, L: null, R: null, single: null, labelL: `${key}L`, labelR: `${key}R` };
-                              if (p.side === "L") cur.L = g;
-                              if (p.side === "R") cur.R = g;
-                              byKey.set(key, cur);
-                            });
-
-                            const keys = Array.from(byKey.values());
-                            keys.sort((a, b) => {
-                              const ap = parse(a.labelL) || { p: a.key, n: 0, side: "" };
-                              const bp = parse(b.labelL) || { p: b.key, n: 0, side: "" };
-                              if (ap.p !== bp.p) return ap.p.localeCompare(bp.p);
-                              if (ap.n !== bp.n) return ap.n - bp.n;
-                              return 0;
-                            });
-
-                            const cellFor = (gid) => {
-                              if (!gid) {
-                                return {
-                                  baseLoop: "",
-                                  override: "",
-                                  loopDelta: "",
-                                  adj: "",
-                                  total: "",
-                                  totalColor: "transparent",
-                                };
-                              }
-                              const baseLoop = groupLoopBaseline[gid] || "SL";
-                              const override = groupLoopChange[gid] || "";
-                              const afterLoop = override || baseLoop;
-
-                              const baseMm = Number(loopSizes[baseLoop] || 0);
-                              const afterMm = Number(loopSizes[afterLoop] || 0);
-                              const loopDelta = afterMm - baseMm;
-
-                              const adj = Number(groupAdjustments[gid] || 0);
-                              const total = loopDelta + adj;
-
-                              const tol = Number((meta && meta.tolerance != null) ? meta.tolerance : 0);
-                              const totalColor =
-                                Math.abs(total) >= tol ? theme.bad : Math.abs(total) >= Math.max(0, tol - 3) ? theme.warn : theme.good;
-
-                              return { baseLoop, override, loopDelta, adj, total, totalColor };
-                            };
-
-                            return keys.map((row) => {
-                              const L = cellFor(row.L);
-                              const R = cellFor(row.R);
-
+                  ) : (() => { try {
+                    const parse = (s) => { const m = String(s || "").match(/^([A-Z]+)(\d+)([LR])$/i); if (!m) return null; return { p: m[1].toUpperCase(), n: Number(m[2]||0), side: m[3].toUpperCase() }; };
+                    const byKey = new Map();
+                    (groupsInUse || []).forEach((g) => { const p = parse(g); if (!p) { byKey.set(g, { key: g, L: null, R: null, labelL: g, labelR: "" }); return; } const key = `${p.p}${p.n}`; const cur = byKey.get(key) || { key, L: null, R: null, labelL: `${key}L`, labelR: `${key}R` }; if (p.side === "L") cur.L = g; if (p.side === "R") cur.R = g; byKey.set(key, cur); });
+                    const keys = Array.from(byKey.values());
+                    const cellFor = (gid) => {
+                      if (!gid || !groupLoopBaseline) return { baseLoop: "—", loopDelta: 0, adj: 0, total: 0, totalColor: "transparent" };
+                      const baseLoop = groupLoopBaseline[gid] || "SL";
+                      const override = groupLoopChange[gid] || "";
+                      const afterLoop = override || baseLoop;
+                      const loopDelta = Number(loopSizes[afterLoop]||0) - Number(loopSizes[baseLoop]||0);
+                      const adj = Number(groupAdjustments[gid] || 0);
+                      const total = loopDelta + adj;
+                      const tol = Number((meta && meta.tolerance != null) ? meta.tolerance : 0);
+                      const totalColor = Math.abs(total) >= tol ? theme.bad : Math.abs(total) >= Math.max(0, tol-3) ? theme.warn : theme.good;
+                      return { baseLoop, loopDelta, adj, total, totalColor };
+                    };
+                    const makeTable = (sideLabel, gidKey, labelKey) => (
+                      <div style={{ flex: "1 1 260px", minWidth: 0, overflow: "auto", border: `1px solid ${theme.border}`, borderRadius: 12 }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                          <thead>
+                            <tr><th colSpan={6} style={Object.assign({}, th, { textAlign: "center", background: theme.panel2, position: "sticky", top: 0, zIndex: 2 })}>{sideLabel}</th></tr>
+                            <tr>
+                              {["Group","Baseline","Override","Loop \u0394","Adj","Total \u0394"].map((h) => (
+                                <th key={h} style={Object.assign({}, th, { position: "sticky", top: 34, background: theme.panel2, zIndex: 2, whiteSpace: "nowrap", fontSize: 11 })}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {keys.map((row) => {
+                              const gid = row[gidKey];
+                              const C = cellFor(gid);
                               return (
-                                <tr key={row.key} style={{ borderTop: `1px solid ${theme.border}` }}>
-                                  <td style={Object.assign({}, td, { whiteSpace: "nowrap" })}>
-                                    <div style={{ fontWeight: 900 }}>{row.L || row.single || row.labelL}</div>
-                                    {row.R ? <div style={{ opacity: 0.85, marginTop: 2 }}>{row.R}</div> : null}
-                                  </td>
-
-                                  {/* Left */}
-                                  <td style={td}>{L.baseLoop}</td>
+                                <tr key={row.key+sideLabel} style={{ borderTop: `1px solid ${theme.border}` }}>
+                                  <td style={Object.assign({}, td, { whiteSpace: "nowrap", fontWeight: 900 })}>{row[labelKey] || row.key}</td>
+                                  <td style={td}>{C.baseLoop}</td>
                                   <td style={td}>
-                                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                                      <select
-                                        style={Object.assign({}, miniInput, { width: 86, padding: "4px 8px", background: theme.panel2, color: theme.text })}
-                                        disabled={!row.L}
-                                        value={(row.L && groupLoopChange && groupLoopChange[row.L]) ? groupLoopChange[row.L] : ""}
-                                        onChange={(e) => {
-                                          if (!row.L) return;
-                                          const v = e.target.value;
-                                          if (!v) {
-                                            setGroupLoopChange((p) => {
-                                              const n = { ...(p || {}) };
-                                              delete n[row.L];
-                                              return n;
-                                            });
-                                          } else {
-                                            setGroupLoopChange((p) => ({ ...(p || {}), [row.L]: v }));
-                                          }
-                                        }}
-                                      >
-                                        <option value="" style={{ background: theme.panel2, color: theme.text }}>(baseline)</option>
-                                        {LOOP_TYPES.map((lt) => (
-                                          <option key={`L-opt-${lt}`} value={lt} style={{ background: theme.panel2, color: theme.text }}>{lt}</option>
-                                        ))}
+                                    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                                      <select style={Object.assign({}, miniInput, { width: 72, padding: "3px 5px", background: theme.panel2, color: theme.text })} disabled={!gid}
+                                        value={(gid && groupLoopChange && groupLoopChange[gid]) ? groupLoopChange[gid] : ""}
+                                        onChange={(e) => { if (!gid) return; const v = e.target.value; if (!v) { setGroupLoopChange((p) => { const n={...(p||{})}; delete n[gid]; return n; }); } else { setGroupLoopChange((p) => ({...(p||{}), [gid]: v})); } }}>
+                                        <option value="" style={{ background: theme.panel2, color: theme.text }}>(base)</option>
+                                        {LOOP_TYPES.map((lt) => <option key={lt} value={lt} style={{ background: theme.panel2, color: theme.text }}>{lt}</option>)}
                                       </select>
-                                      <button
-                                        key={"L-"+row.key+"-reset"}
-                                        title="Reset to baseline"
-                                        style={{
-                                          padding: "4px 8px",
-                                          borderRadius: 999,
-                                          border: `1px solid ${theme.border}`,
-                                          background: "rgba(0,0,0,0.18)",
-                                          color: theme.text,
-                                          fontWeight: 900,
-                                          cursor: row.L ? "pointer" : "not-allowed",
-                                          opacity: row.L ? 0.9 : 0.5,
-                                        }}
-                                        disabled={!row.L}
-                                        onClick={() => {
-                                          if (!row.L) return;
-                                          setGroupLoopChange((p) => {
-                                            const n = { ...(p || {}) };
-                                            delete n[row.L];
-                                            return n;
-                                          });
-                                        }}
-                                      >
-                                        ↺
-                                      </button>
+                                      <button title="Reset" style={{ padding: "3px 6px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "rgba(0,0,0,0.18)", color: theme.text, fontWeight: 900, cursor: gid ? "pointer" : "not-allowed", opacity: gid ? 0.9 : 0.5 }} disabled={!gid}
+                                        onClick={() => { if (!gid) return; setGroupLoopChange((p) => { const n={...(p||{})}; delete n[gid]; return n; }); }}>↺</button>
                                     </div>
                                   </td>
-                                  <td style={td}>{Number.isFinite(L.loopDelta) ? Math.round(L.loopDelta) : ""}</td>
-                                  <td style={td}>
-                                    <input
-                                      style={miniInput}
-                                      value={Number.isFinite(L.adj) ? String(L.adj) : ""}
-                                      onChange={(e) => {
-                                        const v = Number(e.target.value);
-                                        if (!row.L) return;
-                                        setGroupAdjustments((p) => ({ ...p, [row.L]: Number.isFinite(v) ? v : 0 }));
-                                      }}
-                                    />
-                                  </td>
-                                  <td style={Object.assign({}, td, { textAlign: "center" })}><div style={{ display: "inline-block", minWidth: 46, padding: "4px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: L.totalColor, fontWeight: 950, lineHeight: 1 }}>{Number.isFinite(L.total) ? Math.round(L.total) : ""}</div></td>
-
-                                  {/* Right */}
-                                  <td style={td}>{R.baseLoop}</td>
-                                  <td style={td}>
-                                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                                      <select
-                                        style={Object.assign({}, miniInput, { width: 86, padding: "4px 8px", background: theme.panel2, color: theme.text })}
-                                        disabled={!row.R}
-                                        value={(row.R && groupLoopChange && groupLoopChange[row.R]) ? groupLoopChange[row.R] : ""}
-                                        onChange={(e) => {
-                                          if (!row.R) return;
-                                          const v = e.target.value;
-                                          if (!v) {
-                                            setGroupLoopChange((p) => {
-                                              const n = { ...(p || {}) };
-                                              delete n[row.R];
-                                              return n;
-                                            });
-                                          } else {
-                                            setGroupLoopChange((p) => ({ ...(p || {}), [row.R]: v }));
-                                          }
-                                        }}
-                                      >
-                                        <option value="" style={{ background: theme.panel2, color: theme.text }}>(baseline)</option>
-                                        {LOOP_TYPES.map((lt) => (
-                                          <option key={`R-opt-${lt}`} value={lt} style={{ background: theme.panel2, color: theme.text }}>{lt}</option>
-                                        ))}
-                                      </select>
-                                      <button
-                                        key={"R-"+row.key+"-reset"}
-                                        title="Reset to baseline"
-                                        style={{
-                                          padding: "4px 8px",
-                                          borderRadius: 999,
-                                          border: `1px solid ${theme.border}`,
-                                          background: "rgba(0,0,0,0.18)",
-                                          color: theme.text,
-                                          fontWeight: 900,
-                                          cursor: row.R ? "pointer" : "not-allowed",
-                                          opacity: row.R ? 0.9 : 0.5,
-                                        }}
-                                        disabled={!row.R}
-                                        onClick={() => {
-                                          if (!row.R) return;
-                                          setGroupLoopChange((p) => {
-                                            const n = { ...(p || {}) };
-                                            delete n[row.R];
-                                            return n;
-                                          });
-                                        }}
-                                      >
-                                        ↺
-                                      </button>
-                                    </div>
-                                  </td>
-                                  <td style={td}>{Number.isFinite(R.loopDelta) ? Math.round(R.loopDelta) : ""}</td>
-                                  <td style={td}>
-                                    <input
-                                      style={miniInput}
-                                      value={Number.isFinite(R.adj) ? String(R.adj) : ""}
-                                      onChange={(e) => {
-                                        const v = Number(e.target.value);
-                                        if (!row.R) return;
-                                        setGroupAdjustments((p) => ({ ...p, [row.R]: Number.isFinite(v) ? v : 0 }));
-                                      }}
-                                    />
-                                  </td>
-                                  <td style={Object.assign({}, td, { textAlign: "center" })}><div style={{ display: "inline-block", minWidth: 46, padding: "4px 10px", borderRadius: 999, border: `1px solid ${theme.border}`, background: R.totalColor, fontWeight: 950, lineHeight: 1 }}>{Number.isFinite(R.total) ? Math.round(R.total) : ""}</div></td>
+                                  <td style={td}>{Number.isFinite(C.loopDelta) ? Math.round(C.loopDelta) : ""}</td>
+                                  <td style={td}><input style={miniInput} value={Number.isFinite(C.adj) ? String(C.adj) : ""} onChange={(e) => { const v=Number(e.target.value); if (!gid) return; setGroupAdjustments((p) => ({...p, [gid]: Number.isFinite(v)?v:0})); }} /></td>
+                                  <td style={Object.assign({}, td, { textAlign: "center" })}><div style={{ display: "inline-block", minWidth: 38, padding: "3px 8px", borderRadius: 999, border: `1px solid ${theme.border}`, background: C.totalColor, fontWeight: 950, lineHeight: 1 }}>{Number.isFinite(C.total) ? Math.round(C.total) : ""}</div></td>
                                 </tr>
                               );
-                            });
-                          })()}
-                        </tbody>
-                      </table>
-                    </div>); } catch (e) { return (
-                    <div style={{ marginTop: 10, color: theme.bad, fontWeight: 900 }}>
-                      Group table render error: {String((e && e.message) ? e.message : e)}
-                    </div>
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                    return <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>{makeTable("Left", "L", "labelL")}{makeTable("Right", "R", "labelR")}</div>;
+                  } catch (e) { return (
+                    <div style={{ marginTop: 10, color: theme.bad, fontWeight: 900 }}>Group table render error: {String((e && e.message) ? e.message : e)}</div>
                   ); } })()}
                 </div>
 
@@ -8268,139 +8090,6 @@ onPaste={(e) => {
     }
   `}</style>
 </div>
-<div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.panel2, padding: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                    <div>
-                      <div style={{ fontWeight: 950 }}>Whole wing — per line lengths</div>
-                      <div style={{ opacity: 0.78, fontSize: 12, marginTop: 4 }}>
-                        Each line side (L/R) is treated as a separate entity. Values use the <b>frozen baseline</b> + Step 4 overrides/adjustments.
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                      <button
-                        style={Object.assign({}, topBtn, (showCorrected ? topBtnActive : null))}
-                        onClick={() => setShowCorrected((v) => !v)}
-                        title="Toggle whether correction is applied to measured values"
-                      >
-                        {showCorrected ? "Corrected: ON" : "Corrected: OFF"}
-                      </button>
-
-                      {["A", "B", "C", "D"].map((L) => (
-                        <button
-                          key={L}
-                          style={{
-                            ...topBtn,
-                            background: step4LetterFilter[L] ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
-                            borderColor: step4LetterFilter[L] ? "rgba(255,255,255,0.22)" : theme.border,
-                            color: step4LetterFilter[L] ? theme.text : "rgba(255,255,255,0.65)",
-                          }}
-                          onClick={() => setStep4LetterFilter((p) => ({ ...(p || {}), [L]: !p[L] }))}
-                        >
-                          {L}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {step4LineRows.length === 0 ? (
-                    <div style={{ marginTop: 10, opacity: 0.75 }}>No per-line data available yet. Import data in Step 1 and map lines in Step 2.</div>
-                  ) : (
-                    <div
-                      style={{
-                        marginTop: 10,
-                        overflow: "auto", width: "100%", maxWidth: "100%",
-          minWidth: 0, border: `1px solid ${theme.border}`,
-                        borderRadius: 12,
-                        maxHeight: 520,
-                      }}
-                    >
-                      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 0 }}>
-                        <thead>
-                          <tr>
-                            {[
-                              "Line",
-                              "Group",
-                              "Nominal",
-                              "Raw",
-                              "Corrected",
-                              "Baseline loop",
-                              "After loop",
-                              "Adj (mm)",
-                              "Before",
-                              "After",
-                              "Δ vs nominal",
-                            ].map((h) => (
-                              <th key={h} style={Object.assign({}, th, { position: "sticky", top: 0, background: theme.panel2, zIndex: 1 })}>
-                                {h}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {step4LineRows.map((r) => {
-                            const sevColor = r.sev === "bad" ? theme.bad : r.sev === "warn" ? theme.warn : r.sev === "green" ? theme.green : r.sev === "good" ? theme.good : "rgba(255,255,255,0.65)";
-                            const rowBg =
-                              r.sev === "bad" ? "rgba(239,68,68,0.08)" : r.sev === "warn" ? "rgba(245,158,11,0.08)" : "transparent";
-
-                            const fmt = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Math.round(Number(n)));
-
-                            return (
-                              <tr key={r.lineId} style={{ borderTop: `1px solid ${theme.border}`, background: rowBg }}>
-                                <td style={Object.assign({}, td, { fontWeight: 950, color: chipColorFromLineId(r.lineId) })}>{r.lineId}</td>
-                                <td style={td}>{r.groupId || "—"}</td>
-                                <td style={td}>{fmt(r.nominal)}</td>
-                                <td style={td}>{fmt(r.raw)}</td>
-                                <td style={td}>{showCorrected ? fmt(r.corrected) : "—"}</td>
-                                <td style={td}>{r.baseLoop}</td>
-                                <td style={td}>{r.afterLoop}</td>
-                                <td style={td}>{fmt(r.adj)}</td>
-                                <td style={td}>{fmt(r.before)}</td>
-                                <td style={td}>{fmt(r.after)}</td>
-                                <td style={Object.assign({}, td, { fontWeight: 950, color: sevColor })}>{r.delta == null ? "—" : fmt(r.delta)}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  <div style={{ marginTop: 10, opacity: 0.78, fontSize: 12 }}>
-                    Tolerance: <b>{Number(meta.tolerance || 0)}mm</b> • Yellow within <b>3mm</b> of tolerance • Red at/over tolerance
-                  </div>
-                </div>
-
-                
-                
-{/* Charts (Step 4 only; uses frozen baseline-derived step4LineRows) */}
-<div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
-  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-    <div style={{ fontWeight: 950, fontSize: 16 }}>Charts</div>
-    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", opacity: 0.9 }}>
-      <span style={{ fontSize: 12, opacity: 0.85 }}>Showing:</span>
-      {(["A", "B", "C", "D"]).map((L) => (
-        <span
-          key={L}
-          style={{
-            padding: "3px 8px",
-            borderRadius: 999,
-            border: `1px solid ${theme.border}`,
-            background: step4LetterFilter[L] ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)",
-            color: step4LetterFilter[L] ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.45)",
-            fontWeight: 950,
-            fontSize: 12,
-          }}
-        >
-          {L}
-        </span>
-      ))}
-    </div>
-  </div>
-
-  
-</div>
-
 {/* Close Step 4 content grid */}
 </div>
 

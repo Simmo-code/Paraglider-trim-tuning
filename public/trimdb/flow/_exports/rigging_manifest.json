@@ -1,0 +1,276 @@
+{
+  "make": "Flow",
+  "source_site": "https://www.flowparagliders.com.au/",
+  "rigging_dir": "flow/_rigging_pdfs",
+  "by_model_size": {
+    "Flow COSMOS2 bridle": {
+      "wide_xlsx": "Flow_Flow COSMOS2 bridle_WIDE.xlsx",
+      "sizes": {
+        "XS": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "Flow_COSMOS2_XS_V2_bridle.xlsx",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2024/01/Flow_COSMOS2_XS_V2_bridle.xlsx",
+          "note": "No embedded images found (or not an XLSM)."
+        },
+        "S": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "Flow_COSMOS2_S_V2_bridle.xlsx",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2024/01/Flow_COSMOS2_S_V2_bridle.xlsx",
+          "note": "No embedded images found (or not an XLSM)."
+        },
+        "M": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "Flow_COSMOS2_M_V2_bridle.xlsx",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2024/01/Flow_COSMOS2_M_V2_bridle.xlsx",
+          "note": "No embedded images found (or not an XLSM)."
+        },
+        "L": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "Flow_COSMOS2_L_V2_bridle.xlsx",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2024/01/Flow_COSMOS2_L_V2_bridle.xlsx",
+          "note": "No embedded images found (or not an XLSM)."
+        }
+      }
+    },
+    "Freedom2": {
+      "wide_xlsx": "Flow_Freedom2_WIDE.xlsx",
+      "sizes": {
+        "XS": {
+          "matched": true,
+          "pdf_filename": "Flow_Freedom2_XS_rigging.pdf",
+          "factory_sheet_filename": "Freedom2-XS-FACTORY.xlsm",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2025/01/Freedom2-XS-FACTORY.xlsm",
+          "note": "Rigging PDF generated from embedded xl/media image in XLSM."
+        },
+        "S": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "Freedom2-S-V2-FACTORY.xlsm",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2025/01/Freedom2-S-V2-FACTORY.xlsm",
+          "note": "No embedded images found (or not an XLSM)."
+        },
+        "M": {
+          "matched": true,
+          "pdf_filename": "Flow_Freedom2_M_rigging.pdf",
+          "factory_sheet_filename": "Freedom2-M-V2-FACTORY.xlsm",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2025/01/Freedom2-M-V2-FACTORY.xlsm",
+          "note": "Rigging PDF generated from embedded xl/media image in XLSM."
+        },
+        "L": {
+          "matched": true,
+          "pdf_filename": "Flow_Freedom2_L_rigging.pdf",
+          "factory_sheet_filename": "Freedom2-L-FACTORY.xlsm",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2025/01/Freedom2-L-FACTORY.xlsm",
+          "note": "Rigging PDF generated from embedded xl/media image in XLSM."
+        }
+      }
+    },
+    "F2 LIGHT": {
+      "wide_xlsx": "Flow_F2 LIGHT_WIDE.xlsx",
+      "sizes": {
+        "XS": {
+          "matched": true,
+          "pdf_filename": "Flow_F2LIGHT_XS_rigging.pdf",
+          "factory_sheet_filename": "F2-LIGHT-XS-FACTORY.xlsm",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2025/01/F2-LIGHT-XS-FACTORY.xlsm",
+          "note": "Rigging PDF generated from embedded xl/media image in XLSM."
+        },
+        "S": {
+          "matched": true,
+          "pdf_filename": "Flow_F2LIGHT_S_rigging.pdf",
+          "factory_sheet_filename": "F2-LIGHT-S-FACTORY.xlsm",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2025/01/F2-LIGHT-S-FACTORY.xlsm",
+          "note": "Rigging PDF generated from embedded xl/media image in XLSM."
+        },
+        "M": {
+          "matched": true,
+          "pdf_filename": "Flow_F2LIGHT_M_rigging.pdf",
+          "factory_sheet_filename": "F2-LIGHT-M-FACTORY.xlsm",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2025/01/F2-LIGHT-M-FACTORY.xlsm",
+          "note": "Rigging PDF generated from embedded xl/media image in XLSM."
+        },
+        "L": {
+          "matched": true,
+          "pdf_filename": "Flow_F2LIGHT_L_rigging.pdf",
+          "factory_sheet_filename": "F2-LIGHT-L-FACTORY.xlsm",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2025/01/F2-LIGHT-L-FACTORY.xlsm",
+          "note": "Rigging PDF generated from embedded xl/media image in XLSM."
+        }
+      }
+    },
+    "FLOW Panorama 2 39 VF": {
+      "wide_xlsx": "Flow_FLOW Panorama 2 39 VF_WIDE.xlsx",
+      "sizes": {
+        "UNKNOWN": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "FLOW-Panorama-2-39-VF.xlsm",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2024/04/FLOW-Panorama-2-39-VF.xlsm",
+          "note": "No embedded images found (or not an XLSM)."
+        }
+      }
+    },
+    "FLOW PARAGLIDERS Panorama 2 32": {
+      "wide_xlsx": "Flow_FLOW PARAGLIDERS Panorama 2 32_WIDE.xlsx",
+      "sizes": {
+        "UNKNOWN": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "FLOW-PARAGLIDERS-Panorama-2-32.xlsm",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2024/11/FLOW-PARAGLIDERS-Panorama-2-32.xlsm",
+          "note": "No embedded images found (or not an XLSM)."
+        }
+      }
+    },
+    "Flow MULLET 17 Spreadsheet": {
+      "wide_xlsx": "Flow_Flow MULLET 17 Spreadsheet_WIDE.xlsx",
+      "sizes": {
+        "UNKNOWN": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "Flow-MULLET-17-Trim-Spreadsheet.xlsm",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2025/10/Flow-MULLET-17-Trim-Spreadsheet.xlsm",
+          "note": "No embedded images found (or not an XLSM)."
+        }
+      }
+    },
+    "Flow MULLET 18 Spreadsheet": {
+      "wide_xlsx": "Flow_Flow MULLET 18 Spreadsheet_WIDE.xlsx",
+      "sizes": {
+        "UNKNOWN": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "Flow-MULLET-18-Trim-Spreadsheet.xlsm",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2025/10/Flow-MULLET-18-Trim-Spreadsheet.xlsm",
+          "note": "No embedded images found (or not an XLSM)."
+        }
+      }
+    },
+    "Flow MULLET 20 Spreadsheet": {
+      "wide_xlsx": "Flow_Flow MULLET 20 Spreadsheet_WIDE.xlsx",
+      "sizes": {
+        "UNKNOWN": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "Flow-MULLET-20-Trim-Spreadsheet.xlsm",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2025/10/Flow-MULLET-20-Trim-Spreadsheet.xlsm",
+          "note": "No embedded images found (or not an XLSM)."
+        }
+      }
+    },
+    "Flow MULLET 23 Spreadsheet": {
+      "wide_xlsx": "Flow_Flow MULLET 23 Spreadsheet_WIDE.xlsx",
+      "sizes": {
+        "UNKNOWN": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "Flow-MULLET-23-Trim-Spreadsheet.xlsm",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2025/10/Flow-MULLET-23-Trim-Spreadsheet.xlsm",
+          "note": "No embedded images found (or not an XLSM)."
+        }
+      }
+    },
+    "MULLETX 13": {
+      "wide_xlsx": "Flow_MULLETX 13_WIDE.xlsx",
+      "sizes": {
+        "UNKNOWN": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "MULLETX-13.xlsx",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2024/12/MULLETX-13.xlsx",
+          "note": "No embedded images found (or not an XLSM)."
+        }
+      }
+    },
+    "MULLETX 15": {
+      "wide_xlsx": "Flow_MULLETX 15_WIDE.xlsx",
+      "sizes": {
+        "UNKNOWN": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "MULLETX-15.xlsx",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2024/12/MULLETX-15.xlsx",
+          "note": "No embedded images found (or not an XLSM)."
+        }
+      }
+    },
+    "MULLETX 17.5": {
+      "wide_xlsx": "Flow_MULLETX 17.5_WIDE.xlsx",
+      "sizes": {
+        "UNKNOWN": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "MULLETX-17.5.xlsx",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2024/12/MULLETX-17.5.xlsx",
+          "note": "No embedded images found (or not an XLSM)."
+        }
+      }
+    },
+    "MULLETX 20.5": {
+      "wide_xlsx": "Flow_MULLETX 20.5_WIDE.xlsx",
+      "sizes": {
+        "UNKNOWN": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "MULLETX-20.5.xlsx",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2024/12/MULLETX-20.5.xlsx",
+          "note": "No embedded images found (or not an XLSM)."
+        }
+      }
+    },
+    "MULLETX 23.5": {
+      "wide_xlsx": "Flow_MULLETX 23.5_WIDE.xlsx",
+      "sizes": {
+        "UNKNOWN": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "MULLETX-23.5.xlsx",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2024/12/MULLETX-23.5.xlsx",
+          "note": "No embedded images found (or not an XLSM)."
+        }
+      }
+    },
+    "XCRACER": {
+      "wide_xlsx": "Flow_XCRACER_WIDE.xlsx",
+      "sizes": {
+        "S": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "XCRACER-S-Factory.xlsm",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2022/07/XCRACER-S-Factory.xlsm",
+          "note": "No embedded images found (or not an XLSM)."
+        },
+        "M": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "XCRACER-M-Factory-V2.xlsm",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2022/07/XCRACER-M-Factory-V2.xlsm",
+          "note": "No embedded images found (or not an XLSM)."
+        }
+      }
+    },
+    "XCRacer": {
+      "wide_xlsx": "Flow_XCRacer_WIDE.xlsx",
+      "sizes": {
+        "ML": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "XCRacer-ML-Factory-v2.xlsm",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2022/07/XCRacer-ML-Factory-v2.xlsm",
+          "note": "No embedded images found (or not an XLSM)."
+        },
+        "L": {
+          "matched": false,
+          "pdf_filename": null,
+          "factory_sheet_filename": "XCRacer-L-Factory-v2.xlsx",
+          "source_url": "https://www.flowparagliders.com.au/wp-content/uploads/2022/07/XCRacer-L-Factory-v2.xlsx",
+          "note": "No embedded images found (or not an XLSM)."
+        }
+      }
+    }
+  }
+}
